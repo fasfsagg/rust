@@ -1,0 +1,44 @@
+[package]
+name = "axum-tutorial"
+version = "0.1.0"
+edition = "2021"
+authors = ["Rust学习者"]
+description = "Axum框架的分层架构学习项目"
+
+# 依赖列表
+[dependencies]
+# Axum Web 框架核心组件
+axum = { version = "0.7", features = ["ws", "macros"] }
+
+# Tokio 异步运行时
+tokio = { version = "1.36", features = ["full"] }
+
+# 序列化与反序列化库
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# 唯一ID生成
+uuid = { version = "1.7", features = ["v4", "serde"] }
+
+# 日志与跟踪
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# HTTP 工具库
+tower = "0.4"
+tower-http = { version = "0.5", features = ["trace", "fs", "cors"] }
+
+# HTTP/3 支持（可选功能）
+quinn = "0.10" # QUIC 协议实现
+h3 = "0.0.4"   # HTTP/3 协议
+h3-quinn = "0.0.4" # HTTP/3 与 Quinn 的集成
+
+# TLS 支持
+rustls = "0.22" # Rust TLS 库
+tokio-rustls = "0.25" # Tokio 与 Rustls 集成
+
+# 证书生成工具（用于 HTTP/3 演示）
+rcgen = "0.12"
+
+# 同步原语
+parking_lot = "0.12" # RwLock 实现，比标准库更快 

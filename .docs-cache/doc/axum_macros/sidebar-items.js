@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"attr":["debug_handler","debug_middleware"],"derive":["FromRef","FromRequest","FromRequestParts","TypedPath"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"attr":["debug_handler","debug_middleware"],"fn":["serve"],"mod":["body","error_handling","extract","handler","middleware","response","routing","serve"],"struct":["Error","Extension","Form","Json","Router"],"trait":["RequestExt","RequestPartsExt","ServiceExt"],"type":["BoxError"]};

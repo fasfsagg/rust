@@ -1,0 +1,21 @@
+# Rust特有的忽略文件
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# IDE目录和文件
+.idea/
+.vscode/
+*.iml
+*.swp
+.DS_Store
+
+# 证书目录（包含敏感信息）
+/certs/
+
+# 日志文件
+*.log
+
+# 运行时配置
+.env
+.env.local 

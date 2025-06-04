@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["create_task","delete_task","get_all_tasks","get_task_by_id","handle_socket","parse_uuid","update_task","ws_handler"],"struct":["AppState"]};

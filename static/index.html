@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Axum 任务管理系统</title>
+    <style>
+        body {
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        
+        h1 {
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .panel {
+            flex: 1;
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        input, textarea, button {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        button {
+            background-color: #3498db;
+            color: white;
+            cursor: pointer;
+            border: none;
+            padding: 10px;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        #tasksList {
+            list-style-type: none;
+            padding: 0;
+        }
+        
+        .task-item {
+            background-color: white;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border-left: 3px solid #3498db;
+        }
+        
+        .task-item.completed {
+            border-left-color: #2ecc71;
+        }
+        
+        .task-controls {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 8px;
+        }
+        
+        .delete-btn {
+            background-color: #e74c3c;
+        }
+        
+        .delete-btn:hover {
+            background-color: #c0392b;
+        }
+        
+        #webSocketMessages {
+            height: 200px;
+            overflow-y: auto;
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 10px;
+            font-family: monospace;
+            border-radius: 4px;
+        }
+        
+        #wsStatus {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        
+        #wsStatus.connected {
+            background-color: #2ecc71;
+            color: white;
+        }
+        
+        #wsStatus.disconnected {
+            background-color: #e74c3c;
+            color: white;
+        }
+        
+        .timestamp {
+            color: #95a5a6;
+            font-size: 0.8em;
+        }
+        
+        .response-area {
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 页面主标题 -->
+    <h1>Axum 任务管理系统 - 前端测试页面</h1>
+    
+    <!-- 页面主要内容容器，使用 flex 布局 -->
+    <div class="container">
+        <!-- 左侧面板：任务管理功能区域 -->
+        <div class="panel">
+            <h2>任务管理</h2>
+            
+            <!-- 创建任务的表单区域 -->
+            <h3>创建新任务</h3>
+            <form id="createTaskForm">
+                <!-- 任务标题输入框 -->
+                <input type="text" id="title" placeholder="任务标题" required>
+                <!-- 任务描述文本域 -->
+                <textarea id="description" placeholder="任务描述（可选）"></textarea>
+                <!-- 任务完成状态复选框 -->
+                <label>
+                    <input type="checkbox" id="completed">
+                    已完成
+                </label>
+                <!-- 提交表单按钮，用于创建任务 -->
+                <button type="submit">创建任务</button>
+            </form>
+            
+            <!-- 刷新任务列表的按钮 -->
+            <button id="refreshTasksBtn">刷新任务列表</button>
+            
+            <!-- 显示任务列表的区域 -->
+            <h3>任务列表</h3>
+            <ul id="tasksList"></ul>
+            
+            <!-- 显示 API 响应结果的区域 -->
+            <h3>API响应</h3>
+            <div id="apiResponse" class="response-area">等待API响应...</div>
+        </div>
+        
+        <!-- 右侧面板：WebSocket 测试功能区域 -->
+        <div class="panel">
+            <h2>WebSocket测试</h2>
+            <!-- 显示 WebSocket 连接状态 -->
+            <p>
+                状态: <span id="wsStatus" class="disconnected">未连接</span>
+                <!-- 连接 WebSocket 按钮 -->
+                <button id="wsConnectBtn">连接</button>
+                <!-- 断开 WebSocket 按钮，初始状态为禁用 -->
+                <button id="wsDisconnectBtn" disabled>断开</button>
+            </p>
+            
+            <!-- 发送 WebSocket 消息的表单 -->
+            <form id="wsSendForm">
+                <!-- WebSocket 消息输入框 -->
+                <input type="text" id="wsMessage" placeholder="输入消息" required>
+                <!-- 发送消息按钮，初始状态为禁用 -->
+                <button type="submit" disabled>发送</button>
+            </form>
+            
+            <!-- 显示 WebSocket 消息记录的区域 -->
+            <h3>消息记录</h3>
+            <div id="webSocketMessages"></div>
+        </div>
+    </div>
+    
+    <!-- JavaScript 代码部分 -->
+    <script>
+        // ==== 全局变量和状态 ====
+        // 定义 API 的基础 URL
+        const API_BASE_URL = '/api';
+        // 根据当前页面地址构建 WebSocket 的 URL
+        const WS_URL = `ws://${window.location.host}/ws`;
+        // WebSocket 连接对象，初始为 null
+        let socket = null;
+        // 存储任务列表的数组，初始为空
+        let tasks = [];
+        
+        // ==== 页面加载时执行 ====
+        // 当整个 HTML 文档加载并解析完毕后执行
+        document.addEventListener('DOMContentLoaded', () => {
+            // 页面加载时，首先获取并显示任务列表
+            fetchTasks();
+            
+            // 绑定事件处理器：
+            // 监听创建任务表单的提交事件
+            document.getElementById('createTaskForm').addEventListener('submit', handleCreateTask);
+            // 监听刷新任务列表按钮的点击事件
+            document.getElementById('refreshTasksBtn').addEventListener('click', fetchTasks);
+            // 监听连接 WebSocket 按钮的点击事件
+            document.getElementById('wsConnectBtn').addEventListener('click', connectWebSocket);
+            // 监听断开 WebSocket 按钮的点击事件
+            document.getElementById('wsDisconnectBtn').addEventListener('click', disconnectWebSocket);
+            // 监听发送 WebSocket 消息表单的提交事件
+            document.getElementById('wsSendForm').addEventListener('submit', sendWebSocketMessage);
+        });
+        
+        // ==== API操作函数 ====
+        
+        // 异步函数：获取所有任务
+        async function fetchTasks() {
+            try {
+                // 发起 GET 请求获取任务列表
+                const response = await fetch(`${API_BASE_URL}/tasks`);
+                // 解析 JSON 格式的响应数据
+                const data = await response.json();
+                
+                // 更新 API 响应显示区域的内容
+                updateApiResponse('获取任务列表', response, data);
+                
+                // 将获取到的任务数据存储到全局 tasks 数组中
+                tasks = data;
+                // 渲染任务列表到页面上
+                renderTasks();
+            } catch (error) {
+                // 如果发生错误，打印错误信息到控制台
+                console.error('获取任务失败:', error);
+                // 更新 API 响应显示区域，显示错误信息
+                updateApiResponse('获取任务列表', null, { error: error.message });
+            }
+        }
+        
+        // 异步函数：处理创建任务表单提交事件
+        async function handleCreateTask(event) {
+            // 阻止表单的默认提交行为（页面刷新）
+            event.preventDefault();
+            
+            // 获取输入框和文本域的值
+            const title = document.getElementById('title').value;
+            const description = document.getElementById('description').value;
+            // 获取复选框的选中状态
+            const completed = document.getElementById('completed').checked;
+            
+            // 构建发送到后端的任务数据对象
+            const payload = {
+                title,
+                // 如果描述为空，则发送 null
+                description: description || null,
+                completed
+            };
+            
+            try {
+                // 发起 POST 请求创建新任务
+                const response = await fetch(`${API_BASE_URL}/tasks`, {
+                    method: 'POST',
+                    // 设置请求头，告知服务器发送的是 JSON 数据
+                    headers: { 'Content-Type': 'application/json' },
+                    // 将任务数据对象转换为 JSON 字符串作为请求体
+                    body: JSON.stringify(payload)
+                });
+                
+                // 解析 JSON 格式的响应数据
+                const data = await response.json();
+                // 更新 API 响应显示区域的内容
+                updateApiResponse('创建任务', response, data);
+                
+                // 如果响应状态码表示成功 (2xx)
+                if (response.ok) {
+                    // 清空创建任务表单的输入框和文本域
+                    document.getElementById('title').value = '';
+                    document.getElementById('description').value = '';
+                    // 取消复选框的选中状态
+                    document.getElementById('completed').checked = false;
+                    
+                    // 刷新任务列表以显示新创建的任务
+                    fetchTasks();
+                }
+            } catch (error) {
+                // 如果发生错误，打印错误信息到控制台
+                console.error('创建任务失败:', error);
+                // 更新 API 响应显示区域，显示错误信息
+                updateApiResponse('创建任务', null, { error: error.message });
+            }
+        }
+        
+        // 异步函数：获取单个任务
+        async function fetchTask(id) {
+            try {
+                // 发起 GET 请求获取指定 ID 的任务
+                const response = await fetch(`${API_BASE_URL}/tasks/${id}`);
+                // 解析 JSON 格式的响应数据
+                const data = await response.json();
+                
+                // 更新 API 响应显示区域的内容
+                updateApiResponse(`获取任务 ${id}`, response, data);
+                // 返回获取到的任务数据
+                return data;
+            } catch (error) {
+                // 如果发生错误，打印错误信息到控制台
+                console.error(`获取任务 ${id} 失败:`, error);
+                // 更新 API 响应显示区域，显示错误信息
+                updateApiResponse(`获取任务 ${id}`, null, { error: error.message });
+                // 返回 null 表示获取失败
+                return null;
+            }
+        }
+        
+        // 异步函数：更新任务
+        async function updateTask(id, payload) {
+            try {
+                // 发起 PUT 请求更新指定 ID 的任务
+                const response = await fetch(`${API_BASE_URL}/tasks/${id}`, {
+                    method: 'PUT',
+                    // 设置请求头，告知服务器发送的是 JSON 数据
+                    headers: { 'Content-Type': 'application/json' },
+                    // 将更新数据对象转换为 JSON 字符串作为请求体
+                    body: JSON.stringify(payload)
+                });
+                
+                // 解析 JSON 格式的响应数据
+                const data = await response.json();
+                // 更新 API 响应显示区域的内容
+                updateApiResponse(`更新任务 ${id}`, response, data);
+                
+                // 如果响应状态码表示成功 (2xx)
+                if (response.ok) {
+                    // 刷新任务列表以显示更新后的任务状态
+                    fetchTasks();
+                }
+            } catch (error) {
+                // 如果发生错误，打印错误信息到控制台
+                console.error(`更新任务 ${id} 失败:`, error);
+                // 更新 API 响应显示区域，显示错误信息
+                updateApiResponse(`更新任务 ${id}`, null, { error: error.message });
+            }
+        }
+        
+        // 异步函数：删除任务
+        async function deleteTask(id) {
+            try {
+                // 发起 DELETE 请求删除指定 ID 的任务
+                const response = await fetch(`${API_BASE_URL}/tasks/${id}`, {
+                    method: 'DELETE'
+                });
+                
+                // 更新 API 响应显示区域的内容
+                // 如果响应状态码是 204 (No Content)，则显示删除成功消息，否则解析 JSON 响应
+                updateApiResponse(`删除任务 ${id}`, response, 
+                    response.status === 204 ? { message: '删除成功' } : await response.json());
+                
+                // 如果响应状态码表示成功 (2xx)
+                if (response.ok) {
+                    // 刷新任务列表以移除已删除的任务
+                    fetchTasks();
+                }
+            } catch (error) {
+                // 如果发生错误，打印错误信息到控制台
+                console.error(`删除任务 ${id} 失败:`, error);
+                // 更新 API 响应显示区域，显示错误信息
+                updateApiResponse(`删除任务 ${id}`, null, { error: error.message });
+            }
+        }
+        
+        // ==== UI更新函数 ====
+        
+        // 渲染任务列表到页面上
+        function renderTasks() {
+            // 获取任务列表的 ul 元素
+            const tasksList = document.getElementById('tasksList');
+            // 清空当前列表内容
+            tasksList.innerHTML = '';
+            
+            // 如果任务列表为空，显示“没有任务”
+            if (tasks.length === 0) {
+                tasksList.innerHTML = '<li>没有任务</li>';
+                return;
+            }
+            
+            // 遍历任务数组，为每个任务创建列表项
+            tasks.forEach(task => {
+                // 创建一个新的 li 元素作为任务列表项
+                const li = document.createElement('li');
+                // 设置列表项的 CSS 类名，根据任务完成状态添加 'completed' 类
+                li.className = `task-item ${task.completed ? 'completed' : ''}`;
+                
+                // 创建并设置任务标题元素
+                const title = document.createElement('h4');
+                title.textContent = task.title;
+                
+                // 创建并设置任务描述元素，如果描述为空则显示“(无描述)”
+                const description = document.createElement('p');
+                description.textContent = task.description || '(无描述)';
+                
+                // 创建并设置任务状态元素
+                const status = document.createElement('p');
+                status.innerHTML = `状态: <strong>${task.completed ? '已完成' : '未完成'}</strong>`;
+                
+                // 创建并设置日期信息元素（创建时间和更新时间）
+                const dateInfo = document.createElement('p');
+                dateInfo.className = 'timestamp';
+                // 格式化时间戳并显示
+                dateInfo.textContent = `创建于: ${formatDate(task.created_at)} | 更新于: ${formatDate(task.updated_at)}`;
+                
+                // 创建任务控制按钮的容器
+                const controls = document.createElement('div');
+                controls.className = 'task-controls';
+                
+                // 创建“查看”按钮，点击时调用 fetchTask 函数获取单个任务详情
+                const viewBtn = document.createElement('button');
+                viewBtn.textContent = '查看';
+                viewBtn.onclick = () => fetchTask(task.id);
+                
+                // 创建“标记完成/未完成”按钮，点击时调用 updateTask 函数切换任务完成状态
+                const toggleBtn = document.createElement('button');
+                toggleBtn.textContent = task.completed ? '标记为未完成' : '标记为已完成';
+                toggleBtn.onclick = () => updateTask(task.id, { completed: !task.completed });
+                
+                // 创建“删除”按钮，点击时弹出确认框，确认后调用 deleteTask 函数删除任务
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = '删除';
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.onclick = () => {
+                    if (confirm(`确定要删除任务 "${task.title}" 吗？`)) {
+                        deleteTask(task.id);
+                    }
+                };
+                
+                // 将控制按钮添加到控制容器中
+                controls.appendChild(viewBtn);
+                controls.appendChild(toggleBtn);
+                controls.appendChild(deleteBtn);
+                
+                // 将所有元素添加到任务列表项 li 中
+                li.appendChild(title);
+                li.appendChild(description);
+                li.appendChild(status);
+                li.appendChild(dateInfo);
+                li.appendChild(controls);
+                
+                // 将任务列表项添加到任务列表 ul 中
+                tasksList.appendChild(li);
+            });
+        }
+        
+        // 更新 API 响应显示区域的内容
+        function updateApiResponse(action, response, data) {
+            // 获取 API 响应显示区域元素
+            const responseArea = document.getElementById('apiResponse');
+            
+            // 获取当前时间作为时间戳
+            const timestamp = new Date().toLocaleTimeString();
+            // 构建状态文本，如果 response 存在则显示状态码和状态文本，否则显示 'Error'
+            let statusText = response ? `${response.status} ${response.statusText}` : 'Error';
+            // 将响应数据格式化为易读的 JSON 字符串
+            let content = JSON.stringify(data, null, 2);
+            
+            // 更新显示区域的 HTML 内容
+            responseArea.innerHTML = `[${timestamp}] ${action} - ${statusText}\n${content}`;
+            // 滚动到底部，显示最新消息
+            responseArea.scrollTop = responseArea.scrollHeight;
+        }
+        
+        // ==== WebSocket函数 ====
+        
+        // 连接 WebSocket 服务器
+        function connectWebSocket() {
+            // 如果 socket 对象已存在（已连接或正在连接），则不再重复连接
+            if (socket !== null) {
+                logWebSocketMessage('已经连接到WebSocket服务器');
+                return;
+            }
+            
+            try {
+                // 创建一个新的 WebSocket 连接
+                socket = new WebSocket(WS_URL);
+                
+                // 监听连接成功事件
+                socket.onopen = () => {
+                    // 更新 WebSocket 状态显示为已连接
+                    updateWebSocketStatus(true);
+                    // 记录连接成功的消息
+                    logWebSocketMessage('已连接到WebSocket服务器');
+                };
+                
+                // 监听收到消息事件
+                socket.onmessage = (event) => {
+                    // 记录收到的消息内容
+                    logWebSocketMessage(`收到: ${event.data}`);
+                };
+                
+                // 监听连接关闭事件
+                socket.onclose = () => {
+                    // 更新 WebSocket 状态显示为未连接
+                    updateWebSocketStatus(false);
+                    // 记录连接关闭的消息
+                    logWebSocketMessage('WebSocket连接已关闭');
+                    // 将 socket 对象设为 null
+                    socket = null;
+                };
+                
+                // 监听连接错误事件
+                socket.onerror = (error) => {
+                    // 记录错误信息
+                    logWebSocketMessage(`WebSocket错误: ${error}`);
+                    // 更新 WebSocket 状态显示为未连接
+                    updateWebSocketStatus(false);
+                };
+            } catch (error) {
+                // 如果创建 WebSocket 对象时发生错误，打印错误信息到控制台
+                console.error('WebSocket连接失败:', error);
+                // 记录连接失败的消息
+                logWebSocketMessage(`连接失败: ${error.message}`);
+            }
+        }
+        
+        // 断开 WebSocket 连接
+        function disconnectWebSocket() {
+            // 如果 socket 对象为 null，表示未连接，直接返回
+            if (socket === null) {
+                return;
+            }
+            
+            // 关闭 WebSocket 连接
+            socket.close();
+            // 连接关闭后，onclose 事件处理器会自动更新 UI
+        }
+        
+        // 发送 WebSocket 消息
+        function sendWebSocketMessage(event) {
+            // 阻止表单的默认提交行为
+            event.preventDefault();
+            
+            // 如果 socket 对象为 null 或连接未打开，则提示未连接并返回
+            if (socket === null || socket.readyState !== WebSocket.OPEN) {
+                logWebSocketMessage('未连接到WebSocket服务器');
+                return;
+            }
+            
+            // 获取消息输入框元素和消息内容
+            const messageInput = document.getElementById('wsMessage');
+            const message = messageInput.value;
+            
+            // 如果消息内容为空白字符，则不发送
+            if (message.trim() === '') {
+                return;
+            }
+            
+            // 发送消息到 WebSocket 服务器
+            socket.send(message);
+            // 记录发送的消息
+            logWebSocketMessage(`发送: ${message}`);
+            // 清空消息输入框
+            messageInput.value = '';
+        }
+        
+        // 更新 WebSocket 状态显示和按钮的可用状态
+        function updateWebSocketStatus(connected) {
+            // 获取状态显示元素、连接按钮、断开按钮和发送按钮
+            const statusElem = document.getElementById('wsStatus');
+            const connectBtn = document.getElementById('wsConnectBtn');
+            const disconnectBtn = document.getElementById('wsDisconnectBtn');
+            const sendBtn = document.getElementById('wsSendForm').querySelector('button');
+            
+            // 根据连接状态更新文本、类名和按钮的禁用状态
+            if (connected) {
+                statusElem.textContent = '已连接';
+                statusElem.className = 'connected';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                sendBtn.disabled = false;
+            } else {
+                statusElem.textContent = '未连接';
+                statusElem.className = 'disconnected';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                sendBtn.disabled = true;
+            }
+        }
+        
+        // 记录 WebSocket 消息到消息记录区域
+        function logWebSocketMessage(message) {
+            // 获取消息记录区域元素
+            const messagesElem = document.getElementById('webSocketMessages');
+            // 获取当前时间作为时间戳
+            const timestamp = new Date().toLocaleTimeString();
+            
+            // 创建一个新的 div 元素用于显示消息
+            const messageElem = document.createElement('div');
+            // 设置消息的 HTML 内容，包含时间戳和消息文本
+            messageElem.innerHTML = `<span class="timestamp">[${timestamp}]</span> ${message}`;
+            
+            // 将新消息添加到消息记录区域的末尾
+            messagesElem.appendChild(messageElem);
+            // 滚动到底部，显示最新消息
+            messagesElem.scrollTop = messagesElem.scrollHeight;
+        }
+        
+        // ==== 辅助函数 ====
+        
+        // 格式化 Unix 时间戳为可读日期字符串
+        function formatDate(timestamp) {
+            // 将 Unix 时间戳（秒）转换为 JavaScript 的 Date 对象（毫秒）
+            const date = new Date(timestamp * 1000);
+            // 返回本地化的日期和时间字符串
+            return date.toLocaleString();
+        }
+    </script>
+</body>
+</html>
