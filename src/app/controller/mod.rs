@@ -41,12 +41,20 @@
 // `pub mod task_controller;`
 // 【作用】: 声明存在一个名为 `task_controller` 的公共子模块。
 // 【查找规则】: Rust 编译器会查找 `src/app/controller/task_controller.rs` 文件。
-// 【可见性】: `pub` 使得 `task_controller` 模块本身可以被外部访问。[[关键语法要素: pub, mod]]
-pub mod task_controller;
+// 【可见性】: `pub` 使得 `auth_controller` 模块本身可以被外部访问。[[关键语法要素: pub, mod]]
+pub mod auth_controller;
 
 // --- 重新导出公共项 ---
-// `pub use task_controller::*;`
-// 【作用】: 将 `task_controller` 模块中所有 `pub` 的项（主要是 Handler 函数）引入到当前的 `controller` 模块作用域，并使它们也成为 `pub`。
+// `pub use auth_controller::*;`
+// 【作用】: 将 `auth_controller` 模块中所有 `pub` 的项（主要是 Handler 函数）引入到当前的 `controller` 模块作用域，并使它们也成为 `pub`。
 // 【效果】: 简化路由层 (`routes.rs`) 定义路由时的处理函数路径。
-// 【* 通配符】: 导出 `task_controller` 模块内的所有公共项。[[关键语法要素: pub, use, * (glob)]]
-pub use task_controller::*;
+// 【* 通配符】: 导出 `auth_controller` 模块内的所有公共项。
+pub use auth_controller::*;
+
+pub mod protected_controller;
+pub use protected_controller::*;
+
+// task_controller is being removed as per the plan to focus on auth.
+// If task functionality were to be kept, it would remain here.
+// pub mod task_controller;
+// pub use task_controller::*;

@@ -17,8 +17,8 @@ tokio = { version = "1.36", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-# 唯一ID生成
-uuid = { version = "1.7", features = ["v4", "serde"] }
+# 唯一ID生成 (REMOVED - no longer used)
+# uuid = { version = "1.7", features = ["v4", "serde"] }
 
 # 日志与跟踪
 tracing = "0.1"
@@ -40,5 +40,19 @@ tokio-rustls = "0.25" # Tokio 与 Rustls 集成
 # 证书生成工具（用于 HTTP/3 演示）
 rcgen = "0.12"
 
-# 同步原语
-parking_lot = "0.12" # RwLock 实现，比标准库更快 
+# 同步原语 (REMOVED - no longer used)
+# parking_lot = "0.12" # RwLock 实现，比标准库更快
+
+# New dependencies for database, auth, and JWT
+sea-orm = { version = "^0.12", features = ["sqlx-sqlite", "runtime-tokio-rustls", "macros"] }
+argon2 = { version = "^0.5", features = ["std"] } # "std" feature for non-wasm
+jsonwebtoken = "^9"
+# sqlx is brought in by sea-orm's sqlx-sqlite feature.
+rand = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+
+# HTTP/3 request/response body handling
+bytes = "1.5" # Used by h3 and for body manipulation
+http-body-util = { version = "0.1", features = ["full"] } # For StreamBody and BodyExt
+futures-util = { version = "0.3", default-features = false, features = ["std", "alloc", "async-await-macro"] } # For stream manipulation
+async-stream = "0.3" # For creating streams from async blocks (H3 request body)

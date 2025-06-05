@@ -45,13 +45,19 @@
 // `pub mod task;`
 // 【作用】: 声明存在一个名为 `task` 的公共子模块。
 // 【查找规则】: Rust 编译器会查找 `src/app/model/task.rs` 文件。
-// 【可见性】: `pub` 使得 `task` 模块本身可以被外部访问 (虽然我们通常通过重新导出的项来访问其内容)。[[关键语法要素: pub, mod]]
-pub mod task;
+// 【可见性】: `pub` 使得 `user_entity` 模块本身可以被外部访问 (虽然我们通常通过重新导出的项来访问其内容)。[[关键语法要素: pub, mod]]
+pub mod user_entity;
 
 // --- 重新导出公共项 ---
-// `pub use task::*;`
-// 【作用】: 将 `task` 模块中所有 `pub` 的项（结构体、枚举、函数等）引入到当前的 `model` 模块作用域，并使它们也成为 `pub`。
+// `pub use user_entity::*;`
+// 【作用】: 将 `user_entity` 模块中所有 `pub` 的项（结构体、枚举、函数等）引入到当前的 `model` 模块作用域，并使它们也成为 `pub`。
 // 【效果】: 简化外部模块的导入路径。
-// 【举例】: 如果 `task.rs` 中定义了 `pub struct Task { ... }`，那么其他文件现在可以通过 `use crate::app::model::Task;` 来使用它。
-// 【`*` 通配符】: 表示导出 `task` 模块内的所有公共项。有时为了更清晰，也会选择性地重新导出，例如 `pub use task::{Task, CreateTaskPayload};`。[[关键语法要素: pub, use, * (glob)]]
-pub use task::*;
+// 【举例】: 如果 `user_entity.rs` 中定义了 `pub struct Model { ... }` (SeaORM entity model), 那么其他文件现在可以通过 `use crate::app::model::Model as User;` (或者直接 `UserEntity`) 来使用它。
+// 【`*` 通配符】: 表示导出 `user_entity` 模块内的所有公共项。
+pub use user_entity::*;
+
+// --- 声明 auth_dtos 子模块 ---
+pub mod auth_dtos;
+
+// --- 重新导出 auth_dtos 公共项 ---
+pub use auth_dtos::*;

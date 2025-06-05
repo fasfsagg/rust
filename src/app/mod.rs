@@ -13,6 +13,9 @@
 // 声明controller子模块
 pub mod controller;
 
+// 声明repository子模块
+pub mod repository;
+
 // 声明service子模块
 pub mod service;
 
@@ -21,6 +24,10 @@ pub mod model;
 
 // 声明middleware子模块
 pub mod middleware;
+
+// 声明state子模块
+pub mod state;
+pub use state::AppState; // Re-export AppState for easier access
 
 // 这里没有重新导出子模块中的项（与其他mod.rs文件不同）。
 // 这是因为app模块的子模块之间有明确的层次和依赖关系，
