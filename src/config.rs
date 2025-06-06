@@ -66,6 +66,15 @@ pub struct AppConfig {
     /// WebSocket 连接的心跳检测间隔时间 (单位: 秒)。
     /// 用于保持连接活跃并检测断开的连接。
     pub ws_ping_interval: u64,
+
+    /// JWT (JSON Web Token) 签名和验证所使用的密钥。
+    /// 【重要】: 在生产环境中，这应该是一个强大且保密的密钥，并且最好从环境变量或安全的配置服务中加载。
+    ///           不要在代码中硬编码真实的生产密钥。
+    pub jwt_secret: String,
+
+    /// JWT 的有效期 (单位: 秒)。
+    /// 定义了生成的 JWT 在多长时间后过期。
+    pub jwt_expiration_seconds: i64,
 }
 
 // --- 配置加载实现 ---
@@ -124,11 +133,37 @@ impl AppConfig {
         println!("  - WebSocket Ping 间隔: {} 秒", ws_ping_interval);
 
         println!("CONFIG: 配置加载完成。");
+        // --- 加载 JWT 相关配置 ---
+        // JWT Secret Key
+        // 【安全警告】: 默认值 "your-secret-key" 仅用于开发和演示。
+        //             在生产环境中，必须通过环境变量设置一个强大且唯一的密钥。
+        let jwt_secret = std::env
+            ::var("JWT_SECRET")
+            .unwrap_or_else(|_| "your-secret-key-that-is-very-long-and-secure".to_string());
+        if jwt_secret == "your-secret-key-that-is-very-long-and-secure" {
+            // 在实际应用中，你可能希望更严格地处理，比如在生产模式下如果未设置 JWT_SECRET 则 panic。
+            // 或者使用条件编译来仅在调试模式下打印此警告。
+            println!("CONFIG WARNING: JWT_SECRET is using the default insecure value. Please set a strong secret in production via the JWT_SECRET environment variable.");
+        }
+        println!("  - JWT 密钥: [REDACTED FOR SECURITY IN LOGS]"); // 不直接打印密钥
+
+        // JWT Expiration Time
+        let jwt_expiration_seconds = std::env
+            ::var("JWT_EXPIRATION_SECONDS")
+            .map(|v| {
+                v.parse::<i64>().expect("环境变量 JWT_EXPIRATION_SECONDS 必须是有效的整数 (秒)")
+            })
+            .unwrap_or(3600); // 默认 1 小时 (3600 秒)
+        println!("  - JWT 有效期: {} 秒", jwt_expiration_seconds);
+
+        println!("CONFIG: 配置加载完成。");
         // --- 构建并返回 AppConfig 实例 ---
         Self {
             http_addr,
             http3_addr,
             ws_ping_interval,
+            jwt_secret,
+            jwt_expiration_seconds,
         }
     }
 

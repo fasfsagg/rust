@@ -12,4 +12,17 @@ pub mod logger;
 // 重新导出logger模块中的所有公共项
 // 这样，其他模块可以通过 `use crate::app::middleware::setup_logger` 直接访问函数，
 // 而不需要 `use crate::app::middleware::logger::setup_logger`。
-pub use logger::*; 
+pub use logger::*;
+
+// --- Auth Middleware ---
+pub mod auth_middleware;
+// Re-exporting Claims here makes it available via `crate::app::middleware::Claims`
+// This is for convenience if someone expects all auth related logic to be findable via middleware path.
+// However, Claims is fundamentally a model, so `crate::app::model::Claims` is its canonical path.
+// We also re-export it from `crate::app::model::mod.rs` and `crate::app::mod.rs`.
+// If `auth_middleware.rs` defined a specific middleware struct (e.g., `JwtAuthMiddlewareLayer`),
+// that would be more typically re-exported here.
+// For `FromRequestParts` extractors, they are typically just imported where used.
+pub use auth_middleware::*; // This will make the FromRequestParts<AppState> for Claims active.
+                            // If Claims struct itself was in auth_middleware.rs, it would be re-exported.
+                            // Since Claims is in model::user, this mostly ensures the module is linked.

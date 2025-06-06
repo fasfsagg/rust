@@ -22,6 +22,12 @@ pub mod model;
 // 声明middleware子模块
 pub mod middleware;
 
+// 声明state子模块
+pub mod state;
+
+// 重新导出 AppState 以方便在 main.rs 和 startup.rs 等地方使用
+pub use state::AppState;
+
 // 这里没有重新导出子模块中的项（与其他mod.rs文件不同）。
 // 这是因为app模块的子模块之间有明确的层次和依赖关系，
 // 我们希望保持这种明确的引用路径，例如：

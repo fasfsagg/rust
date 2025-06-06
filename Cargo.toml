@@ -13,9 +13,24 @@ axum = { version = "0.7", features = ["ws", "macros"] }
 # Tokio 异步运行时
 tokio = { version = "1.36", features = ["full"] }
 
-# 序列化与反序列化库
+# SeaORM for database interaction
+sea-orm = { version = "0.12", features = ["sqlx-sqlite", "runtime-tokio-rustls", "macros"] }
+
+# Argon2 for password hashing
+argon2 = "0.5"
+
+# JSON Web Tokens
+jsonwebtoken = "9"
+
+# Serde for serialization/deserialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+# thiserror for custom error types
+thiserror = "1.0"
+
+# async-trait for async traits
+async-trait = "0.1"
 
 # 唯一ID生成
 uuid = { version = "1.7", features = ["v4", "serde"] }
@@ -41,4 +56,14 @@ tokio-rustls = "0.25" # Tokio 与 Rustls 集成
 rcgen = "0.12"
 
 # 同步原语
-parking_lot = "0.12" # RwLock 实现，比标准库更快 
+parking_lot = "0.12" # RwLock 实现，比标准库更快
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+hyper-util = { version = "0.1", features = ["client", "client-legacy", "http1"] }
+# serde_json can be useful for constructing test payloads or asserting responses
+# but often tests can use the application's own structs for requests and responses.
+# assert_json_diff = "2.0.2" # If needed for complex JSON comparisons
+once_cell = "1.19" # For global test setup, like TRACING
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] } # For initializing tracing in tests
+uuid = { version = "1.7", features = ["v4"] } # For generating unique DB names if using file DBs

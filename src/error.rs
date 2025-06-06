@@ -93,7 +93,39 @@ pub enum AppError {
     /// 409 Conflict - 表示请求与服务器当前状态冲突，通常用于创建已存在的资源或更新冲突。
     /// 【关联状态码】: `StatusCode::CONFLICT` (409)
     Conflict(String),
+
+    // --- Authentication Errors ---
+    /// 401 Unauthorized - 表示用户未提供凭证或凭证无效。
+    UserNotFound(String),
+    /// 401 Unauthorized - 密码不正确。
+    InvalidPassword,
+    /// 500 Internal Server Error - JWT 创建失败。
+    JwtCreationError(String),
+    /// 409 Conflict - 用户名已存在
+    UsernameAlreadyExists(String),
+    /// 500 Internal Server Error - 密码哈希失败
+    PasswordHashingError(String),
+    /// 401 Unauthorized - Generic unauthorized access
+    Unauthorized(String),
+
+    // --- Database Errors ---
+    /// 500 Internal Server Error - 表示数据库操作失败。
+    /// 将 `sea_orm::DbErr` 包装起来，以便在应用错误处理中统一处理。
+    DatabaseError(sea_orm::DbErr),
+
+    // --- Task Specific Errors ---
+    /// 404 Not Found - Task with a specific i32 ID was not found.
+    TaskNotFound(i32),
 }
+
+// --- Implement From<sea_orm::DbErr> for AppError ---
+// This allows us to use `?` to propagate `DbErr` as `AppError::DatabaseError`
+impl From<sea_orm::DbErr> for AppError {
+    fn from(err: sea_orm::DbErr) -> Self {
+        AppError::DatabaseError(err)
+    }
+}
+
 
 // --- 实现 IntoResponse ---
 
@@ -123,6 +155,22 @@ impl IntoResponse for AppError {
             AppError::InternalServerError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
             // 如果错误是 Conflict，状态码是 409。
             AppError::Conflict(msg) => (StatusCode::CONFLICT, msg),
+            // Auth errors
+            AppError::UserNotFound(username) => (StatusCode::UNAUTHORIZED, format!("User '{}' not found", username)),
+            AppError::InvalidPassword => (StatusCode::UNAUTHORIZED, "Invalid password".to_string()),
+            AppError::JwtCreationError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, format!("JWT creation error: {}", msg)),
+            AppError::UsernameAlreadyExists(username) => (StatusCode::CONFLICT, format!("Username '{}' already exists", username)),
+            AppError::PasswordHashingError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Password hashing error: {}", msg)),
+            AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
+            // Database error
+            AppError::DatabaseError(db_err) => {
+                // Log the detailed database error for server-side inspection
+                eprintln!("Database Error: {:?}", db_err);
+                // Return a generic message to the client
+                (StatusCode::INTERNAL_SERVER_ERROR, "A database error occurred".to_string())
+            }
+            // Task Specific Error
+            AppError::TaskNotFound(id) => (StatusCode::NOT_FOUND, format!("Task with ID {} not found", id)),
         };
 
         // --- 步骤 2: 构建 JSON 格式的响应体 ---
@@ -175,11 +223,11 @@ pub type Result<T> = std::result::Result<T, AppError>;
 ///          提高代码可读性和一致性。
 ///
 /// # 参数
-/// * `id: Uuid` - 未找到的任务的 UUID。
+/// * `id: i32` - 未找到的任务的 ID。
 /// # 返回值
-/// * `AppError` - 一个配置好的 `AppError::NotFound` 实例。
-pub fn task_not_found(id: Uuid) -> AppError {
-    AppError::NotFound(format!("未找到ID为 {} 的任务", id))
+/// * `AppError` - 一个配置好的 `AppError::TaskNotFound` 实例。
+pub fn task_not_found(id: i32) -> AppError {
+    AppError::TaskNotFound(id)
 }
 
 /// 辅助函数：创建"无效 UUID"错误 (`AppError::BadRequest`)

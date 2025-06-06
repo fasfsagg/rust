@@ -55,6 +55,11 @@ use crate::app::controller::{ // 导入控制器函数
     get_task_by_id, // 处理 GET /api/tasks/:id
     update_task, // 处理 PUT /api/tasks/:id 
     ws_handler, // 处理 GET /ws
+    // Auth handlers
+    register_handler,
+    login_handler,
+    // Protected data handler
+    protected_data_handler,
     AppState, // 导入共享应用状态类型
 };
 
@@ -92,6 +97,11 @@ pub fn create_routes(app_state: AppState) -> Router {
         .route("/tasks/:id", put(update_task))
         // 定义 DELETE /tasks/:id 路由，映射到 delete_task 控制器函数。
         .route("/tasks/:id", delete(delete_task))
+        // --- Auth Routes ---
+        .route("/register", post(register_handler))
+        .route("/login", post(login_handler))
+        // --- Protected Routes ---
+        .route("/protected_data", get(protected_data_handler))
         // --- 注入共享状态 ---
         // `.with_state(app_state.clone())`: 将 `app_state` 注入到上面定义的所有 API 路由的处理函数中。
         // **重要**: 因为 `AppState` 通常包含 `Arc<...>` 类型（如我们的 `Db`），所以克隆 `app_state` 是一个廉价的操作

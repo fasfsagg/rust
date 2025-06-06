@@ -1,10 +1,10 @@
 # 控制器层 (Controller) 流程图
 
-## 1. 处理 `POST /tasks` 请求 (`create_task` Handler)
+## 1. 处理 `POST /api/tasks` 请求 (`create_task` Handler) - 创建任务
 
 ```mermaid
 graph TD
-    A["HTTP POST /tasks<br/>(携带 JSON Body)"] --> B{Axum Router 匹配路由};
+    A["HTTP POST /api/tasks<br/>(携带 JSON Body: title, description?, completed?)"] --> B{Axum Router 匹配路由};
     B --> C["`create_task` Handler 被选中"];
     
     subgraph Axum 执行 Handler
@@ -24,8 +24,8 @@ graph TD
     subgraph Handler 内部逻辑 (`create_task`)
         direction TB
         J --> K{"调用 `service::create_task(&state.db, payload).await`"};
-        K --> L{"处理 Service 返回的 `Result<Task>`"};
-        L -- "Ok(task)" --> M["构造 `Ok((StatusCode::CREATED, Json(task)))`"];
+        K --> L{"处理 Service 返回的 `Result<task::Model>`"};
+        L -- "Ok(task_model)" --> M["构造 `Ok((StatusCode::CREATED, Json(task_model)))`"];
         L -- "Err(app_error)" --> N["通过 `?` 操作符<br/>返回 `Err(app_error)`"];
     end
     
@@ -34,7 +34,7 @@ graph TD
         M --> O{"返回值 `Ok(impl IntoResponse)`"};
         N --> O; 
         O --> P{"调用 `IntoResponse::into_response()`"};
-        P -- "来自 Ok(...) 的元组" --> Q["生成 HTTP 响应<br/>- Status: 201 Created<br/>- Header: Content-Type: application/json<br/>- Body: task 的 JSON 序列化"];
+        P -- "来自 Ok(...) 的元组" --> Q["生成 HTTP 响应<br/>- Status: 201 Created<br/>- Header: Content-Type: application/json<br/>- Body: task model 的 JSON 序列化"];
         P -- "来自 Err(app_error)" --> R["调用 `AppError::into_response()`<br/>生成 HTTP 错误响应<br/>(例如 404 or 500)"];
     end
     
@@ -43,16 +43,11 @@ graph TD
     H --> S;
 ```
 
-**说明**:
-- 这个流程展示了 Axum 如何处理一个典型的 POST 请求。
-- **关键点**: 提取器的执行先于 Handler 函数本体。任何提取器失败都会导致请求被短路，直接返回错误。
-- Handler 函数返回 `Result<impl IntoResponse>`，Axum 会根据 `Ok` 或 `Err` 调用相应的 `into_response()` 方法来生成最终的 HTTP 响应。
-
-## 2. 处理 `GET /tasks/:id` 请求 (`get_task_by_id` Handler)
+## 2. 处理 `GET /api/tasks/{id}` 请求 (`get_task_by_id` Handler) - 获取特定任务
 
 ```mermaid
 graph TD
-    A["HTTP GET /tasks/some-uuid"] --> B{Axum Router 匹配路由};
+    A["HTTP GET /api/tasks/{id} (e.g., /api/tasks/123)"] --> B{Axum Router 匹配路由};
     B --> C["`get_task_by_id` Handler 被选中"];
     
     subgraph Axum 执行 Handler
@@ -61,19 +56,17 @@ graph TD
         subgraph Extractors
             direction LR
             D -- "1. State<AppState>" --> E["克隆 AppState (成功)"];
-            D -- "2. Path<String>" --> F["从路径提取 "some-uuid"<br/>(绑定到 `id_str`)"];
+            D -- "2. Path<i32>" --> F["从路径提取 id (整数)<br/>(绑定到 `id`)"];
         end
         E & F --> G{"所有提取器成功, 调用 Handler 函数"};
     end
 
-    G --> H{`get_task_by_id(state, id_str)` 执行};
+    G --> H{`get_task_by_id(state, id)` 执行};
     subgraph Handler 内部逻辑 (`get_task_by_id`)
         direction TB
-        H --> I{"调用 `parse_uuid(&id_str)`"};
-        I -- "解析失败 (Err)" --> J["通过 `?` 返回<br/>`Err(AppError::InvalidUuid)`"];
-        I -- "解析成功 (Ok(id))" --> K{"调用 `service::get_task_by_id(&state.db, id).await`"};
-        K --> L{"处理 Service 返回的 `Result<Task>`"};
-        L -- "Ok(task)" --> M["构造 `Ok((StatusCode::OK, Json(task)))`"];
+        H --> K{"调用 `service::get_task_by_id(&state.db, id).await`"};
+        K --> L{"处理 Service 返回的 `Result<task::Model>`"};
+        L -- "Ok(task_model)" --> M["构造 `Ok((StatusCode::OK, Json(task_model)))`"];
         L -- "Err(app_error)" --> N["通过 `?` 返回<br/>`Err(app_error)` (e.g., TaskNotFound)"];
     end
     
@@ -81,21 +74,128 @@ graph TD
         direction TB
         M --> O{"返回值 `Ok(impl IntoResponse)`"};
         N --> O;
-        J --> O {"返回值 `Err(AppError::InvalidUuid)`"};
         O --> P{"调用 `IntoResponse::into_response()`"};
-        P -- "来自 Ok(...) 的元组" --> Q["生成 HTTP 响应<br/>- Status: 200 OK<br/>- Body: task 的 JSON"];
-        P -- "来自 Err(app_error)" --> R["调用 `AppError::into_response()`<br/>生成 HTTP 错误响应 (404 or 400)"];
+        P -- "来自 Ok(...) 的元组" --> Q["生成 HTTP 响应<br/>- Status: 200 OK<br/>- Body: task model 的 JSON"];
+        P -- "来自 Err(app_error)" --> R["调用 `AppError::into_response()`<br/>生成 HTTP 错误响应 (404)"];
     end
     
     Q --> S["将 HTTP 响应发送给客户端"];
     R --> S;
 ```
 
-**说明**:
-- 这个流程展示了 `Path` 提取器的使用，以及 Handler 内部的错误处理（UUID 解析错误）。
-- 无论错误发生在 Handler 内部（如 `parse_uuid`）还是 Service 层，最终都会通过返回 `Err(AppError)` 并由 Axum 的 `IntoResponse` 机制统一转换为 HTTP 错误响应。
+## 3. 用户注册流程 (`POST /api/register`)
 
-## 3. WebSocket 升级流程 (`ws_handler`)
+```mermaid
+graph TD
+    A["HTTP POST /api/register<br/>(携带 JSON Body: username, password)"] --> B{Axum Router 匹配路由};
+    B --> C["`register_handler` 被选中"];
+
+    subgraph Axum 执行 Handler
+        direction TB
+        C --> D{"尝试运行提取器"};
+        D -- "1. State<AppState>" --> E["克隆 AppState"];
+        D -- "2. Json<RegisterUserPayload>" --> F{"解析 JSON Body"};
+        F -- "成功" --> G["创建 `RegisterUserPayload`"];
+        F -- "失败" --> X["返回 4xx 错误"];
+    end
+
+    E & G --> H{"调用 `register_handler(app_state, payload)`"};
+    subgraph Handler 内部逻辑 (`register_handler`)
+        H --> I{"调用 `AuthService::register_user(&app_state.db, payload).await`"};
+        subgraph AuthService::register_user
+            I --> J["检查用户名是否存在 (SeaORM 查询)"];
+            J -- "已存在" --> K["返回 `Err(AppError::UsernameAlreadyExists)`"];
+            J -- "不存在" --> L["哈希密码 (argon2)"];
+            L --> M["创建 `user::ActiveModel`"];
+            M --> N["插入数据库 (SeaORM `insert`)"];
+            N -- "成功" --> O["返回 `Ok(user::Model)`"];
+            N -- "失败" --> P["返回 `Err(AppError::DatabaseError)`"];
+        end
+        O --> Q["构造 `Ok(Json(UserResponse))`"];
+        K --> R["返回 `Err(AppError)`"]; P --> R;
+    end
+
+    subgraph Axum 处理 Handler 返回值
+        Q --> S{"调用 `IntoResponse`"}; S --> T["生成 HTTP 200 OK 响应 (含 UserResponse JSON)"];
+        R --> U{"调用 `AppError::into_response()`"}; U --> V["生成 HTTP 错误响应 (e.g., 409, 500)"];
+    end
+
+    T --> W["发送响应给客户端"]; V --> W; X --> W;
+```
+
+## 4. 用户登录流程 (`POST /api/login`)
+
+```mermaid
+graph TD
+    A["HTTP POST /api/login<br/>(携带 JSON Body: username, password)"] --> B{Axum Router 匹配路由};
+    B --> C["`login_handler` 被选中"];
+
+    subgraph Axum 执行 Handler
+        C --> D{"提取 `State<AppState>` 和 `Json<LoginUserPayload>`"};
+        D --> E{"调用 `login_handler(app_state, payload)`"};
+    end
+
+    subgraph Handler 内部逻辑 (`login_handler`)
+        E --> F{"调用 `AuthService::login_user(&app_state.db, &app_state.config, payload).await`"};
+        subgraph AuthService::login_user
+            F --> G["查询用户 (SeaORM `find().filter()`)"];
+            G -- "未找到" --> H["返回 `Err(AppError::UserNotFound)`"];
+            G -- "找到 (user_model)" --> I["验证密码 (argon2 `verify_password`)"];
+            I -- "密码错误" --> J["返回 `Err(AppError::InvalidPassword)`"];
+            I -- "密码正确" --> K["准备 JWT Claims (sub, username, exp, iat)"];
+            K --> L["生成 JWT (jsonwebtoken `encode`, 使用 `app_state.config.jwt_secret`)"];
+            L -- "成功" --> M["返回 `Ok(token_string)`"];
+            L -- "失败" --> N["返回 `Err(AppError::JwtCreationError)`"];
+        end
+        M --> O["构造 `Ok(Json(LoginResponse))`"];
+        H --> P["返回 `Err(AppError)`"]; J --> P; N --> P;
+    end
+
+    subgraph Axum 处理 Handler 返回值
+        O --> Q["生成 HTTP 200 OK 响应 (含 LoginResponse JSON with token)"];
+        P --> R["生成 HTTP 错误响应 (e.g., 401, 500)"];
+    end
+
+    Q --> S["发送响应给客户端"]; R --> S;
+```
+
+## 5. 受保护路由访问流程 (例如 `GET /api/protected_data`)
+
+```mermaid
+graph TD
+    A["HTTP GET /api/protected_data<br/>(携带 Header: \"Authorization: Bearer <token>\")"] --> B{Axum Router 匹配路由};
+    B --> C["`protected_data_handler` 被选中"];
+
+    subgraph Axum 执行 Handler (参数提取)
+        direction TB
+        C --> D{"尝试运行提取器"};
+        D -- "1. `claims: Claims`" --> E{"调用 `Claims::from_request_parts()`"};
+        subgraph Claims::from_request_parts
+            direction TB
+            E --> F["获取 `AppState` (含 `AppConfig`)"];
+            F --> G["提取 `Authorization` 头部"];
+            G -- "无或格式错误" --> H["返回 `Err(AppError::Unauthorized)`"];
+            G -- "有 Bearer token" --> I["解码和验证 JWT (使用 `jwt_secret`, 检查 `exp`)"];
+            I -- "验证失败 (无效/过期)" --> J["返回 `Err(AppError::Unauthorized)`"];
+            I -- "验证成功" --> K["返回 `Ok(Claims)`"];
+        end
+        H --> L{提取失败}; J --> L;
+        K --> M{提取成功};
+    end
+
+    subgraph Handler 调用与响应
+        direction TB
+        M --> N{"调用 `protected_data_handler(claims)`"};
+        N --> O["Handler 执行业务逻辑 (使用 `claims` 数据)"];
+        O --> P["构造 `Ok(Json(response_data))`"];
+        P --> Q["生成 HTTP 200 OK 响应 (含 JSON)"];
+        L --> R{"Axum 将 `AppError` 转为 HTTP 401 响应"};
+    end
+
+    Q --> S["发送响应给客户端"]; R --> S;
+```
+
+## 6. WebSocket 升级流程 (`ws_handler`) (基本不变)
 
 ```mermaid
 graph TD
@@ -131,10 +231,3 @@ graph TD
     N --> O{"`handle_socket(socket, state)`<br/>在一个新 Task 中被异步调用"};
     O --> P["WebSocket 通信开始<br/>(发送欢迎消息, 进入 recv 循环)"];
 ```
-
-**说明**: 
-- WebSocket 的处理流程比较特殊。
-- Handler (`ws_handler`) 的主要作用是使用 `WebSocketUpgrade` 提取器检测升级请求，并调用 `.on_upgrade()` 注册一个回调函数 (`handle_socket`)。
-- Handler 返回一个特殊的响应 (101 Switching Protocols)。
-- 真正的 WebSocket 消息处理逻辑在回调函数 (`handle_socket`) 中进行，它会在连接成功建立后被 Axum 异步执行。
-``` 

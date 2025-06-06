@@ -56,4 +56,42 @@ graph TD
 - **启动时**: `trace_layer()` 函数被调用以创建一个 `TraceLayer` 实例。它与其他中间件 (如 `CorsLayer`) 一起通过 `ServiceBuilder` 组合成一个中间件栈。这个栈最后被应用到整个 Axum `Router` 上。
 - **请求处理时**: 每个进入的请求都会按照"洋葱模型"流经中间件栈。
     - 请求首先经过 `CorsLayer`，然后是 `TraceLayer` (记录请求开始)，然后到达路由匹配和控制器处理函数。
-    - 控制器处理函数生成响应后，响应首先经过 `TraceLayer` (记录响应结束信息)，然后是 `CorsLayer` (添加必要的 CORS 响应头)，最后发送给客户端。 
+    - 控制器处理函数生成响应后，响应首先经过 `TraceLayer` (记录响应结束信息)，然后是 `CorsLayer` (添加必要的 CORS 响应头)，最后发送给客户端。
+
+## 3. JWT认证流程 (`Claims::from_request_parts` Extractor)
+
+当一个 Axum 处理器 (Handler) 的参数中包含 `claims: Claims` 时，以下流程会被触发：
+
+```mermaid
+graph TD
+    A["HTTP 请求 (访问受保护路由)"] -- 参数中包含 `claims: Claims` --> B{Axum 尝试解析 `Claims`};
+    B --> C["调用 `Claims::from_request_parts(parts, &app_state)`"];
+    subgraph Claims::from_request_parts 内部逻辑
+        direction TB
+        C --> D["从 `parts.headers` 获取 `Authorization` 头部"];
+        D -- "头部不存在或为空" --> E["返回 `Err(AppError::Unauthorized(\"Missing or malformed Bearer token\"))`"];
+        D -- "头部存在" --> F{"检查头部值是否以 \"Bearer \" 开头"};
+        F -- "否" --> G["返回 `Err(AppError::Unauthorized(\"Malformed token\"))`"];
+        F -- "是" --> H["提取 token 字符串"];
+        H --> I["从 `app_state.config.jwt_secret` 获取 JWT 密钥"];
+        I --> J["创建 `jsonwebtoken::DecodingKey` 和 `Validation` (指定算法如 HS512)"];
+        J --> K{"调用 `jsonwebtoken::decode(token, key, validation)`"};
+        K -- "解码/验证成功 (返回 `TokenData<Claims>`)" --> L["提取 `token_data.claims`"];
+        L --> M["返回 `Ok(Claims)`"];
+        K -- "解码/验证失败 (e.g., 签名无效, 过期)" --> N["记录错误详情 (eprintln)"];
+        N --> O["返回 `Err(AppError::Unauthorized(\"Invalid token\"))`"];
+    end
+    E --> P[请求被拒绝];
+    G --> P;
+    O --> P;
+    M --> Q["`Claims` 对象成功注入到处理器函数"];
+    P --> R[Axum 将 `AppError` 转为 HTTP 401 响应并发送给客户端<br/>(处理器函数不执行)];
+    Q --> S[处理器函数继续执行，可以访问 `claims` 对象];
+```
+
+**说明**:
+- 此流程展示了通过 Axum 的 `FromRequestParts` trait 实现的 JWT 认证机制。
+- 当路由处理函数的参数列表包含 `claims: Claims` 时，Axum 会自动调用 `Claims::from_request_parts`。
+- **成功路径**: 如果请求包含有效的 Bearer Token，并且该 Token 通过了所有的验证（签名、有效期等），则 `from_request_parts` 方法返回 `Ok(Claims)`。这些 `Claims` 数据随后被 Axum 注入到处理函数的参数中，处理函数得以正常执行。
+- **失败路径**: 如果 `Authorization` 头部缺失、格式错误，或者 Token 本身无效（例如签名不匹配、已过期），`from_request_parts` 方法会返回 `Err(AppError::Unauthorized)`。在这种情况下，Axum 会捕获这个错误，并调用 `AppError::into_response()` 将其转换为一个 HTTP 401 Unauthorized 响应。原始的路由处理函数将**不会**被执行。
+- 这种机制使得认证逻辑可以优雅地集成到 Axum 的请求处理流程中，保持控制器代码的简洁。

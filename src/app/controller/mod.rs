@@ -50,3 +50,13 @@ pub mod task_controller;
 // 【效果】: 简化路由层 (`routes.rs`) 定义路由时的处理函数路径。
 // 【* 通配符】: 导出 `task_controller` 模块内的所有公共项。[[关键语法要素: pub, use, * (glob)]]
 pub use task_controller::*;
+
+// --- 声明 auth_controller 子模块 ---
+pub mod auth_controller;
+// --- 重新导出 auth_controller 公共项 ---
+pub use auth_controller::*;
+
+// --- 重新导出共享的 AppState ---
+// This makes `crate::app::controller::AppState` a valid path,
+// which might be used by other modules like `routes.rs`.
+pub use crate::app::AppState;

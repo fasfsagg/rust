@@ -49,3 +49,8 @@ pub mod task_service;
 // 【效果】: 简化 Controller 层及其他调用者的导入和调用路径。
 // 【* 通配符】: 导出 `task_service` 模块内的所有公共项。[[关键语法要素: pub, use, * (glob)]]
 pub use task_service::*;
+
+// --- 声明 auth_service 子模块 ---
+pub mod auth_service;
+// --- 重新导出 auth_service 公共项 ---
+pub use auth_service::*;

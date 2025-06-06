@@ -1,131 +1,34 @@
-// /-----------------------------------------------------------------------------\
-// |                              【模块功能图示】                             |
-// |-----------------------------------------------------------------------------|
-// | HTTP 请求 (例如 GET /tasks/:id)                                           |
-// |      |                                                                      |
-// |      V                                                                      |
-// | +-----------------------------+      +------------------------------------+ |
-// | | routes.rs                   | ---> | task_controller.rs (本模块)        | |
-// | | (路由定义, 映射路径到 Handler) |      | (处理函数 Handlers)                | |
-// | +-----------------------------+      |                                    | |
-// |                                      | 依赖项 (Dependencies):             | |
-// |                                      |  - axum::{extract::{...}, ...}     | |
-// |                                      |  - model::{...载荷, Task} (模型)   | |
-// |                                      |  - service::{..._svc} (服务函数)    | |
-// |                                      |  - db::Db (数据库类型)              | |
-// |                                      |  - error::{Result, AppError} (错误) | |
-// |                                      |                                    | |
-// |                                      | +--------------------------------+ | |
-// |                                      | | 处理函数 (例如 get_task_by_id)   | | |
-// |                                      | | - 输入: 提取器 (Extractors)      | | |
-// |                                      | |   - State<应用状态>              | | |
-// |                                      | |   - Path<字符串> (路径参数)      | | |
-// |                                      | |   - Json<载荷> (请求体)          | | |
-// |                                      | |   - WebSocket升级                | | |
-// |                                      | | - 逻辑:                          | | |
-// |                                      | |   1. 解析输入 (例如 UUID)      | | |
-// |                                      | |   2. 调用服务函数                | | |
-// |                                      | |   3. 处理结果 (Ok/Err)         | | |
-// |                                      | | - 输出: impl IntoResponse        | | |
-// |                                      | |   - (状态码, Json<任务>)         | | |
-// |                                      | |   - 状态码                     | | |
-// |                                      | |   - AppError (通过 IntoResponse) | | |
-// |                                      | |   - WebSocket 响应             | | |
-// |                                      | +--------------------------------+ | |
-// |                                      |        | 调用服务层 (Call Service) | |
-// |                                      |        V                           | |
-// |                                      |   服务层 (service/*.rs)          | |
-// |                                      +------------------------------------+ |
-// |                                              |                              |
-// |                                              V                              |
-// | HTTP 响应 (例如 200 OK + JSON Body)                                     |
-// \-----------------------------------------------------------------------------/
-//
-// 文件路径: src/app/controller/task_controller.rs
-//
-// 【模块核心职责】
-// 这个模块是应用程序的【控制器层 (Controller Layer)】的一部分，专门负责处理与"任务"资源相关的 HTTP 请求。
-// 它是 Web 框架 (Axum) 与应用程序业务逻辑 (Service Layer) 之间的【接口】。
-//
-// 【主要职责】
-// 1. **接收 HTTP 请求**: 由 Axum 路由层 (`routes.rs`) 将匹配的请求分发到这里的处理函数 (Handler)。
-// 2. **解析请求数据**: 使用 Axum 提供的【提取器 (Extractors)】（如 `State`, `Path`, `Json`）从请求中提取所需信息。
-// 3. **调用服务层**: 将解析后的数据传递给服务层 (`service::task_service`) 的相应函数来执行核心业务逻辑。
-// 4. **处理服务层结果**: 获取服务层返回的 `Result`，并根据是 `Ok` 还是 `Err` 来决定如何响应。
-// 5. **构造 HTTP 响应**: 将业务逻辑的处理结果转换为标准的 HTTP 响应，通常使用 Axum 的 `IntoResponse` 特性。
-// 6. **WebSocket 处理**: 处理 WebSocket 握手请求和后续通信。
-//
-// 【控制器层的特点 - "轻薄"】: 控制器不应包含复杂业务逻辑，主要负责数据传递和 HTTP 交互。
-//
-// 【Axum 框架关键概念】: Handler, Extractor (State, Path, Json, WebSocketUpgrade), IntoResponse, AppState。
-//
-// 【面向初学者提示】: 控制器像餐厅服务员，接收请求、传递给后厨（服务层）、返回结果给顾客。
+// src/app/controller/task_controller.rs
 
-// --- 导入依赖 ---
-// 导入 Axum 框架的核心组件
+// This module handles HTTP requests related to tasks, acting as an interface
+// between the web framework (Axum) and the business logic (service layer).
+// It uses extractors to parse request data, calls service functions,
+// and constructs HTTP responses.
+
+// --- Imports ---
 use axum::{
     extract::{ Path, State, ws::{ WebSocket, Message, WebSocketUpgrade } },
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-// 导入 UUID 类型。
-use uuid::Uuid;
-// 导入模型层定义的载荷结构体。
-use crate::app::model::{ CreateTaskPayload, Task, UpdateTaskPayload };
+// 导入模型层定义的载荷结构体 (task::Model will be used for responses)
+// Also CreateTaskPayload, UpdateTaskPayload for request bodies.
+use crate::app::model::{task, CreateTaskPayload, UpdateTaskPayload};
 // 导入服务层模块。
 use crate::app::service;
-// 导入数据库类型定义，用于 AppState。
-use crate::db::Db;
 // 导入自定义错误类型和 Result 别名。
 use crate::error::{ self, AppError, Result }; // 显式导入 AppError
-
-// --- 应用程序共享状态 ---
-
-/// 应用程序状态结构体 (Application State Struct)
-///
-/// 【用途】: 封装需要在整个应用程序（特别是不同的请求处理函数之间）共享的数据。
-/// 【生命周期】: 通常在应用程序启动时创建一次，并通过 Axum 的 `.with_state()` 方法注入到 Router 中。
-/// 【共享机制】: Axum 要求 State 必须实现 `Clone` 特性。
-///             当请求到达时，Axum 会【克隆】这个状态并将其传递给处理函数。
-///             因此，状态内部的字段通常需要使用 `Arc` 来包裹，以避免深拷贝。
-/// 【`#[derive(Clone)]`**: 自动实现 `Clone` 特性。[[关键语法要素: derive 宏]]
-#[derive(Clone)]
-pub struct AppState {
-    /// 数据库实例 (Database Instance)
-    /// 【类型】: `Db` (即 `Arc<RwLock<HashMap<Uuid, Task>>>`)
-    /// 【共享】: `Db` 是 `Arc` 包裹的，克隆 `AppState` 实际上是克隆 `Arc` 指针，非常高效。
-    pub db: Db,
-}
+// 导入新的 AppState
+use crate::app::AppState;
 
 // --- 任务相关的 HTTP 处理函数 (Task Handlers) ---
 
-/// Handler: 创建任务 (POST /tasks)
+/// Handler for creating a new task.
 ///
-/// 【功能】: 处理创建新任务的 HTTP POST 请求。
-/// 【路由】: 通常在 `routes.rs` 中被绑定到 `POST /tasks` 路径。
-/// 【标记】: `pub async fn` - 公共异步处理函数。
-///
-/// # 【参数 (Axum Extractors)】
-/// * `State(state): State<AppState>`: [[Axum Extractor: State]]
-///    - 从应用程序状态中提取 `AppState` 的【克隆】。
-///    - `State(...)` 语法是解构模式。
-/// * `Json(payload): Json<CreateTaskPayload>`: [[Axum Extractor: Json]]
-///    - 尝试从 HTTP 请求体中【反序列化】JSON 数据为 `CreateTaskPayload` 类型。
-///    - `Json(...)` 解构模式。
-///    - 【错误处理】: 无效 JSON 或结构不匹配会自动返回 4xx 错误。
-///
-/// # 【返回值】
-/// * `-> Result<impl IntoResponse>`: [[Axum 返回值: Result]]
-///    - 使用自定义 `Result` (`Result<T, AppError>`)。
-///    - `impl IntoResponse`: 成功类型 (`T`) 和失败类型 (`AppError`) 都必须实现 `IntoResponse`。
-///    - 【成功路径 (`Ok(...)`)】: `Ok((StatusCode::CREATED, Json(task)))`
-///      - 返回元组 `(StatusCode, Json<Task>)`，Axum 内置了其 `IntoResponse` 实现。
-///      - `StatusCode::CREATED` (201): 设置状态码。
-///      - `Json(task)`: 将 `Task` 序列化为 JSON 响应体，并设置 `Content-Type`。
-///    - 【失败路径 (`Err(...)`)】: 函数体中的 `?` 会处理错误。
-///      - 如果 `service::create_task(...).await` 返回 `Err(app_error)`，`?` 将其作为当前函数的返回值。
-///      - Axum 会调用 `AppError` 的 `into_response()` 方法将错误转为 HTTP 响应。
+/// Receives task data via `CreateTaskPayload` in the JSON request body.
+/// Calls the task service to perform the creation logic using SeaORM.
+/// Returns the created task as JSON with a 201 status code.
 pub async fn create_task(
     State(state): State<AppState>, // 注入共享状态
     Json(payload): Json<CreateTaskPayload> // 从请求体解析 JSON
@@ -145,58 +48,42 @@ pub async fn create_task(
     Ok((StatusCode::CREATED, Json(task)))
 }
 
-/// Handler: 获取所有任务 (GET /tasks)
+/// Handler for retrieving all tasks.
 ///
-/// 【功能】: 处理获取所有任务列表的 HTTP GET 请求。
-/// 【路由】: 绑定到 `GET /tasks`。
-///
-/// # 【参数】
-/// * `State(state): State<AppState>`: 注入共享状态以访问数据库。
-///
-/// # 【返回值】
-/// * `-> impl IntoResponse`: [[Axum 返回值: impl Trait]]
-///    - 这里没有使用 `Result`，假设此操作总能成功（简单示例）。
-///    - 直接返回一个元组 `(StatusCode, Json<Vec<Task>>)`。
-///    - `StatusCode::OK` (200): 标准成功状态码。
-///    - `Json(tasks)`: 将 `Vec<Task>` 序列化为 JSON 数组作为响应体。
+/// Calls the task service to fetch all tasks from the database via SeaORM.
+/// Returns a JSON array of tasks with a 200 status code.
+/// Handles potential errors from the service layer.
 pub async fn get_all_tasks(State(state): State<AppState>) -> impl IntoResponse {
     println!("CONTROLLER: Received get all tasks request");
     // --- 调用服务层 ---
     // `.await`: 因为 `service::get_all_tasks` 是 `async fn`。
-    let tasks = service::get_all_tasks(&state.db).await;
-    println!("CONTROLLER: Retrieved {} tasks", tasks.len());
+    // The service now returns Result<Vec<task::Model>, AppError>
+    let tasks_result = service::get_all_tasks(&state.db).await;
 
-    // --- 构造成功响应 ---
-    (StatusCode::OK, Json(tasks))
+    match tasks_result {
+        Ok(tasks) => {
+            println!("CONTROLLER: Retrieved {} tasks", tasks.len());
+            (StatusCode::OK, Json(tasks)).into_response()
+        }
+        Err(e) => {
+            println!("CONTROLLER: Error retrieving tasks: {:?}", e);
+            e.into_response()
+        }
+    }
 }
 
-/// Handler: 获取单个任务 (GET /tasks/:id)
+/// Handler for retrieving a single task by its ID.
 ///
-/// 【功能】: 处理根据 ID 获取单个任务的 HTTP GET 请求。
-/// 【路由】: 绑定到 `GET /tasks/:id`，其中 `:id` 是路径参数。
-///
-/// # 【参数】
-/// * `State(state): State<AppState>`: 注入共享状态。
-/// * `Path(id_str): Path<String>`: [[Axum Extractor: Path]]
-///    - 从 URL 路径中提取 `:id` 部分作为 `String`。
-///    - `Path(...)` 解构。
-///
-/// # 【返回值】
-/// * `-> Result<impl IntoResponse>`: 返回 `Result`，因为任务可能找不到。
-///    - 【成功路径】: `Ok((StatusCode::OK, Json(task)))` - 返回 200 OK 和任务 JSON。
-///    - 【失败路径】: 处理 `InvalidUuid` 和 `TaskNotFound` 错误，Axum 会自动转换。
+/// Expects an `i32` task ID from the URL path.
+/// Calls the task service to fetch the specific task.
+/// Returns the task as JSON with a 200 status code if found,
+/// or a 404 error if not found.
 pub async fn get_task_by_id(
     State(state): State<AppState>,
-    Path(id_str): Path<String> // 从路径提取 ID 字符串
+    Path(id): Path<i32> // ID is now i32
 ) -> Result<impl IntoResponse> {
-    println!("CONTROLLER: Received get task by ID request for '{}'", id_str);
-    // --- 解析输入 ---
-    // 路径参数提取的是字符串，我们需要将其解析为 Uuid 类型。
-    // 调用下面的辅助函数 `parse_uuid`。
-    // `?`: 如果解析失败，`parse_uuid` 返回 `Err(AppError::InvalidUuid)`，`?` 将其作为此函数的返回值。
-    let id = parse_uuid(&id_str)?;
-    println!("CONTROLLER: Parsed UUID: {}", id);
-
+    println!("CONTROLLER: Received get task by ID request for '{}'", id);
+    // ID is already i32, no parsing needed from string.
     // --- 调用服务层 ---
     let task = service::get_task_by_id(&state.db, id).await?;
     println!("CONTROLLER: Task found for ID: {}", id);
@@ -205,30 +92,19 @@ pub async fn get_task_by_id(
     Ok((StatusCode::OK, Json(task)))
 }
 
-/// Handler: 更新任务 (PUT /tasks/:id)
+/// Handler for updating an existing task.
 ///
-/// 【功能】: 处理更新现有任务的 HTTP PUT 请求。
-/// 【路由】: 绑定到 `PUT /tasks/:id`。
-///
-/// # 【参数】
-/// * `State(state): State<AppState>`: 注入共享状态。
-/// * `Path(id_str): Path<String>`: 提取路径参数 ID。
-/// * `Json(payload): Json<UpdateTaskPayload>`: 从请求体解析 JSON 更新数据。
-///
-/// # 【返回值】
-/// * `-> Result<impl IntoResponse>`: 返回 `Result`。
-///    - 【成功路径】: `Ok((StatusCode::OK, Json(task)))` - 返回 200 OK 和更新后的任务 JSON。
-///    - 【失败路径】: 处理 `InvalidUuid` 和 `TaskNotFound` 等错误。
+/// Expects an `i32` task ID from the URL path and `UpdateTaskPayload` in the JSON body.
+/// Calls the task service to perform the update.
+/// Returns the updated task as JSON with a 200 status code,
+/// or relevant errors (e.g., 404 if not found).
 pub async fn update_task(
     State(state): State<AppState>,
-    Path(id_str): Path<String>,
+    Path(id): Path<i32>, // ID is now i32
     Json(payload): Json<UpdateTaskPayload> // 从请求体解析更新数据
 ) -> Result<impl IntoResponse> {
-    println!("CONTROLLER: Received update task request for '{}'", id_str);
-    // --- 解析输入 ---
-    let id = parse_uuid(&id_str)?;
-    println!("CONTROLLER: Parsed UUID: {}", id);
-
+    println!("CONTROLLER: Received update task request for ID: {}", id);
+    // ID is already i32.
     // --- 调用服务层 ---
     let task = service::update_task(&state.db, id, payload).await?;
     println!("CONTROLLER: Task updated successfully for ID: {}", id);
@@ -237,32 +113,21 @@ pub async fn update_task(
     Ok((StatusCode::OK, Json(task)))
 }
 
-/// Handler: 删除任务 (DELETE /tasks/:id)
+/// Handler for deleting a task by its ID.
 ///
-/// 【功能】: 处理删除任务的 HTTP DELETE 请求。
-/// 【路由】: 绑定到 `DELETE /tasks/:id`。
-///
-/// # 【参数】
-/// * `State(state): State<AppState>`: 注入共享状态。
-/// * `Path(id_str): Path<String>`: 提取路径参数 ID。
-///
-/// # 【返回值】
-/// * `-> Result<impl IntoResponse>`: 返回 `Result`。
-///    - 【成功路径】: `Ok(StatusCode::NO_CONTENT)` - 返回 204 No Content 状态码。[[HTTP 状态码: 204 No Content]]
-///      - 204 响应通常【没有】响应体。
-///    - 【失败路径】: 处理 `InvalidUuid` 和 `TaskNotFound` 等错误。
+/// Expects an `i32` task ID from the URL path.
+/// Calls the task service to perform the deletion.
+/// Returns a 204 No Content status on successful deletion,
+/// or relevant errors (e.g., 404 if not found).
 pub async fn delete_task(
     State(state): State<AppState>,
-    Path(id_str): Path<String>
+    Path(id): Path<i32> // ID is now i32
 ) -> Result<impl IntoResponse> {
-    println!("CONTROLLER: Received delete task request for '{}'", id_str);
-    // --- 解析输入 ---
-    let id = parse_uuid(&id_str)?;
-    println!("CONTROLLER: Parsed UUID: {}", id);
-
+    println!("CONTROLLER: Received delete task request for ID: {}", id);
+    // ID is already i32.
     // --- 调用服务层 ---
-    // `?` 在成功时提取 `Ok(Task)` 中的 `Task`，但我们忽略它。
-    service::delete_task(&state.db, id).await?;
+    // Service returns the deleted task, but we don't need to use it in the response for DELETE.
+    let _deleted_task = service::delete_task(&state.db, id).await?;
     println!("CONTROLLER: Task deleted successfully for ID: {}", id);
 
     // --- 构造成功响应 ---
@@ -270,18 +135,10 @@ pub async fn delete_task(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Handler: WebSocket 连接处理 (GET /ws)
+/// Handler for WebSocket connections.
 ///
-/// 【功能】: 处理客户端发起的 WebSocket 握手请求。
-/// 【路由】: 通常绑定到 `GET /ws` 或类似路径。
-///
-/// # 【参数】
-/// * `ws: WebSocketUpgrade`: [[Axum Extractor: WebSocketUpgrade]]
-///    - 用于检测 WebSocket 升级请求，并提供 `.on_upgrade()` 方法。
-/// * `State(state): State<AppState>`: 注入共享状态，以便后续的 `handle_socket` 可以访问。
-///
-/// # 【返回值】
-/// * `-> impl IntoResponse`: 返回由 `ws.on_upgrade()` 生成的特殊响应，告知客户端同意升级协议。
+/// Upgrades the HTTP connection to a WebSocket connection and passes it
+/// to `handle_socket` for message processing.
 pub async fn ws_handler(
     ws: WebSocketUpgrade, // WebSocket 升级请求提取器
     State(state): State<AppState> // 注入共享状态
@@ -294,15 +151,12 @@ pub async fn ws_handler(
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
-/// WebSocket 实际处理逻辑
+/// Handles individual WebSocket connections.
 ///
-/// 【功能】: 在 WebSocket 连接建立后，处理消息的接收和发送。
-/// 【调用】: 由 `ws.on_upgrade()` 在连接成功升级后异步调用。
-///
-/// # 【参数】
-/// * `socket: WebSocket`: [[Axum 类型: WebSocket]]
-///    - 代表已建立的双向 WebSocket 连接。提供 `.send()` 和 `.recv()` 方法。
-/// * `state: AppState`: 从 `ws_handler` 传递过来的共享状态。
+/// Receives messages from the client and can send messages back.
+/// Includes basic echo functionality and connection lifecycle logging.
+/// The `state: AppState` argument demonstrates how shared state can be accessed
+/// within WebSocket handlers if needed (e.g., for broadcasting or DB interaction).
 async fn handle_socket(mut socket: WebSocket, state: AppState) {
     println!("WEBSOCKET: Connection established. Sending welcome message.");
     // --- 发送欢迎消息 ---
@@ -380,5 +234,38 @@ fn parse_uuid(id_str: &str) -> Result<Uuid> {
     // `.map_err(|_| ...)`: 如果是 Err，则转换错误类型。
     //   - `_`: 忽略原始的 `uuid::Error`。
     //   - `error::invalid_uuid(id_str)`: 创建自定义错误。
-    Uuid::parse_str(id_str).map_err(|_| error::invalid_uuid(id_str))
+*/
+
+// The parse_uuid function is no longer needed as IDs are i32.
+// The error::invalid_uuid helper (in src/error.rs) might still be useful if other string UUIDs
+// are parsed elsewhere, but it's not used for task IDs from path anymore.
+
+// --- Protected Data Handler (Example for JWT Auth) ---
+// Ensure model::user::Claims is imported if not already covered by model::*
+use crate::app::model::user::Claims;
+use serde_json::{json, Value};
+
+/// Handler for accessing protected data.
+///
+/// This handler demonstrates JWT authentication. It requires valid `Claims`
+/// to be extracted from the JWT in the request. If authentication fails,
+/// the `FromRequestParts` implementation for `Claims` will reject the request
+/// before this handler is called.
+///
+/// Returns a JSON object with a success message and some claims data.
+pub async fn protected_data_handler(
+    claims: Claims // The Claims struct is automatically extracted and validated by Axum
+) -> Result<Json<Value>, AppError> {
+    println!(
+        "CONTROLLER: Accessing protected data for user_id: {}, username: {}",
+        claims.sub, claims.username
+    );
+    Ok(Json(json!({
+        "message": "This is protected data. You are authenticated.",
+        "user_id": claims.sub,
+        "username": claims.username,
+        "company": claims.company,
+        "expires_at_timestamp": claims.exp,
+        "issued_at_timestamp": claims.iat,
+    })))
 }
