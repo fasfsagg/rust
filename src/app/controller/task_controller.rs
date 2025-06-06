@@ -72,13 +72,13 @@ use axum::{
 // 导入 UUID 类型。
 use uuid::Uuid;
 // 导入模型层定义的载荷结构体。
-use crate::app::model::{ CreateTaskPayload, Task, UpdateTaskPayload };
+use crate::app::model::{ CreateTaskPayload, UpdateTaskPayload };
 // 导入服务层模块。
 use crate::app::service;
 // 导入数据库类型定义，用于 AppState。
 use crate::db::Db;
 // 导入自定义错误类型和 Result 别名。
-use crate::error::{ self, AppError, Result }; // 显式导入 AppError
+use crate::error::{ self, Result }; // 显式导入 AppError
 
 // --- 应用程序共享状态 ---
 
