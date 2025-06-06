@@ -1,7 +1,10 @@
 # Rust特有的忽略文件
 /target/
 **/*.rs.bk
-Cargo.lock
+# Cargo.lock - 对于应用程序，建议将 Cargo.lock 文件提交到版本控制中，以确保构建的可复现性。
+
+# 文档缓存
+.docs-cache/
 
 # IDE目录和文件
 .idea/

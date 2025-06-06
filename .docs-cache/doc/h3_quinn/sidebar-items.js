@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["SendDatagramError","SendStreamError","WriteError"],"struct":["AcceptBi","AcceptUni","BidiStream","Connection","ConnectionError","Endpoint","OpenBi","OpenStreams","OpenUni","ReadError","RecvStream","SendStream","VarInt"],"trait":["Session"]};

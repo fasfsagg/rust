@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["consoleapi","errhandlingapi","fileapi","gl","handleapi","lsalookup","minwinbase","ntsecapi","processenv","sspi","subauth","wincon","wincontypes","wincred","wingdi","winnt"]};

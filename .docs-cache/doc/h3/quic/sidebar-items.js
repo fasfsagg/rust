@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"struct":["InvalidStreamId","StreamId","WriteBuf"],"trait":["BidiStream","Connection","Error","OpenStreams","RecvDatagramExt","RecvStream","SendDatagramExt","SendStream","SendStreamUnframed"]};
