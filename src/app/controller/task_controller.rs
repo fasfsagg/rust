@@ -69,34 +69,24 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+// 导入标准库的 ControlFlow，用于优雅地控制循环。
+use std::ops::ControlFlow;
 // 导入 UUID 类型。
 use uuid::Uuid;
-// 导入模型层定义的载荷结构体。
-use crate::app::model::{ CreateTaskPayload, UpdateTaskPayload };
+// 导入模型层定义的载荷结构体和 Task DTO。
+// 注意：现在我们使用的是 `Task` DTO，而不是数据库实体。
+use crate::app::model::task::{ CreateTaskPayload, Task, UpdateTaskPayload };
 // 导入服务层模块。
 use crate::app::service;
-// 导入数据库类型定义，用于 AppState。
-use crate::db::Db;
 // 导入自定义错误类型和 Result 别名。
 use crate::error::{ self, Result }; // 显式导入 AppError
+use crate::startup::AppState; // <--- 使用在 startup.rs 中定义的新 AppState
 
 // --- 应用程序共享状态 ---
 
-/// 应用程序状态结构体 (Application State Struct)
-///
-/// 【用途】: 封装需要在整个应用程序（特别是不同的请求处理函数之间）共享的数据。
-/// 【生命周期】: 通常在应用程序启动时创建一次，并通过 Axum 的 `.with_state()` 方法注入到 Router 中。
-/// 【共享机制】: Axum 要求 State 必须实现 `Clone` 特性。
-///             当请求到达时，Axum 会【克隆】这个状态并将其传递给处理函数。
-///             因此，状态内部的字段通常需要使用 `Arc` 来包裹，以避免深拷贝。
-/// 【`#[derive(Clone)]`**: 自动实现 `Clone` 特性。[[关键语法要素: derive 宏]]
-#[derive(Clone)]
-pub struct AppState {
-    /// 数据库实例 (Database Instance)
-    /// 【类型】: `Db` (即 `Arc<RwLock<HashMap<Uuid, Task>>>`)
-    /// 【共享】: `Db` 是 `Arc` 包裹的，克隆 `AppState` 实际上是克隆 `Arc` 指针，非常高效。
-    pub db: Db,
-}
+// 【说明】: AppState 的定义已移至 `src/startup.rs` 作为单一来源。
+//          这里直接使用 `use crate::startup::AppState;` 导入。
+//          这解决了 E0255 (重复定义) 和 E0308 (类型不匹配) 的错误。
 
 // --- 任务相关的 HTTP 处理函数 (Task Handlers) ---
 
@@ -133,11 +123,11 @@ pub async fn create_task(
     // 返回 Result，成功和失败类型都能转为 Response
     println!("CONTROLLER: Received create task request");
     // --- 调用服务层 ---
-    // `state.db`: 从注入的 AppState 中获取数据库实例的引用。
+    // `state.db_connection`: 从注入的 AppState 中获取数据库连接的引用。
     // `payload`: 将从 JSON 解析得到的载荷传递给服务层。
     // `.await`: 因为 `service::create_task` 是 `async fn`。
     // `?`: 如果服务层返回 `Err(app_error)`，则立即将 `Err(app_error)` 作为此函数的返回值。
-    let task = service::create_task(&state.db, payload).await?;
+    let task = service::create_task(&state.db_connection, payload).await?;
     println!("CONTROLLER: Task created successfully (ID: {})", task.id);
 
     // --- 构造成功响应 ---
@@ -154,20 +144,19 @@ pub async fn create_task(
 /// * `State(state): State<AppState>`: 注入共享状态以访问数据库。
 ///
 /// # 【返回值】
-/// * `-> impl IntoResponse`: [[Axum 返回值: impl Trait]]
-///    - 这里没有使用 `Result`，假设此操作总能成功（简单示例）。
-///    - 直接返回一个元组 `(StatusCode, Json<Vec<Task>>)`。
-///    - `StatusCode::OK` (200): 标准成功状态码。
-///    - `Json(tasks)`: 将 `Vec<Task>` 序列化为 JSON 数组作为响应体。
-pub async fn get_all_tasks(State(state): State<AppState>) -> impl IntoResponse {
+/// * `-> Result<impl IntoResponse>`: 返回 Result 以处理潜在的数据库错误。
+///    - 【成功路径】: `Ok((StatusCode::OK, Json<Vec<Task>>))`
+///    - 【失败路径】: 由 `?` 操作符处理。
+pub async fn get_all_tasks(State(state): State<AppState>) -> Result<impl IntoResponse> {
     println!("CONTROLLER: Received get all tasks request");
     // --- 调用服务层 ---
     // `.await`: 因为 `service::get_all_tasks` 是 `async fn`。
-    let tasks = service::get_all_tasks(&state.db).await;
+    // `?`: 如果服务层返回错误，则提前返回。
+    let tasks = service::get_all_tasks(&state.db_connection).await?;
     println!("CONTROLLER: Retrieved {} tasks", tasks.len());
 
     // --- 构造成功响应 ---
-    (StatusCode::OK, Json(tasks))
+    Ok((StatusCode::OK, Json(tasks)))
 }
 
 /// Handler: 获取单个任务 (GET /tasks/:id)
@@ -198,7 +187,7 @@ pub async fn get_task_by_id(
     println!("CONTROLLER: Parsed UUID: {}", id);
 
     // --- 调用服务层 ---
-    let task = service::get_task_by_id(&state.db, id).await?;
+    let task = service::get_task_by_id(&state.db_connection, id).await?;
     println!("CONTROLLER: Task found for ID: {}", id);
 
     // --- 构造成功响应 ---
@@ -230,7 +219,7 @@ pub async fn update_task(
     println!("CONTROLLER: Parsed UUID: {}", id);
 
     // --- 调用服务层 ---
-    let task = service::update_task(&state.db, id, payload).await?;
+    let task = service::update_task(&state.db_connection, id, payload).await?;
     println!("CONTROLLER: Task updated successfully for ID: {}", id);
 
     // --- 构造成功响应 ---
@@ -254,19 +243,18 @@ pub async fn update_task(
 pub async fn delete_task(
     State(state): State<AppState>,
     Path(id_str): Path<String>
-) -> Result<impl IntoResponse> {
+) -> Result<StatusCode> {
     println!("CONTROLLER: Received delete task request for '{}'", id_str);
-    // --- 解析输入 ---
     let id = parse_uuid(&id_str)?;
     println!("CONTROLLER: Parsed UUID: {}", id);
 
-    // --- 调用服务层 ---
-    // `?` 在成功时提取 `Ok(Task)` 中的 `Task`，但我们忽略它。
-    service::delete_task(&state.db, id).await?;
+    // 调用服务层
+    service::delete_task(&state.db_connection, id).await?;
     println!("CONTROLLER: Task deleted successfully for ID: {}", id);
 
     // --- 构造成功响应 ---
-    // 直接返回 204 状态码。
+    // 对于成功的 DELETE 操作，返回 204 No Content 是最佳实践。
+    // 这告诉客户端操作已成功执行，但响应体中没有内容。
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -286,83 +274,96 @@ pub async fn ws_handler(
     ws: WebSocketUpgrade, // WebSocket 升级请求提取器
     State(state): State<AppState> // 注入共享状态
 ) -> impl IntoResponse {
+    // 成功时，返回一个特殊的响应，指示服务器愿意将连接升级到 WebSocket 协议。
+    // `ws.on_upgrade(...)` 接收一个回调函数，该函数在 WebSocket 连接建立后执行。
     println!("CONTROLLER: Received WebSocket upgrade request");
-    // --- 处理 WebSocket 升级 ---
-    // `ws.on_upgrade()`: 接收一个回调函数（这里是 `handle_socket`）。
-    // 连接成功升级后，Axum 调用此回调，传入建立好的 `WebSocket` 连接。
-    // 使用 `move` 将 state 的所有权移入闭包，传递给 `handle_socket`。
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
-/// WebSocket 实际处理逻辑
+/// Helper: 处理单个 WebSocket 连接
 ///
-/// 【功能】: 在 WebSocket 连接建立后，处理消息的接收和发送。
-/// 【调用】: 由 `ws.on_upgrade()` 在连接成功升级后异步调用。
+/// 【功能】: 这个函数是 WebSocket 连接建立后的【主循环】。
 ///
 /// # 【参数】
-/// * `socket: WebSocket`: [[Axum 类型: WebSocket]]
-///    - 代表已建立的双向 WebSocket 连接。提供 `.send()` 和 `.recv()` 方法。
-/// * `state: AppState`: 从 `ws_handler` 传递过来的共享状态。
-async fn handle_socket(mut socket: WebSocket, state: AppState) {
-    println!("WEBSOCKET: Connection established. Sending welcome message.");
-    // --- 发送欢迎消息 ---
-    if let Err(e) = socket.send(Message::Text("欢迎连接任务管理 WebSocket 服务！".into())).await {
-        println!("WEBSOCKET: Failed to send welcome message: {}", e);
-        return; // 发送失败则直接返回
-    }
+/// * `socket: WebSocket`: 表示一个独立的 WebSocket 连接。
+/// * `state: AppState`: 传入应用状态，以便在需要时访问（例如，数据库）。
+async fn handle_socket(mut socket: WebSocket, _state: AppState) {
+    // 循环等待来自客户端的消息。
+    // `socket.recv().await` 是一个异步操作，会等待直到接收到消息。
+    while let Some(msg) = socket.recv().await {
+        if let Ok(msg) = msg {
+            // 打印收到的消息。
+            println!("WS: Received message: {:?}", msg);
 
-    // --- 消息接收与处理循环 ---
-    // `socket.recv()`: 异步等待接收下一条消息。
-    // 返回 `Option<Result<Message, axum::Error>>`。
-    while let Some(msg_result) = socket.recv().await {
-        match msg_result {
-            Ok(msg) => {
-                // --- 根据消息类型处理 ---
-                match msg {
-                    // 处理文本消息
-                    Message::Text(text) => {
-                        println!("WEBSOCKET: Received text message: {}", text);
-                        // --- 业务逻辑示例：简单回显 ---
-                        let response = Message::Text(format!("Echo: {}", text));
-                        if socket.send(response).await.is_err() {
-                            println!("WEBSOCKET: Failed to send echo message. Closing connection.");
-                            break; // 发送失败，退出循环
-                        }
-                    }
-                    // 处理二进制消息
-                    Message::Binary(data) => {
-                        println!("WEBSOCKET: Received binary message ({} bytes)", data.len());
-                        if socket.send(Message::Binary(data)).await.is_err() {
-                            println!("WEBSOCKET: Failed to send binary echo. Closing connection.");
-                            break;
-                        }
-                    }
-                    // 处理关闭消息
-                    Message::Close(close_frame) => {
-                        println!("WEBSOCKET: Received close message: {:?}", close_frame);
-                        break; // 收到关闭帧，退出循环
-                    }
-                    // 处理 Ping/Pong (Axum 通常会自动处理 Pong)
-                    Message::Ping(ping_data) => {
-                        println!("WEBSOCKET: Received ping");
-                        if socket.send(Message::Pong(ping_data)).await.is_err() {
-                            println!("WEBSOCKET: Failed to send pong. Closing connection.");
-                            break;
-                        }
-                    }
-                    Message::Pong(_) => {
-                        println!("WEBSOCKET: Received pong");
+            // 处理消息并获取响应
+            match msg {
+                Message::Text(text) => {
+                    println!("WS: Received text message: {}", text);
+                    // 发送回复消息
+                    if
+                        let Err(e) = socket.send(
+                            Message::Text(format!("服务器收到: {}", text))
+                        ).await
+                    {
+                        println!("WS: Error sending response: {:?}", e);
+                        break;
                     }
                 }
+                Message::Close(c) => {
+                    if let Some(cf) = c {
+                        println!(
+                            "WS: Received close with code {} and reason '{}'",
+                            cf.code,
+                            cf.reason
+                        );
+                    } else {
+                        println!("WS: Received close message without details");
+                    }
+                    break;
+                }
+                _ => {
+                    println!("WS: Received other type of message: {:?}", msg);
+                }
             }
-            Err(e) => {
-                println!("WEBSOCKET: Error receiving message: {}", e);
-                break; // 发生错误，退出循环
-            }
+        } else {
+            // 客户端断开连接。
+            println!("WS: Client disconnected.");
+            break;
         }
     }
-    // --- 连接关闭 ---
-    println!("WEBSOCKET: Connection closed.");
+    // 注意: `state` 在这里被丢弃，但由于它是 `Arc` 的克隆，所以不会影响其他部分。
+}
+
+/// 辅助函数：处理单个 WebSocket 消息
+///
+/// 【功能】: 根据收到的消息类型执行不同操作。
+/// 【返回值】: `ControlFlow` - 用于指示调用者是否应该中断循环。
+///    - `ControlFlow::Continue(())`: 继续处理后续消息。
+///    - `ControlFlow::Break(())`: 关闭连接并跳出循环。
+fn process_message(msg: Message) -> ControlFlow<(), ()> {
+    match msg {
+        Message::Text(t) => {
+            println!("WS: Received text message: {}", t);
+        }
+        Message::Binary(b) => {
+            println!("WS: Received binary message: {:?}", b);
+        }
+        Message::Ping(p) => {
+            println!("WS: Received ping: {:?}", p);
+        }
+        Message::Pong(p) => {
+            println!("WS: Received pong: {:?}", p);
+        }
+        Message::Close(c) => {
+            if let Some(cf) = c {
+                println!("WS: Received close with code {} and reason '{}'", cf.code, cf.reason);
+            } else {
+                println!("WS: Received close message without details");
+            }
+            return ControlFlow::Break(()); // 收到关闭帧，中断循环
+        }
+    }
+    ControlFlow::Continue(()) // 其他消息，继续循环
 }
 
 /// 辅助函数：将字符串解析为 UUID (Helper Function: Parse UUID)

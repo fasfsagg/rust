@@ -36,13 +36,26 @@
 use axum::Router; // Axum 的核心路由类型
 use tower::ServiceBuilder; // Tower 提供的用于构建中间件栈的服务构建器
 use tower_http::cors::{ Any, CorsLayer }; // Tower HTTP 提供的 CORS 中间件和相关配置
+use anyhow::Result; // anyhow 用于简化错误处理
+use migration::{ Migrator, MigratorTrait }; // 导入迁移器
+use sea_orm::{ Database, DatabaseConnection }; // 导入 SeaORM 的核心类型
 
 // --- 导入项目内部模块 ---
-use crate::app::controller::AppState; // 应用共享状态结构体
 use crate::app::middleware; // 中间件模块 (日志等)
 use crate::config::AppConfig; // 应用配置结构体
-use crate::db; // 数据库模块 (内存 DB 实现)
 use crate::routes; // 路由定义模块
+
+/// 应用的共享状态结构体 (`AppState`)
+///
+/// 【用途】: 这个结构体持有了所有需要在不同 Axum Handler 之间共享的状态。
+///          最典型的共享状态就是数据库连接池。
+/// 【设计】: 使用 `#[derive(Clone)]` 宏，使得 `AppState` 可以被轻松地克隆。
+///          Axum 在分发请求给不同的 Handler 时，需要克隆这个状态。
+///          `DatabaseConnection` 本身是设计为可以被克隆的（它内部使用了 `Arc`）。
+#[derive(Clone)]
+pub struct AppState {
+    pub db_connection: DatabaseConnection, // 数据库连接池
+}
 
 // --- 初始化函数 ---
 
@@ -53,81 +66,47 @@ use crate::routes; // 路由定义模块
 ///          最终返回一个配置完整、准备好运行的 `axum::Router`。
 ///
 /// # 【参数】
-/// * `_config: AppConfig` - 应用程序的配置信息。[[所有权: 移动]]
-///                         虽然在这个当前版本中参数被标记为 `_config` (表示未使用)，
-///                         但保留它是为了将来可能的扩展，例如根据配置选择不同的数据库或启用/禁用某些功能。
+/// * `config: AppConfig` - 应用程序的配置信息。[[所有权: 移动]]
 ///
 /// # 【返回值】
-/// * `-> Router`: 返回一个 `axum::Router` 实例。
-///                这个实例已经包含了所有定义的路由、应用的中间件栈以及注入的共享状态。
-///                它将被传递给 `main.rs` 中的 `axum::serve` 来启动服务器。
-pub async fn init_app(_config: AppConfig) -> Router {
+/// * `-> Result<Router>`: 返回一个 `anyhow::Result`。
+///    - `Ok(Router)`: 成功时返回配置好的 `Router`。
+///    - `Err(error)`: 如果在初始化过程中（如数据库连接失败）发生错误，则返回错误。
+pub async fn init_app(config: AppConfig) -> Result<Router> {
     // --- 步骤 1: 设置日志系统 ---
-    // 调用 `middleware` 模块中的 `setup_logger` 函数。
-    // 这通常会配置 `tracing` crate，设置日志级别、格式和输出目标（例如控制台）。
     middleware::setup_logger();
     println!("STARTUP: 日志系统初始化完成。");
 
-    // --- 步骤 2: 创建数据库实例 ---
-    // 调用 `db` 模块的 `new_db` 函数来创建一个新的内存数据库实例。
-    // 返回的是 `Db` 类型，即 `Arc<RwLock<HashMap<Uuid, Task>>>`。
-    let db = db::new_db();
-    println!("STARTUP: 内存数据库实例创建完成。");
+    // --- 步骤 2: 建立数据库连接 ---
+    // 直接在这里建立数据库连接，而不是通过旧的 `db.rs` 模块。
+    let db_connection = Database::connect(&config.database_url).await?;
+    println!("STARTUP: 数据库连接池创建完成。");
 
-    // --- 步骤 3: 初始化示例数据 ---
-    // 调用 `db` 模块的 `init_sample_data` 函数，并将数据库实例的引用传递给它。
-    // 这个函数会向内存数据库中添加一些初始的任务数据，方便开发和测试。
-    db::init_sample_data(&db);
-    println!("STARTUP: 内存数据库示例数据填充完成。");
+    // --- (新) 步骤 2.5: 自动执行数据库迁移 ---
+    // 这是最佳实践：在应用启动时自动运行所有未应用的迁移。
+    // `Migrator::up` 会检查数据库中的迁移历史记录，并只运行新的迁移脚本。
+    // `&db_connection` 是对连接池的引用。
+    // `None` 表示我们想要运行所有待处理的迁移。
+    Migrator::up(&db_connection, None).await?;
+    println!("STARTUP: 数据库迁移检查与应用完成。");
 
-    // --- 步骤 4: 创建应用状态 ---
-    // 创建 `AppState` 结构体的实例。
-    // 这个结构体包含了所有需要在请求处理函数之间共享的状态。
-    // 在本例中，它只包含数据库实例 `db` (是 `Arc<...>` 类型，可以安全克隆和共享)。
-    // 如果应用需要共享其他资源（如配置、连接池等），也应添加到 `AppState` 中。
-    let app_state = AppState { db };
+    // 注意: 旧的 `db::new_db()` 和 `db::init_sample_data()` 已被移除。
+
+    // --- 步骤 3: 创建应用状态 ---
+    let app_state = AppState { db_connection };
     println!("STARTUP: 应用共享状态 (AppState) 创建完成。");
 
-    // --- 步骤 5: 构建中间件栈 ---
-    // 使用 `tower::ServiceBuilder` 来定义和组合中间件。
-    // 中间件是在请求到达处理函数之前和响应返回给客户端之后执行的逻辑层。
+    // --- 步骤 4: 构建中间件栈 ---
     let middleware_stack = ServiceBuilder::new()
-        // `.layer()` 方法将一个中间件层添加到构建器中。
-        // 中间件按 `.layer()` 调用的【顺序】应用。
-        // 请求会【反向】通过这些层（最后添加的最先处理请求），响应会【正向】通过这些层（最先添加的最先处理响应）。
-
-        // 添加日志跟踪中间件 (来自 middleware 模块)。
-        // 这个中间件通常会记录每个请求的详细信息（方法、路径、状态码、耗时等）。
         .layer(middleware::trace_layer())
-        // 添加 CORS (跨域资源共享) 中间件。
-        // 这对于允许来自不同源（例如，运行在不同端口的前端应用）的 JavaScript 代码访问 API 至关重要。
-        .layer(
-            CorsLayer::new()
-                // `allow_origin(Any)`: 允许来自任何源的请求。
-                // 在生产环境中，通常应配置为只允许特定的源。
-                .allow_origin(Any)
-                // `allow_methods(Any)`: 允许所有常见的 HTTP 方法 (GET, POST, PUT, DELETE, etc.)。
-                // 也可以指定具体允许的方法列表。
-                .allow_methods(Any)
-                // `allow_headers(Any)`: 允许客户端发送任何自定义的请求头。
-                // 也可以指定具体允许的头部列表。
-                .allow_headers(Any)
-        );
+        .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any));
     println!("STARTUP: 中间件栈构建完成 (Trace, CORS)。");
 
-    // --- 步骤 6: 创建应用路由并应用中间件 ---
-    // 调用 `routes` 模块的 `create_routes` 函数，并将 `app_state` 传递给它。
-    // 这会返回一个包含所有已定义路由（API 路由、WebSocket 路由、静态文件服务）的 `Router`。
-    let app = routes
-        ::create_routes(app_state)
-        // `.layer(middleware_stack)`: 将之前构建的整个 `middleware_stack` 应用到【所有】路由上。
-        // 这意味着每个进入应用的请求都会先经过 CORS 和 Trace 中间件的处理。
-        .layer(middleware_stack);
+    // --- 步骤 5: 创建应用路由并应用中间件 ---
+    let app = routes::create_routes(app_state).layer(middleware_stack);
     println!("STARTUP: 路由创建并应用中间件完成。");
 
-    // --- 步骤 7: 返回配置好的应用 ---
-    // 返回最终的 `Router` 实例，它现在包含了所有的路由、中间件和共享状态，
-    // 准备好被 `main.rs` 中的服务器使用了。
+    // --- 步骤 6: 返回配置好的应用 ---
     println!("STARTUP: 应用初始化流程完成。");
-    app
+    Ok(app)
 }

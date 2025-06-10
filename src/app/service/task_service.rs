@@ -77,221 +77,136 @@
 // - **异步编程**: 想象一下在厨房做饭。同步方式是：烧水->等水开->煮面->等面熟。异步方式是：开始烧水（不等它开），同时去切菜，水开了再去煮面（不等它熟），同时去准备调料。异步允许程序在等待耗时操作（如烧水、煮面、数据库查询）时去做其他事情，提高效率。
 
 // --- 导入依赖 ---
-// 导入模型层定义的结构体：任务实体 `Task`，以及用于创建和更新的载荷。
-use crate::app::model::{ CreateTaskPayload, Task, UpdateTaskPayload };
-// 导入数据访问层 (`db.rs`) 的所有公共项（主要是 CRUD 函数和 `Db` 类型）。
-// `crate::db` 表示从当前 crate 的根目录开始查找 `db` 模块。
-use crate::db;
+// 导入模型层定义的结构体：任务 DTO `Task`，以及用于创建和更新的载荷。
+use crate::app::model::task::{ CreateTaskPayload, Task, UpdateTaskPayload };
 // 导入自定义的 `Result` 类型别名，用于统一函数返回值。
-use crate::error::Result;
-// 导入 `Uuid` 类型，用于标识任务。
-use uuid::Uuid;
+use crate::error::{ AppError, Result };
+// 导入仓库层
+use crate::app::repository::TaskRepository;
+// 导入 SeaORM 相关模块和数据库实体
+use migration::task_entity::ActiveModel; // 直接导入 ActiveModel
+use sea_orm::{ prelude::Uuid, ActiveValue, DatabaseConnection, IntoActiveModel };
 
 // --- 服务函数定义 ---
 
-/// 服务函数：创建新任务 (Service Function: Create Task)
-///
-/// 【功能】: 处理创建新任务的核心业务流程。
-/// 【输入】: 数据库访问接口 (`db`) 和 从 Controller 传来的已解析的请求载荷 (`payload`)。
-/// 【输出】: 一个包含新创建 `Task` 或错误的 `Result`。
-/// 【标记】: `pub async fn` - 定义一个公共的异步函数。[[关键语法要素: pub, async, fn]]
-///
-/// # 【参数】
-/// * `db: &db::Db` - 对数据库实例的【不可变引用】。服务函数通过它调用 `db.rs` 中的函数。
-/// * `payload: CreateTaskPayload` - 创建任务所需的数据。[[所有权: 移动]] (Controller 将 Payload 的所有权转移给这个函数)
-///
-/// # 【返回值】
-/// * `-> Result<Task>`: 返回一个 `Result`。
-///    - `Ok(Task)`: 成功时，包含新创建的任务实体。
-///    - `Err(AppError)`: 失败时，包含一个描述错误的 `AppError`。
-pub async fn create_task(db: &db::Db, payload: CreateTaskPayload) -> Result<Task> {
-    // --- 业务逻辑占位符 ---
-    // 在一个更完整的应用程序中，这里会是实现具体业务规则的地方。
-    // 例如：
-    // 1. **输入验证**: 检查 `payload.title` 是否为空，长度是否符合要求等（虽然部分验证可能在 Controller 或 Model 层做）。
-    //    ```rust
-    //    if payload.title.is_empty() {
-    //        return Err(AppError::ValidationError("标题不能为空".to_string()));
-    //    }
-    //    ```
-    // 2. **默认值处理**: 如果某些字段有更复杂的默认逻辑。
-    // 3. **唯一性检查**: 查询数据库确保不存在同名任务（如果需要）。
-    //    ```rust
-    //    // 伪代码: 需要添加相应的 db 函数
-    //    // if db::task_exists_with_title(db, &payload.title).await? {
-    //    //     return Err(AppError::BusinessRuleViolation("任务标题已存在".to_string()));
-    //    // }
-    //    ```
-    // 4. **权限检查**: 检查当前用户是否有权创建任务。
-    // 5. **审计日志**: 记录谁在什么时间创建了任务。
-    // 6. **触发事件/通知**: 例如，任务创建后发送通知给相关人员。
-    println!("SERVICE: 正在处理创建任务请求..."); // 简单的日志
+/// 服务函数：创建新任务
+pub async fn create_task(db: &DatabaseConnection, payload: CreateTaskPayload) -> Result<Task> {
+    println!("SERVICE: 正在处理创建任务请求...");
 
-    // --- 解构 Payload ---
-    // 使用模式匹配将 `payload` 结构体的字段解构到独立的变量中。
-    // 这使得后续调用 `db::create_task` 时传递参数更清晰。
-    let CreateTaskPayload { title, description, completed } = payload;
+    // 将来自 API 的 payload 转换为 SeaORM 的 ActiveModel。
+    // ActiveModel 是用于执行插入和更新操作的可变模型。
+    let new_task = ActiveModel {
+        id: ActiveValue::Set(Uuid::new_v4()), // 生成新的 UUID
+        title: ActiveValue::Set(payload.title),
+        description: ActiveValue::Set(payload.description),
+        completed: ActiveValue::Set(payload.completed),
+        ..Default::default() // 其他字段使用默认值 (如 created_at, updated_at 由数据库生成)
+    };
 
-    // --- 调用数据访问层 ---
-    // 调用 `db.rs` 中定义的 `create_task` 函数来执行实际的数据库插入操作。
-    // 将从 `payload` 解构出来的字段传递给数据库函数。
-    // **关于 `await`**: 虽然 `db::create_task` 在我们当前的内存实现中是同步的，
-    // 但由于 `create_task` (本函数) 被声明为 `async`，理论上它调用的其他 `async` 函数需要使用 `.await`。
-    // 不过，Rust 编译器足够智能，如果调用的函数 (`db::create_task`) 不是 `async fn`，
-    // 则不需要也不能使用 `.await`。如果未来 `db::create_task` 变为 `async`，则需要在这里加上 `.await`。
-    // 即 `db::create_task(db, title, description, completed).await?` (如果它返回 Result)
-    // 或者 `db::create_task(db, title, description, completed).await` (如果它直接返回 Task)
-    let result = db::create_task(db, title, description, completed);
+    // 调用仓库层来执行数据库插入。
+    // 错误（DbErr）会通过 `?` 操作符自动转换为 AppError::DbErr。
+    let created_task = TaskRepository::create(db, new_task).await?;
 
     println!("SERVICE: 创建任务请求处理完成。");
-
-    // 返回数据库操作的结果。
-    result
+    // 将数据库模型转换为 API DTO 并返回
+    Ok(created_task.into())
 }
 
-/// 服务函数：获取所有任务 (Service Function: Get All Tasks)
-///
-/// 【功能】: 处理获取所有任务的业务逻辑（在这个简单场景下，主要是直接调用 DB 层）。
-/// 【输入】: 数据库访问接口 (`db`)。
-/// 【输出】: 包含所有 `Task` 实体的向量。
-///
-/// # 【参数】
-/// * `db: &db::Db` - 数据库实例的引用。
-///
-/// # 【返回值】
-/// * `-> Vec<Task>`: 返回包含所有任务的向量。
-///   【注意】: 这里直接返回 `Vec<Task>` 而不是 `Result<Vec<Task>>`，
-///            隐含的假设是获取所有任务的操作本身不太可能失败（在内存实现中是这样）。
-///            在真实的数据库场景中，即使是读取操作也可能因为连接问题等失败，
-///            通常会返回 `Result<Vec<Task>>`。
-pub async fn get_all_tasks(db: &db::Db) -> Vec<Task> {
-    // --- 业务逻辑占位符 ---
-    // 可能的业务逻辑：
-    // - **权限检查**: 是否允许当前用户查看所有任务？
-    // - **过滤/分页**: 根据用户角色或其他条件过滤任务，或者实现分页逻辑（但通常分页参数来自 Controller）。
+/// 服务函数：获取所有任务
+pub async fn get_all_tasks(db: &DatabaseConnection) -> Result<Vec<Task>> {
     println!("SERVICE: 正在处理获取所有任务请求...");
 
-    // --- 调用数据访问层 ---
-    // 直接调用 `db.rs` 中的 `get_all_tasks` 函数。
-    let tasks = db::get_all_tasks(db);
+    // 直接调用仓库层函数。
+    let db_tasks = TaskRepository::find_all(db).await?;
+
+    // 使用迭代器的 `map` 和 `collect` 将 Vec<db_model::Model> 转换为 Vec<Task>
+    let tasks: Vec<Task> = db_tasks
+        .into_iter()
+        .map(|db_task| db_task.into())
+        .collect();
 
     println!("SERVICE: 获取所有任务请求处理完成，找到 {} 个任务", tasks.len());
-
-    // 返回从数据库获取的任务列表。
-    tasks
+    Ok(tasks)
 }
 
-/// 服务函数：根据 ID 获取任务 (Service Function: Get Task By ID)
-///
-/// 【功能】: 处理根据唯一 ID 检索单个任务的业务逻辑。
-/// 【输入】: 数据库访问接口 (`db`) 和 任务 ID (`id`)。
-/// 【输出】: 一个包含找到的 `Task` 或错误的 `Result`。
-///
-/// # 【参数】
-/// * `db: &db::Db` - 数据库实例的引用。
-/// * `id: Uuid` - 要检索的任务的 UUID。[[所有权: 拷贝]]
-///
-/// # 【返回值】
-/// * `-> Result<Task>`: 返回 `Result`。
-///    - `Ok(Task)`: 成功找到任务。
-///    - `Err(AppError::TaskNotFound)`: 未找到任务。
-pub async fn get_task_by_id(db: &db::Db, id: Uuid) -> Result<Task> {
-    // --- 业务逻辑占位符 ---
-    // 可能的业务逻辑：
-    // - **权限检查**: 当前用户是否有权查看这个特定的任务？（例如，只能看自己创建的任务）。
-    // - **数据转换**: 如果需要将数据库模型转换为不同的 DTO 返回给上层。
+/// 服务函数：根据 ID 获取任务
+pub async fn get_task_by_id(db: &DatabaseConnection, id: Uuid) -> Result<Task> {
     println!("SERVICE: 正在处理获取任务 ID: {} 的请求...", id);
 
-    // --- 调用数据访问层 ---
-    // 调用 `db.rs` 中的 `get_task_by_id` 函数。
-    let result = db::get_task_by_id(db, id);
+    // 调用仓库层函数。
+    let db_task = TaskRepository::find_by_id(db, id).await?;
 
-    match &result {
-        Ok(_) => println!("SERVICE: 获取任务 ID: {} 的请求处理成功。", id),
-        Err(_) => println!("SERVICE: 获取任务 ID: {} 的请求处理失败（未找到）。", id),
+    // `find_by_id` 返回 `Option<Model>`，我们需要处理 `None` 的情况。
+    // 如果是 `None`，表示任务未找到，我们返回一个特定的应用错误。
+    // 如果是 `Some(task)`，我们返回任务本身。
+    match db_task {
+        Some(db_task) => {
+            println!("SERVICE: 获取任务 ID: {} 的请求处理成功。", id);
+            // 将数据库模型转换为 API DTO 并返回
+            Ok(db_task.into())
+        }
+        None => {
+            println!("SERVICE: 获取任务 ID: {} 的请求处理失败（未找到）。", id);
+            Err(AppError::TaskNotFound(id))
+        }
     }
-
-    // 返回数据库操作的结果。
-    result
 }
 
-/// 服务函数：更新任务 (Service Function: Update Task)
-///
-/// 【功能】: 处理更新现有任务的业务逻辑。
-/// 【输入】: 数据库访问接口 (`db`)，要更新的任务 ID (`id`)，以及包含更新信息的载荷 (`payload`)。
-/// 【输出】: 一个包含更新后 `Task` 或错误的 `Result`。
-///
-/// # 【参数】
-/// * `db: &db::Db` - 数据库实例的引用。
-/// * `id: Uuid` - 要更新的任务的 UUID。[[所有权: 拷贝]]
-/// * `payload: UpdateTaskPayload` - 包含可选更新字段的数据。[[所有权: 移动]]
-///
-/// # 【返回值】
-/// * `-> Result<Task>`: 返回 `Result`。
-///    - `Ok(Task)`: 成功更新任务，返回更新后的任务状态。
-///    - `Err(AppError::TaskNotFound)`: 未找到要更新的任务。
-///    - `Err(AppError::...)`: 其他可能的业务逻辑错误。
-pub async fn update_task(db: &db::Db, id: Uuid, payload: UpdateTaskPayload) -> Result<Task> {
-    // --- 业务逻辑占位符 ---
-    // 可能的业务逻辑：
-    // 1. **权限检查**: 用户是否有权修改这个任务？
-    // 2. **状态检查**: 任务是否处于允许修改的状态？（例如，已完成的任务可能不允许修改标题）
-    // 3. **输入验证**: 对 `payload` 中的字段进行更复杂的验证。
-    // 4. **部分更新处理**: 确保只更新了 `payload` 中实际提供的字段。
-    // 5. **审计日志**: 记录谁在何时修改了哪些字段。
+/// 服务函数：更新任务
+pub async fn update_task(
+    db: &DatabaseConnection,
+    id: Uuid,
+    payload: UpdateTaskPayload
+) -> Result<Task> {
     println!("SERVICE: 正在处理更新任务 ID: {} 的请求...", id);
 
-    // --- 解构 Payload ---
-    // 将 `payload` 中的可选字段解构出来。
-    let UpdateTaskPayload { title, description, completed } = payload;
+    // 1. 根据 ID 从数据库中获取现有的任务实体。
+    //    我们使用 `.into_active_model()` 将其转换为 ActiveModel，以便进行修改。
+    let mut active_task = match TaskRepository::find_by_id(db, id).await? {
+        Some(task) => task.into_active_model(),
+        None => {
+            return Err(AppError::TaskNotFound(id));
+        }
+    };
 
-    // --- 调用数据访问层 ---
-    // 调用 `db.rs` 中的 `update_task` 函数。
-    // 将 ID 和解构出来的可选字段传递给它。
-    let result = db::update_task(db, id, title, description, completed);
-
-    match &result {
-        Ok(_) => println!("SERVICE: 更新任务 ID: {} 的请求处理成功。", id),
-        Err(_) => println!("SERVICE: 更新任务 ID: {} 的请求处理失败（未找到或其他错误）。", id),
+    // 2. 检查 payload 中的每个字段，如果提供了新值，则更新 ActiveModel。
+    if let Some(title) = payload.title {
+        active_task.title = ActiveValue::Set(title);
     }
 
-    // 返回数据库操作的结果。
-    result
+    if let Some(description) = payload.description {
+        active_task.description = ActiveValue::Set(description);
+    }
+
+    if let Some(completed) = payload.completed {
+        active_task.completed = ActiveValue::Set(completed);
+    }
+
+    // 3. 调用仓库层来执行数据库更新。
+    let updated_task = TaskRepository::update(db, active_task).await?;
+
+    println!("SERVICE: 更新任务 ID: {} 的请求处理完成。", id);
+    // 将数据库模型转换为 API DTO 并返回
+    Ok(updated_task.into())
 }
 
-/// 服务函数：删除任务 (Service Function: Delete Task)
-///
-/// 【功能】: 处理删除任务的业务逻辑。
-/// 【输入】: 数据库访问接口 (`db`) 和 要删除的任务 ID (`id`)。
-/// 【输出】: 一个包含被删除 `Task` 或错误的 `Result`。
-///
-/// # 【参数】
-/// * `db: &db::Db` - 数据库实例的引用。
-/// * `id: Uuid` - 要删除的任务的 UUID。[[所有权: 拷贝]]
-///
-/// # 【返回值】
-/// * `-> Result<Task>`: 返回 `Result`。
-///    - `Ok(Task)`: 成功删除任务，返回被删除的任务数据（有时可能只返回 `Ok(())` 表示成功）。
-///    - `Err(AppError::TaskNotFound)`: 未找到要删除的任务。
-///    - `Err(AppError::...)`: 其他可能的业务逻辑错误（例如，权限不足）。
-pub async fn delete_task(db: &db::Db, id: Uuid) -> Result<Task> {
-    // --- 业务逻辑占位符 ---
-    // 可能的业务逻辑：
-    // 1. **权限检查**: 用户是否有权删除这个任务？
-    // 2. **依赖检查**: 是否有其他数据依赖于这个任务，导致不能删除？
-    // 3. **软删除**: 可能不是真的从数据库删除，而是标记为"已删除"（添加 `deleted_at` 字段）。
-    // 4. **审计日志**: 记录删除操作。
+/// 服务函数：删除任务
+pub async fn delete_task(db: &DatabaseConnection, id: Uuid) -> Result<()> {
     println!("SERVICE: 正在处理删除任务 ID: {} 的请求...", id);
 
-    // --- 调用数据访问层 ---
-    // 调用 `db.rs` 中的 `delete_task` 函数。
-    let result = db::delete_task(db, id);
+    // 调用仓库层执行删除操作。
+    let delete_result = TaskRepository::delete(db, id).await?;
 
-    match &result {
-        Ok(_) => println!("SERVICE: 删除任务 ID: {} 的请求处理成功。", id),
-        Err(_) => println!("SERVICE: 删除任务 ID: {} 的请求处理失败（未找到或其他错误）。", id),
+    // `delete` 返回 `DeleteResult`，其中包含 `rows_affected`。
+    // 我们检查这个值来确定是否真的有任务被删除了。
+    if delete_result.rows_affected == 0 {
+        // 如果没有行受影响，说明数据库中没有这个 ID 的任务。
+        println!("SERVICE: 删除任务 ID: {} 的请求处理失败（未找到）。", id);
+        Err(AppError::TaskNotFound(id))
+    } else {
+        // 如果 `rows_affected` 是 1 (或更大，但主键删除应该是1)，说明删除成功。
+        println!("SERVICE: 删除任务 ID: {} 的请求处理成功。", id);
+        // 删除成功，我们不需要返回任何数据，所以返回 `Ok(())`。
+        Ok(())
     }
-
-    // 返回数据库操作的结果。
-    result
 }

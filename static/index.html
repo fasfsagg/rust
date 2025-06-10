@@ -94,6 +94,12 @@
             background-color: #c0392b;
         }
         
+        /* 新增：编辑模式下的输入框样式 */
+        .edit-input {
+            width: calc(100% - 18px); /* 减去padding和border */
+            margin-bottom: 5px;
+        }
+        
         #webSocketMessages {
             height: 200px;
             overflow-y: auto;
@@ -135,6 +141,23 @@
             white-space: pre-wrap;
             margin-top: 10px;
         }
+        
+        /* 新增：筛选按钮样式 */
+        .filter-btn {
+            background-color: #ecf0f1;
+            color: #34495e;
+            border: 1px solid #bdc3c7;
+        }
+        
+        .filter-btn:hover {
+            background-color: #dce4e6;
+        }
+        
+        .filter-btn.active {
+            background-color: #3498db;
+            color: white;
+            border-color: #3498db;
+        }
     </style>
 </head>
 <body>
@@ -165,6 +188,13 @@
             
             <!-- 刷新任务列表的按钮 -->
             <button id="refreshTasksBtn">刷新任务列表</button>
+            
+            <!-- 新增：任务筛选按钮 -->
+            <div id="filter-buttons" style="margin-top: 10px;">
+                <button class="filter-btn active" onclick="setFilter('all')">所有</button>
+                <button class="filter-btn" onclick="setFilter('active')">未完成</button>
+                <button class="filter-btn" onclick="setFilter('completed')">已完成</button>
+            </div>
             
             <!-- 显示任务列表的区域 -->
             <h3>任务列表</h3>
@@ -212,6 +242,8 @@
         let socket = null;
         // 存储任务列表的数组，初始为空
         let tasks = [];
+        // 新增：当前筛选器状态，默认为 'all'
+        let currentFilter = 'all';
         
         // ==== 页面加载时执行 ====
         // 当整个 HTML 文档加载并解析完毕后执行
@@ -236,9 +268,19 @@
         
         // 异步函数：获取所有任务
         async function fetchTasks() {
+            // 获取任务列表元素，并显示加载中提示
+            const tasksList = document.getElementById('tasksList');
+            tasksList.innerHTML = '<li>正在加载...</li>';
+
             try {
                 // 发起 GET 请求获取任务列表
                 const response = await fetch(`${API_BASE_URL}/tasks`);
+                
+                // 如果响应不成功，抛出错误
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
                 // 解析 JSON 格式的响应数据
                 const data = await response.json();
                 
@@ -252,6 +294,8 @@
             } catch (error) {
                 // 如果发生错误，打印错误信息到控制台
                 console.error('获取任务失败:', error);
+                // 在任务列表区域显示错误信息
+                tasksList.innerHTML = `<li>获取任务失败: ${error.message}</li>`;
                 // 更新 API 响应显示区域，显示错误信息
                 updateApiResponse('获取任务列表', null, { error: error.message });
             }
@@ -310,25 +354,22 @@
             }
         }
         
-        // 异步函数：获取单个任务
-        async function fetchTask(id) {
+        // 新增：异步函数 - 查看单个任务详情
+        async function viewTask(id) {
             try {
                 // 发起 GET 请求获取指定 ID 的任务
                 const response = await fetch(`${API_BASE_URL}/tasks/${id}`);
                 // 解析 JSON 格式的响应数据
                 const data = await response.json();
                 
-                // 更新 API 响应显示区域的内容
-                updateApiResponse(`获取任务 ${id}`, response, data);
-                // 返回获取到的任务数据
-                return data;
+                // 更新 API 响应显示区域的内容，以展示后端返回的数据
+                updateApiResponse(`查看任务 ${id}`, response, data);
+                
             } catch (error) {
                 // 如果发生错误，打印错误信息到控制台
-                console.error(`获取任务 ${id} 失败:`, error);
+                console.error(`查看任务 ${id} 失败:`, error);
                 // 更新 API 响应显示区域，显示错误信息
-                updateApiResponse(`获取任务 ${id}`, null, { error: error.message });
-                // 返回 null 表示获取失败
-                return null;
+                updateApiResponse(`查看任务 ${id}`, null, { error: error.message });
             }
         }
         
@@ -397,76 +438,126 @@
             // 清空当前列表内容
             tasksList.innerHTML = '';
             
-            // 如果任务列表为空，显示“没有任务”
-            if (tasks.length === 0) {
-                tasksList.innerHTML = '<li>没有任务</li>';
+            // 新增：根据当前筛选器过滤任务
+            const filteredTasks = tasks.filter(task => {
+                if (currentFilter === 'completed') {
+                    return task.completed;
+                }
+                if (currentFilter === 'active') {
+                    return !task.completed;
+                }
+                return true; // 'all'
+            });
+
+            // 如果过滤后的任务列表为空，显示提示信息
+            if (filteredTasks.length === 0) {
+                tasksList.innerHTML = '<li>没有符合条件的任务</li>';
                 return;
             }
             
-            // 遍历任务数组，为每个任务创建列表项
-            tasks.forEach(task => {
+            // 遍历过滤后的任务数组，为每个任务创建列表项
+            filteredTasks.forEach(task => {
                 // 创建一个新的 li 元素作为任务列表项
                 const li = document.createElement('li');
+                // 给 li 设置一个唯一的 ID，方便后续查找
+                li.id = `task-${task.id}`;
                 // 设置列表项的 CSS 类名，根据任务完成状态添加 'completed' 类
                 li.className = `task-item ${task.completed ? 'completed' : ''}`;
-                
-                // 创建并设置任务标题元素
-                const title = document.createElement('h4');
-                title.textContent = task.title;
-                
-                // 创建并设置任务描述元素，如果描述为空则显示“(无描述)”
-                const description = document.createElement('p');
-                description.textContent = task.description || '(无描述)';
-                
-                // 创建并设置任务状态元素
-                const status = document.createElement('p');
-                status.innerHTML = `状态: <strong>${task.completed ? '已完成' : '未完成'}</strong>`;
-                
-                // 创建并设置日期信息元素（创建时间和更新时间）
-                const dateInfo = document.createElement('p');
-                dateInfo.className = 'timestamp';
-                // 格式化时间戳并显示
-                dateInfo.textContent = `创建于: ${formatDate(task.created_at)} | 更新于: ${formatDate(task.updated_at)}`;
-                
-                // 创建任务控制按钮的容器
-                const controls = document.createElement('div');
-                controls.className = 'task-controls';
-                
-                // 创建“查看”按钮，点击时调用 fetchTask 函数获取单个任务详情
-                const viewBtn = document.createElement('button');
-                viewBtn.textContent = '查看';
-                viewBtn.onclick = () => fetchTask(task.id);
-                
-                // 创建“标记完成/未完成”按钮，点击时调用 updateTask 函数切换任务完成状态
-                const toggleBtn = document.createElement('button');
-                toggleBtn.textContent = task.completed ? '标记为未完成' : '标记为已完成';
-                toggleBtn.onclick = () => updateTask(task.id, { completed: !task.completed });
-                
-                // 创建“删除”按钮，点击时弹出确认框，确认后调用 deleteTask 函数删除任务
-                const deleteBtn = document.createElement('button');
-                deleteBtn.textContent = '删除';
-                deleteBtn.className = 'delete-btn';
-                deleteBtn.onclick = () => {
-                    if (confirm(`确定要删除任务 "${task.title}" 吗？`)) {
-                        deleteTask(task.id);
-                    }
-                };
-                
-                // 将控制按钮添加到控制容器中
-                controls.appendChild(viewBtn);
-                controls.appendChild(toggleBtn);
-                controls.appendChild(deleteBtn);
-                
-                // 将所有元素添加到任务列表项 li 中
-                li.appendChild(title);
-                li.appendChild(description);
-                li.appendChild(status);
-                li.appendChild(dateInfo);
-                li.appendChild(controls);
+
+                // 将任务内容（标题、描述、状态、日期、按钮）渲染到 li 中
+                li.innerHTML = buildTaskContent(task);
                 
                 // 将任务列表项添加到任务列表 ul 中
                 tasksList.appendChild(li);
             });
+        }
+        
+        // 新增：构建单个任务项的 HTML 内容
+        function buildTaskContent(task) {
+            // 返回包含任务所有信息的 HTML 字符串
+            return `
+                <div id="task-display-${task.id}">
+                    <h4>${task.title}</h4>
+                    <p>${task.description || '(无描述)'}</p>
+                    <p>状态: <strong>${task.completed ? '已完成' : '未完成'}</strong></p>
+                    <p class="timestamp">创建于: ${formatDate(task.created_at)} | 更新于: ${formatDate(task.updated_at)}</p>
+                </div>
+                <div id="task-edit-${task.id}" style="display:none;">
+                    <input type="text" value="${task.title}" class="edit-input" id="edit-title-${task.id}">
+                    <textarea class="edit-input" id="edit-desc-${task.id}">${task.description || ''}</textarea>
+                </div>
+                <div class="task-controls" id="task-controls-${task.id}">
+                    ${buildTaskControls(task)}
+                </div>
+            `;
+        }
+
+        // 新增：构建任务控制按钮的 HTML 内容
+        function buildTaskControls(task) {
+             // 返回包含默认控制按钮的 HTML 字符串
+            return `
+                <button onclick="viewTask('${task.id}')">查看</button>
+                <button onclick="toggleEditMode('${task.id}')">编辑</button>
+                <button onclick="updateTask('${task.id}', { completed: ${!task.completed} })">${task.completed ? '标记为未完成' : '标记为已完成'}</button>
+                <button class="delete-btn" onclick="confirmDelete('${task.id}', '${task.title}')">删除</button>
+            `;
+        }
+
+        // 新增：切换任务的编辑模式
+        function toggleEditMode(id) {
+            // 获取显示区域、编辑区域和控制区域的 DOM 元素
+            const displayDiv = document.getElementById(`task-display-${id}`);
+            const editDiv = document.getElementById(`task-edit-${id}`);
+            const controlsDiv = document.getElementById(`task-controls-${id}`);
+            const task = tasks.find(t => t.id === id);
+            
+            // 切换显示和编辑区域的可见性
+            if (displayDiv.style.display !== 'none') {
+                // 进入编辑模式
+                displayDiv.style.display = 'none';
+                editDiv.style.display = 'block';
+                // 更新按钮为"保存"和"取消"
+                controlsDiv.innerHTML = `
+                    <button onclick="handleSaveTask('${id}')">保存</button>
+                    <button onclick="cancelEdit('${id}')">取消</button>
+                `;
+            } else {
+                // 退出编辑模式（由 cancelEdit 调用）
+                displayDiv.style.display = 'block';
+                editDiv.style.display = 'none';
+                // 恢复默认按钮
+                controlsDiv.innerHTML = buildTaskControls(task);
+            }
+        }
+        
+        // 新增：取消编辑
+        function cancelEdit(id) {
+            toggleEditMode(id); // 直接调用 toggleEditMode 来切换回显示状态
+        }
+
+        // 新增：处理保存任务的逻辑
+        async function handleSaveTask(id) {
+            // 获取编辑输入框中的新标题和新描述
+            const newTitle = document.getElementById(`edit-title-${id}`).value;
+            const newDescription = document.getElementById(`edit-desc-${id}`).value;
+            
+            // 构建更新负载
+            const payload = {
+                title: newTitle,
+                description: newDescription || null // 如果描述为空，发送 null
+            };
+            
+            // 调用 updateTask 函数将更改发送到服务器
+            await updateTask(id, payload);
+            // 注意：updateTask 成功后会自动调用 fetchTasks() 来刷新列表，
+            // 这会自动将所有任务（包括刚编辑的）重置为显示模式。
+        }
+
+        // 新增：删除任务前的确认对话框
+        function confirmDelete(id, title) {
+            if (confirm(`确定要删除任务 "${title}" 吗？`)) {
+                deleteTask(id);
+            }
         }
         
         // 更新 API 响应显示区域的内容
@@ -626,10 +717,31 @@
         
         // 格式化 Unix 时间戳为可读日期字符串
         function formatDate(timestamp) {
-            // 将 Unix 时间戳（秒）转换为 JavaScript 的 Date 对象（毫秒）
-            const date = new Date(timestamp * 1000);
+            // 如果时间戳为空或无效，返回'N/A'
+            if (!timestamp) {
+                return 'N/A';
+            }
+            // 将后端返回的 ISO 8601 字符串直接转换为 Date 对象
+            const date = new Date(timestamp);
+            // 检查日期是否有效
+            if (isNaN(date.getTime())) {
+                return '无效日期';
+            }
             // 返回本地化的日期和时间字符串
             return date.toLocaleString();
+        }
+
+        // 新增：设置筛选器
+        function setFilter(filter) {
+            currentFilter = filter;
+            
+            // 更新按钮的激活状态
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`.filter-btn[onclick="setFilter('${filter}')"]`).classList.add('active');
+
+            renderTasks();
         }
     </script>
 </body>

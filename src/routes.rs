@@ -46,17 +46,18 @@ use axum::{ routing::{ get, post, put, delete }, Router };
 use tower_http::services::ServeDir;
 
 // --- 导入控制器层组件 ---
-// 导入在 `src/app/controller/` 模块中定义的处理函数和共享应用状态 `AppState`。
+// 导入在 `src/app/controller/` 模块中定义的处理函数。
 // 这是路由层与控制器层的连接点。
-use crate::app::controller::{ // 导入控制器函数
+use crate::app::controller::{
     create_task, // 处理 POST /api/tasks
     delete_task, // 处理 DELETE /api/tasks/:id
     get_all_tasks, // 处理 GET /api/tasks
     get_task_by_id, // 处理 GET /api/tasks/:id
-    update_task, // 处理 PUT /api/tasks/:id 
+    update_task, // 处理 PUT /api/tasks/:id
     ws_handler, // 处理 GET /ws
-    AppState, // 导入共享应用状态类型
 };
+// 导入在 `src/startup.rs` 中定义的唯一的共享应用状态 `AppState`。
+use crate::startup::AppState;
 
 // --- 路由创建函数 ---
 
@@ -78,7 +79,7 @@ pub fn create_routes(app_state: AppState) -> Router {
     // 创建一个专门用于处理 `/api` 前缀下所有请求的子路由。
     let api_routes = Router::new()
         // 定义 GET /tasks 路由，映射到 get_all_tasks 控制器函数。调用.route() 方法来定义一个路由。返回一个 Router<AppState> 实例。
-        // 这个 Router 实例是“携带”了 AppState 这种共享状态的。处理函数可以访问到 AppState 中包含的数据
+        // 这个 Router 实例是"携带"了 AppState 这种共享状态的。处理函数可以访问到 AppState 中包含的数据
         // 注意: 同一个路径 "/tasks" 可以根据 HTTP 方法 (GET vs POST) 映射到不同的处理函数。
         .route("/tasks", get(get_all_tasks))
         // 定义 POST /tasks 路由，映射到 create_task 控制器函数。

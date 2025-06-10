@@ -1,3 +1,6 @@
+[workspace]
+members = [".", "migration"]
+
 [package]
 name = "axum-tutorial"
 version = "0.1.0"
@@ -5,40 +8,42 @@ edition = "2024"
 authors = ["Rust学习者"]
 description = "Axum框架的分层架构学习项目"
 
-# 依赖列表
 [dependencies]
 # Axum Web 框架核心组件
-axum = { version = "0.7", features = ["ws", "macros"] }
-
+axum = { version = "0.7.5", features = ["ws", "macros"] }
+# axum-extra = { version = "0.9.3", features = ["spa"] }
 # Tokio 异步运行时
-tokio = { version = "1.36", features = ["full"] }
-
+tokio = { version = "1.37.0", features = ["full"] }
 # 序列化与反序列化库
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-
 # 唯一ID生成
-uuid = { version = "1.7", features = ["v4", "serde"] }
-
+uuid = { version = "1.8.0", features = ["v4", "serde"] }
 # 日志与跟踪
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 # HTTP 工具库
-tower = "0.4"
-tower-http = { version = "0.5", features = ["trace", "fs", "cors"] }
-
+tower = "0.4.13"
+tower-http = { version = "0.5.2", features = ["trace", "cors", "fs"] }
 # HTTP/3 支持（可选功能）
-quinn = "0.10" # QUIC 协议实现
-h3 = "0.0.4"   # HTTP/3 协议
-h3-quinn = "0.0.4" # HTTP/3 与 Quinn 的集成
-
+quinn = "0.10"
+h3 = "0.0.4"
+h3-quinn = "0.0.4"
 # TLS 支持
-rustls = "0.22" # Rust TLS 库
-tokio-rustls = "0.25" # Tokio 与 Rustls 集成
-
+rustls = "0.22"
+tokio-rustls = "0.25"
 # 证书生成工具（用于 HTTP/3 演示）
 rcgen = "0.12"
-
 # 同步原语
-parking_lot = "0.12" # RwLock 实现，比标准库更快 
+parking_lot = "0.12"
+# SeaORM
+sea-orm = { version = "0.12", features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
+# 迁移 Crate
+migration = { path = "migration" }
+anyhow = "1.0.82"
+chrono = { version = "0.4.41", features = ["serde"] }
+
+[dev-dependencies]
+anyhow = "1.0.82"
+httpc-test = "0.1.9"
+sea-orm-cli = "0.12" 

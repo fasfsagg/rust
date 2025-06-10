@@ -1,0 +1,1 @@
+$body = @{title = "测试任务"; description = "这是一个测试任务"; completed = $false}; $jsonBody = ConvertTo-Json $body; Invoke-WebRequest -Method Post -Uri "http://localhost:3000/api/tasks" -Body $jsonBody -ContentType "application/json"

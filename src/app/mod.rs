@@ -22,6 +22,9 @@ pub mod model;
 // 声明middleware子模块
 pub mod middleware;
 
+// 声明repository子模块
+pub mod repository;
+
 // 这里没有重新导出子模块中的项（与其他mod.rs文件不同）。
 // 这是因为app模块的子模块之间有明确的层次和依赖关系，
 // 我们希望保持这种明确的引用路径，例如：

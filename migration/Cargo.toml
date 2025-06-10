@@ -1,0 +1,20 @@
+[package]
+name = "migration"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "migration"
+path = "src/lib.rs"
+
+[dependencies]
+# 异步运行时
+tokio = { version = "1.37.0", features = ["full"] }
+
+# SeaORM 迁移库
+sea-orm-migration = { version = "0.12", features = ["runtime-tokio-rustls", "sqlx-sqlite"] }
+
+# 实体定义所需的依赖
+sea-orm = { version = "0.12", features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
+serde = { version = "1.0", features = ["derive"] }
+chrono = "0.4"

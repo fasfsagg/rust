@@ -32,13 +32,14 @@
 
 use tokio::net::TcpListener; // Tokio 提供的异步 TCP Listener
 use tracing::info; // 用于记录信息的日志宏
+use anyhow::Result; // 引入 anyhow::Result 用于更简洁的错误处理
 
 // --- 声明项目根模块 ---
 // `mod` 关键字告诉 Rust 编译器查找并包含这些模块文件或目录。
 // 这是 Rust 模块系统的基础，用于组织代码。
 mod app; // 包含控制器、服务、模型等核心应用逻辑 (./app/mod.rs 或 ./app.rs)
 mod config; // 应用配置加载与管理 (./config.rs)
-mod db; // 数据访问层 (./db.rs)
+// `mod db;` 已被移除，因为数据访问逻辑现在由 `app/repository` 和 `startup.rs` 处理。
 mod error; // 自定义错误处理 (./error.rs)
 mod routes; // API 路由定义 (./routes.rs)
 mod startup; // 应用启动与初始化逻辑 (./startup.rs)
@@ -52,7 +53,7 @@ mod startup; // 应用启动与初始化逻辑 (./startup.rs)
 // 这使得我们可以在 `main` 函数内部直接使用 `.await` 语法来等待异步操作完成。
 // 本质上是简化异步程序入口设置的语法糖。
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     // --- 步骤 1: 加载应用程序配置 ---
     // 从环境变量或配置文件加载配置信息 (例如服务器地址、数据库连接信息等)。
     // `config::AppConfig::from_env()` 是我们自定义的配置加载函数。
@@ -63,19 +64,17 @@ async fn main() {
     // 这通常包括: 设置日志系统 (tracing)、初始化数据库连接或内存存储、
     // 创建并配置 Axum Router (定义路由和中间件)。
     // 返回配置好的 Axum 应用实例 (`axum::Router`)。
-    let app = startup::init_app(config.clone()).await;
+    let app = startup::init_app(config.clone()).await?;
 
     // --- 步骤 3: 创建 TCP 监听器 ---
     // 使用从配置中获取的 HTTP 地址 (`config.http_addr`)。
     // `TcpListener::bind` 创建一个监听指定地址和端口的 TCP 套接字。
-    // `.await` 等待绑定操作完成。
-    // `.unwrap()` 在绑定失败时会 panic (生产环境中应进行更健壮的错误处理)。
     let http_addr = config.http_addr;
-    let listener = TcpListener::bind(http_addr).await.unwrap();
+    let listener = TcpListener::bind(http_addr).await?;
     info!("HTTP/1.1 服务器启动，监听地址: http://{}", http_addr);
 
     // --- 步骤 4: (可选) 启动 HTTP/3 服务器 ---
-    // 这部分代码默认被注释掉，因为 HTTP/3 需要额外的设置 (TLS 证书)。  
+    // 这部分代码默认被注释掉，因为 HTTP/3 需要额外的设置 (TLS 证书)。
     // 如果需要启用，需要设置环境变量 `ENABLE_HTTP3=true` 并确保证书可用。
     /*
     if std::env::var("ENABLE_HTTP3").is_ok() {
@@ -88,9 +87,11 @@ async fn main() {
     // --- 步骤 5: 启动 HTTP/1.1 服务器 ---
     // `axum::serve` 是 Axum 提供的函数，用于将 TCP 监听器 (`listener`) 和
     // 配置好的 Axum 应用 (`app`) 绑定起来，并开始处理传入的 HTTP/1.1 请求。
-    // 这是一个【异步】操作，`.await` 会使 `main` 函数在此暂停，直到服务器停止。
-    // `.unwrap()` 在服务器启动失败时会 panic。
-    axum::serve(listener, app.into_make_service()).await.unwrap(); // 注意: .into_make_service() 用于共享 app
+    axum::serve(listener, app.into_make_service()).await?;
+
+    // --- 步骤 6: 返回成功 ---
+    // 如果服务器正常关闭（例如通过 Ctrl+C），main 函数会执行到这里并返回 Ok。
+    Ok(())
 }
 
 // --- (可选) HTTP/3 服务器实现 ---

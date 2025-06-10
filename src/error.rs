@@ -53,6 +53,7 @@ use axum::{ // 导入 Axum 框架相关的类型
 };
 use serde_json::{ json, Value }; // 导入 `serde_json` 用于创建 JSON 值 (`Value`)
 use uuid::Uuid; // 导入 UUID 类型，用于错误消息
+use sea_orm::DbErr; // 导入 SeaORM 的数据库错误类型
 
 // --- 自定义错误枚举 ---
 
@@ -76,23 +77,14 @@ use uuid::Uuid; // 导入 UUID 类型，用于错误消息
 /// ```
 #[derive(Debug)]
 pub enum AppError {
-    /// 404 Not Found - 表示请求的资源（如特定任务）未能找到。
-    /// 【关联状态码】: `StatusCode::NOT_FOUND` (404)
-    NotFound(String),
+    /// 404 Not Found - 表示请求的任务资源未能找到。
+    TaskNotFound(Uuid),
 
-    /// 400 Bad Request - 表示客户端发送的请求无效，例如格式错误、缺少必要参数、参数值不合法等。
-    /// 【关联状态码】: `StatusCode::BAD_REQUEST` (400)
+    /// 400 Bad Request - 表示客户端发送的请求无效。
     BadRequest(String),
 
-    /// 500 Internal Server Error - 表示服务器在处理请求时遇到了意外的内部问题。
-    ///                      这通常是代码中的 bug 或外部服务故障导致的。
-    /// 【关联状态码】: `StatusCode::INTERNAL_SERVER_ERROR` (500)
-    /// 【注意】: 应尽量避免向客户端暴露过多内部细节，消息应通用化。
-    InternalServerError(String),
-
-    /// 409 Conflict - 表示请求与服务器当前状态冲突，通常用于创建已存在的资源或更新冲突。
-    /// 【关联状态码】: `StatusCode::CONFLICT` (409)
-    Conflict(String),
+    /// 500 Internal Server Error - 包装了来自数据库的错误。
+    DbErr(DbErr),
 }
 
 // --- 实现 IntoResponse ---
@@ -110,39 +102,45 @@ pub enum AppError {
 impl IntoResponse for AppError {
     /// 将 `AppError` 实例转换为 HTTP 响应 (`Response`)。
     fn into_response(self) -> Response {
-        // --- 步骤 1: 根据错误变体确定状态码和错误消息 ---
-        // 使用 `match` 表达式解构 `self` (即 AppError 实例)。
-        // 每个分支对应 `AppError` 的一个变体。
-        // 返回一个元组 `(StatusCode, String)`。
         let (status, message) = match self {
-            // 如果错误是 NotFound，状态码是 404，消息是内部携带的 String。
-            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
-            // 如果错误是 BadRequest，状态码是 400。
+            // 如果是任务未找到错误，返回 404 和标准化的消息。
+            AppError::TaskNotFound(id) =>
+                (StatusCode::NOT_FOUND, format!("未找到ID为 {} 的任务", id)),
+            // 如果是数据库错误，记录到日志（重要！），并返回通用的 500 错误。
+            // 注意：为了安全，不应将原始的 `db_err` 细节暴露给客户端。
+            AppError::DbErr(db_err) => {
+                // 在服务器端打印详细的错误日志以供调试。
+                eprintln!("[DB_ERROR] 数据库操作失败: {:?}", db_err);
+                (StatusCode::INTERNAL_SERVER_ERROR, "服务器内部错误".to_string())
+            }
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
-            // 如果错误是 InternalServerError，状态码是 500。
-            AppError::InternalServerError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
-            // 如果错误是 Conflict，状态码是 409。
-            AppError::Conflict(msg) => (StatusCode::CONFLICT, msg),
         };
 
-        // --- 步骤 2: 构建 JSON 格式的响应体 ---
-        // 使用 `serde_json::json!` 宏创建一个 JSON `Value`。
-        // 这个宏提供了一种方便的方式来构造 JSON 对象。
-        // 响应体包含一个 "error" 对象，其中有 "message" 和 "code" 字段。
         let body: Value =
             json!({
             "error": {
-                "message": message, // 从 match 语句获取的错误消息
-                "code": status.as_u16() // 将 StatusCode 转换为 u16 数字码
+                "message": message,
+                "code": status.as_u16()
             }
         });
 
-        // --- 步骤 3: 组合状态码和 JSON 响应体为最终响应 ---
-        // `(status, Json(body))` 创建一个元组。
-        // Axum 为 `(StatusCode, Json<T>)` 类型也实现了 `IntoResponse`。
-        // 所以我们直接调用 `.into_response()` 将这个元组转换为最终的 `Response` 对象。
-        // 这会自动设置正确的 HTTP 状态码和 `Content-Type: application/json` 响应头。
         (status, Json(body)).into_response()
+    }
+}
+
+// --- 实现 From Trait for DbErr ---
+
+/// 实现 `From<DbErr>` for `AppError`
+///
+/// 【目的】: 这是实现 `?` 错误传播的关键。
+///          它告诉编译器如何将一个 `sea_orm::DbErr` 自动转换为一个 `AppError`。
+/// 【流程】: 当你在一个返回 `Result<_, AppError>` 的函数中使用 `?` 操作符处理一个
+///          返回 `Result<_, DbErr>` 的表达式时，如果结果是 `Err(db_err)`，
+///          编译器会自动调用 `AppError::from(db_err)` 来转换错误类型。
+impl From<DbErr> for AppError {
+    fn from(err: DbErr) -> Self {
+        // 直接将传入的 `DbErr` 包装到 `AppError::DbErr` 变体中。
+        AppError::DbErr(err)
     }
 }
 
@@ -167,20 +165,6 @@ impl IntoResponse for AppError {
 pub type Result<T> = std::result::Result<T, AppError>;
 
 // --- 辅助函数 (可选，但推荐) ---
-
-/// 辅助函数：创建"任务未找到"错误 (`AppError::NotFound`)
-///
-/// 【目的】: 提供一个标准化的方式来创建特定类型的 `AppError`。
-///          避免在代码中重复构造错误消息字符串。
-///          提高代码可读性和一致性。
-///
-/// # 参数
-/// * `id: Uuid` - 未找到的任务的 UUID。
-/// # 返回值
-/// * `AppError` - 一个配置好的 `AppError::NotFound` 实例。
-pub fn task_not_found(id: Uuid) -> AppError {
-    AppError::NotFound(format!("未找到ID为 {} 的任务", id))
-}
 
 /// 辅助函数：创建"无效 UUID"错误 (`AppError::BadRequest`)
 ///

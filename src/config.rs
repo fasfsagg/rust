@@ -59,13 +59,9 @@ pub struct AppConfig {
     /// `SocketAddr` 结构体结合了 IP 地址和端口号。
     pub http_addr: SocketAddr,
 
-    /// HTTP/3 (QUIC) 服务器监听地址。
-    /// (如果启用 HTTP/3 功能)
-    pub http3_addr: SocketAddr,
-
-    /// WebSocket 连接的心跳检测间隔时间 (单位: 秒)。
-    /// 用于保持连接活跃并检测断开的连接。
-    pub ws_ping_interval: u64,
+    /// 数据库连接 URL。
+    /// 用于连接到应用程序的数据库 (例如 SQLite, PostgreSQL)。
+    pub database_url: String,
 }
 
 // --- 配置加载实现 ---
@@ -98,52 +94,18 @@ impl AppConfig {
             .expect("环境变量 HTTP_ADDR 必须是有效的 SocketAddr (例如 '127.0.0.1:3000')");
         println!("  - HTTP 地址: {}", http_addr);
 
-        // --- 加载 HTTP/3 服务器地址 ---
-        // 逻辑与加载 HTTP 地址类似。
-        let http3_addr = std::env
-            ::var("HTTP3_ADDR")
-            .unwrap_or_else(|_| "127.0.0.1:3001".to_string()); // 默认 HTTP/3 端口
-        let http3_addr = http3_addr
-            .parse()
-            .expect("环境变量 HTTP3_ADDR 必须是有效的 SocketAddr (例如 '127.0.0.1:3001')");
-        println!("  - HTTP/3 地址: {}", http3_addr);
-
-        // --- 加载 WebSocket 心跳间隔 ---
-        // 1. `std::env::var("WS_PING_INTERVAL")`: 尝试读取环境变量。
-        // 2. `.map(|v| ...)`: 如果 `var` 返回 `Ok(v)` (其中 `v` 是 String)，则执行闭包。
-        //    闭包尝试将字符串 `v` 解析为 `u64`。
-        //    `.parse::<u64>().expect("...")`: 如果解析失败，程序 panic。
-        //    `.map` 返回 `Option<Result<u64, _>>` 或类似，但这里的 `expect` 简化了它为 `Option<u64>` (如果成功)。
-        // 3. `.unwrap_or(30)`: 如果 `map` 返回 `None` (因为 `var` 返回 `Err`，或者内部 `parse` 失败后被处理了，这里简化假设)，
-        //    则使用默认值 `30`。
-        // 【更健壮的方式】: 分开处理 `var` 的 `Err` 和 `parse` 的 `Err`。
-        let ws_ping_interval = std::env
-            ::var("WS_PING_INTERVAL") // 尝试读取环境变量
-            .map(|v| { v.parse::<u64>().expect("环境变量 WS_PING_INTERVAL 必须是有效的正整数") })
-            .unwrap_or(30); // 如果未设置或解析失败，默认为 30 秒
-        println!("  - WebSocket Ping 间隔: {} 秒", ws_ping_interval);
+        // --- 加载数据库连接 URL ---
+        // 逻辑与加载 HTTP 地址类似，但不需要 .parse()，因为我们直接使用 String。
+        let database_url = std::env
+            ::var("DATABASE_URL")
+            .unwrap_or_else(|_| "sqlite:task_manager.db?mode=rwc".to_string());
+        println!("  - 数据库 URL: {}", database_url);
 
         println!("CONFIG: 配置加载完成。");
         // --- 构建并返回 AppConfig 实例 ---
         Self {
             http_addr,
-            http3_addr,
-            ws_ping_interval,
+            database_url,
         }
-    }
-
-    /// 获取 WebSocket 心跳间隔对应的 `Duration` (Method)
-    ///
-    /// 【功能】: 提供一个方便的方法，将配置中存储的 `u64` 秒数转换为标准库中的 `Duration` 类型。
-    /// 【用途】: 在需要设置定时器或超时的地方（例如 WebSocket 的 ping 任务）使用。
-    ///
-    /// # 【参数】
-    /// * `&self`: 接收一个对 `AppConfig` 实例的【不可变引用】。[[Rust语法特性/概念: 方法, &self]]
-    ///
-    /// # 【返回值】
-    /// * `-> Duration`: 返回对应的 `Duration` 值。
-    pub fn ws_ping_interval(&self) -> Duration {
-        // `Duration::from_secs` 是 `std::time::Duration` 提供的关联函数，用于从秒数创建 Duration。
-        Duration::from_secs(self.ws_ping_interval)
     }
 }
