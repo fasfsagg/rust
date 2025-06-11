@@ -37,8 +37,7 @@ pub async fn spawn_app() -> TestApp {
     // 生成唯一的数据库名称，以确保测试之间的隔离
     let db_name = Uuid::new_v4().to_string();
     // 使用临时文件作为数据库，而不是内存数据库，因为SQLite内存数据库在连接之间不共享
-    let db_url = format!("sqlite:{}?mode=rwc", db_name);
-    println!("INFO: 为测试创建唯一临时数据库文件: {}", db_url);
+    let db_url = format!("sqlite://{}.db?mode=rwc", db_name);
 
     // 加载应用配置并覆盖数据库 URL
     let mut config = AppConfig::from_env();
@@ -47,8 +46,8 @@ pub async fn spawn_app() -> TestApp {
     // 初始化应用，现在它返回应用本身和数据库连接
     let (app, db_connection) = init_app(config).await.expect("无法初始化应用");
 
-    // 确保数据库是空的
-    cleanup_db(&db_connection).await.expect("无法清理数据库");
+    // 注意： init_app 内部已经执行了迁移，这里我们不再需要手动清理，
+    // 因为每次都是全新的数据库文件。
 
     // 在一个新的 Tokio 任务中启动服务器，使其在后台运行
     tokio::spawn(async move {
@@ -63,29 +62,17 @@ pub async fn spawn_app() -> TestApp {
 
 /// 清理数据库，删除所有表中的数据
 ///
-/// 在每个测试后调用此函数，以确保测试之间的独立性。
-#[allow(dead_code)] // 允许这个函数在当前未被使用，因为它是一个供测试调用的工具函数
+/// 注意：此函数在当前 `spawn_app` 的实现中已不再需要，
+/// 因为每个测试都使用一个全新的、唯一的数据库文件。
+/// 保留此函数是为了演示目的或用于其他不创建新文件的测试策略。
+#[allow(dead_code)]
 pub async fn cleanup_db(db: &DatabaseConnection) -> Result<(), DbErr> {
-    // 打印清理开始日志
-    println!("INFO: 开始清理测试数据库...");
-
-    let tables = [
-        "tasks",
-        // 如果有其他表，也在这里添加
-    ];
+    let tables = ["tasks"];
 
     for table in tables.iter() {
         let query = format!("DELETE FROM {};", table);
-        match db.execute(Statement::from_string(db.get_database_backend(), query)).await {
-            Ok(result) =>
-                println!("INFO: 已清理表 {} - 删除了 {} 行", table, result.rows_affected()),
-            Err(e) => {
-                println!("ERROR: 清理表 {} 时出错: {}", table, e);
-                return Err(e);
-            }
-        }
+        db.execute(Statement::from_string(db.get_database_backend(), query)).await?;
     }
 
-    println!("INFO: 测试数据库清理完成");
     Ok(())
 }

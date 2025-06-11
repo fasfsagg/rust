@@ -106,7 +106,7 @@ pub async fn create_task(
     Json(payload): Json<CreateTaskPayload>
 ) -> Result<impl IntoResponse> {
     println!("CONTROLLER: Received create task request");
-    let task = service::create_task(&state.db_connection, payload).await?;
+    let task = service::create_task(state.task_repo.clone(), payload).await?;
     println!("CONTROLLER: Task created successfully (ID: {})", task.id);
     Ok((StatusCode::CREATED, Json(task)))
 }
@@ -125,7 +125,7 @@ pub async fn create_task(
 ///    - 【失败路径】: 由 `?` 操作符处理。
 pub async fn get_all_tasks(State(state): State<AppState>) -> Result<impl IntoResponse> {
     println!("CONTROLLER: Received get all tasks request");
-    let tasks = service::get_all_tasks(&state.db_connection).await?;
+    let tasks = service::get_all_tasks(state.task_repo.clone()).await?;
     println!("CONTROLLER: Retrieved {} tasks", tasks.len());
     Ok((StatusCode::OK, Json(tasks)))
 }
@@ -152,7 +152,7 @@ pub async fn get_task_by_id(
     println!("CONTROLLER: Received get task by ID request for '{}'", id_str);
     let id = parse_uuid(&id_str)?;
     println!("CONTROLLER: Parsed UUID: {}", id);
-    let task = service::get_task_by_id(&state.db_connection, id).await?;
+    let task = service::get_task_by_id(state.task_repo.clone(), id).await?;
     println!("CONTROLLER: Task found for ID: {}", id);
     Ok((StatusCode::OK, Json(task)))
 }
@@ -179,7 +179,7 @@ pub async fn update_task(
     println!("CONTROLLER: Received update task request for '{}'", id_str);
     let id = parse_uuid(&id_str)?;
     println!("CONTROLLER: Parsed UUID: {}", id);
-    let task = service::update_task(&state.db_connection, id, payload).await?;
+    let task = service::update_task(state.task_repo.clone(), id, payload).await?;
     println!("CONTROLLER: Task updated successfully for ID: {}", id);
     Ok((StatusCode::OK, Json(task)))
 }
@@ -205,7 +205,7 @@ pub async fn delete_task(
     println!("CONTROLLER: Received delete task request for '{}'", id_str);
     let id = parse_uuid(&id_str)?;
     println!("CONTROLLER: Parsed UUID: {}", id);
-    service::delete_task(&state.db_connection, id).await?;
+    service::delete_task(state.task_repo.clone(), id).await?;
     println!("CONTROLLER: Task deleted successfully for ID: {}", id);
     Ok(StatusCode::NO_CONTENT)
 }

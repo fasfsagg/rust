@@ -25,7 +25,7 @@ use migration::task_entity as db_model;
 /// `#[derive(Debug, Serialize)]` 是解决 500 错误的关键：
 ///   - `Serialize`: 告诉 `serde` 如何将这个结构体转换为 JSON。
 ///   - `Debug`: 方便在日志中打印调试。
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Task {
     pub id: Uuid,
     pub title: String,
@@ -56,7 +56,7 @@ impl From<db_model::Model> for Task {
 // 这些结构体定义了 API 的【外部契约】。
 
 /// 创建任务的请求载荷。
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct CreateTaskPayload {
     pub title: String,
     #[serde(default)]
@@ -65,8 +65,8 @@ pub struct CreateTaskPayload {
     pub completed: bool,
 }
 
-/// 更新任务的请求载aho荷。
-#[derive(Deserialize)]
+/// 更新任务的请求载荷。
+#[derive(Deserialize, Serialize)]
 pub struct UpdateTaskPayload {
     pub title: Option<String>,
     #[serde(default, with = "double_option")]
@@ -76,11 +76,30 @@ pub struct UpdateTaskPayload {
 
 /// 自定义 serde 辅助模块，用于处理双层 Option，以区分 "未提供" 和 "null"。
 mod double_option {
-    use serde::{ Deserialize, Deserializer };
+    use serde::{ Deserialize, Deserializer, Serialize, Serializer };
 
     pub fn deserialize<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
         where T: Deserialize<'de>, D: Deserializer<'de>
     {
         Option::<Option<T>>::deserialize(deserializer).map(|opt| opt.flatten())
+    }
+
+    /// 为 `Option<Option<T>>` 提供序列化实现
+    ///
+    /// 这是必需的，因为 `#[serde(with = "...")]` 同时对序列化和反序列化生效。
+    /// 当 `UpdateTaskPayload` 派生了 `Serialize` 后，`serde` 需要知道如何序列化此字段。
+    ///
+    /// # 逻辑
+    /// - `Some(Some(value))` 序列化为 `value`
+    /// - `Some(None)` 序列化为 `null`
+    /// - `None` (如果 `UpdateTaskPayload` 的字段本身是 `None`) 在 `#[serde(skip_serializing_if = "Option::is_none")]`
+    ///   的作用下会被跳过。但在 `with` 模块中，我们直接处理内部 `Option` 即可。
+    pub fn serialize<S, T>(value: &Option<Option<T>>, serializer: S) -> Result<S::Ok, S::Error>
+        where S: Serializer, T: Serialize
+    {
+        match value {
+            Some(inner) => inner.serialize(serializer),
+            None => serializer.serialize_none(),
+        }
     }
 }

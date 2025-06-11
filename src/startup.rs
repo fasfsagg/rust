@@ -39,9 +39,11 @@ use tower_http::cors::{ Any, CorsLayer }; // Tower HTTP 提供的 CORS 中间件
 use anyhow::Result; // anyhow 用于简化错误处理
 use migration::{ Migrator, MigratorTrait }; // 导入迁移器
 use sea_orm::{ Database, DatabaseConnection }; // 导入 SeaORM 的核心类型
+use std::sync::Arc;
 
 // --- 导入项目内部模块 ---
 use crate::app::middleware; // 中间件模块 (日志等)
+use crate::app::repository::task_repository::{ TaskRepository, TaskRepositoryContract }; // 导入仓库
 use crate::config::AppConfig; // 应用配置结构体
 use crate::routes; // 路由定义模块
 
@@ -54,7 +56,7 @@ use crate::routes; // 路由定义模块
 ///          `DatabaseConnection` 本身是设计为可以被克隆的（它内部使用了 `Arc`）。
 #[derive(Clone)]
 pub struct AppState {
-    pub db_connection: DatabaseConnection, // 数据库连接池
+    pub task_repo: Arc<dyn TaskRepositoryContract>, // 任务仓库的抽象 Trait
 }
 
 // --- 初始化函数 ---
@@ -92,8 +94,13 @@ pub async fn init_app(config: AppConfig) -> Result<(Router, DatabaseConnection)>
 
     // 注意: 旧的 `db::new_db()` 和 `db::init_sample_data()` 已被移除。
 
-    // --- 步骤 3: 创建应用状态 ---
-    let app_state = AppState { db_connection };
+    // --- 步骤 3: 创建仓库和应用状态 ---
+    // 创建仓库实例
+    let task_repo = Arc::new(TaskRepository::new(db_connection.clone())) as Arc<
+        dyn TaskRepositoryContract
+    >;
+    // 创建应用状态
+    let app_state = AppState { task_repo };
     println!("STARTUP: 应用共享状态 (AppState) 创建完成。");
 
     // --- 步骤 4: 构建中间件栈 ---
@@ -108,5 +115,5 @@ pub async fn init_app(config: AppConfig) -> Result<(Router, DatabaseConnection)>
 
     // --- 步骤 6: 返回配置好的应用和数据库连接 ---
     println!("STARTUP: 应用初始化流程完成。");
-    Ok((app, app_state.db_connection))
+    Ok((app, db_connection))
 }

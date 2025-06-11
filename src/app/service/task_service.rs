@@ -81,16 +81,20 @@
 use crate::app::model::task::{ CreateTaskPayload, Task, UpdateTaskPayload };
 // 导入自定义的 `Result` 类型别名，用于统一函数返回值。
 use crate::error::{ AppError, Result };
-// 导入仓库层
-use crate::app::repository::TaskRepository;
+// 导入仓库层 Trait
+use crate::app::repository::task_repository::TaskRepositoryContract;
 // 导入 SeaORM 相关模块和数据库实体
 use migration::task_entity::ActiveModel; // 直接导入 ActiveModel
-use sea_orm::{ prelude::Uuid, ActiveValue, DatabaseConnection, IntoActiveModel };
+use sea_orm::{ prelude::Uuid, ActiveValue, IntoActiveModel };
+use std::sync::Arc;
 
 // --- 服务函数定义 ---
 
 /// 服务函数：创建新任务
-pub async fn create_task(db: &DatabaseConnection, payload: CreateTaskPayload) -> Result<Task> {
+pub async fn create_task(
+    repo: Arc<dyn TaskRepositoryContract>,
+    payload: CreateTaskPayload
+) -> Result<Task> {
     println!("SERVICE: 正在处理创建任务请求...");
 
     // 将来自 API 的 payload 转换为 SeaORM 的 ActiveModel。
@@ -105,7 +109,7 @@ pub async fn create_task(db: &DatabaseConnection, payload: CreateTaskPayload) ->
 
     // 调用仓库层来执行数据库插入。
     // 错误（DbErr）会通过 `?` 操作符自动转换为 AppError::DbErr。
-    let created_task = TaskRepository::create(db, new_task).await?;
+    let created_task = repo.create(new_task).await?;
 
     println!("SERVICE: 创建任务请求处理完成。");
     // 将数据库模型转换为 API DTO 并返回
@@ -113,11 +117,11 @@ pub async fn create_task(db: &DatabaseConnection, payload: CreateTaskPayload) ->
 }
 
 /// 服务函数：获取所有任务
-pub async fn get_all_tasks(db: &DatabaseConnection) -> Result<Vec<Task>> {
+pub async fn get_all_tasks(repo: Arc<dyn TaskRepositoryContract>) -> Result<Vec<Task>> {
     println!("SERVICE: 正在处理获取所有任务请求...");
 
     // 直接调用仓库层函数。
-    let db_tasks = TaskRepository::find_all(db).await?;
+    let db_tasks = repo.find_all().await?;
 
     // 使用迭代器的 `map` 和 `collect` 将 Vec<db_model::Model> 转换为 Vec<Task>
     let tasks: Vec<Task> = db_tasks
@@ -130,11 +134,11 @@ pub async fn get_all_tasks(db: &DatabaseConnection) -> Result<Vec<Task>> {
 }
 
 /// 服务函数：根据 ID 获取任务
-pub async fn get_task_by_id(db: &DatabaseConnection, id: Uuid) -> Result<Task> {
+pub async fn get_task_by_id(repo: Arc<dyn TaskRepositoryContract>, id: Uuid) -> Result<Task> {
     println!("SERVICE: 正在处理获取任务 ID: {} 的请求...", id);
 
     // 调用仓库层函数。
-    let db_task = TaskRepository::find_by_id(db, id).await?;
+    let db_task = repo.find_by_id(id).await?;
 
     // `find_by_id` 返回 `Option<Model>`，我们需要处理 `None` 的情况。
     // 如果是 `None`，表示任务未找到，我们返回一个特定的应用错误。
@@ -154,7 +158,7 @@ pub async fn get_task_by_id(db: &DatabaseConnection, id: Uuid) -> Result<Task> {
 
 /// 服务函数：更新任务
 pub async fn update_task(
-    db: &DatabaseConnection,
+    repo: Arc<dyn TaskRepositoryContract>,
     id: Uuid,
     payload: UpdateTaskPayload
 ) -> Result<Task> {
@@ -162,7 +166,7 @@ pub async fn update_task(
 
     // 1. 根据 ID 从数据库中获取现有的任务实体。
     //    我们使用 `.into_active_model()` 将其转换为 ActiveModel，以便进行修改。
-    let mut active_task = match TaskRepository::find_by_id(db, id).await? {
+    let mut active_task = match repo.find_by_id(id).await? {
         Some(task) => task.into_active_model(),
         None => {
             return Err(AppError::TaskNotFound(id));
@@ -183,7 +187,7 @@ pub async fn update_task(
     }
 
     // 3. 调用仓库层来执行数据库更新。
-    let updated_task = TaskRepository::update(db, active_task).await?;
+    let updated_task = repo.update(active_task).await?;
 
     println!("SERVICE: 更新任务 ID: {} 的请求处理完成。", id);
     // 将数据库模型转换为 API DTO 并返回
@@ -191,11 +195,11 @@ pub async fn update_task(
 }
 
 /// 服务函数：删除任务
-pub async fn delete_task(db: &DatabaseConnection, id: Uuid) -> Result<()> {
+pub async fn delete_task(repo: Arc<dyn TaskRepositoryContract>, id: Uuid) -> Result<()> {
     println!("SERVICE: 正在处理删除任务 ID: {} 的请求...", id);
 
     // 调用仓库层执行删除操作。
-    let delete_result = TaskRepository::delete(db, id).await?;
+    let delete_result = repo.delete(id).await?;
 
     // `delete` 返回 `DeleteResult`，其中包含 `rows_affected`。
     // 我们检查这个值来确定是否真的有任务被删除了。
@@ -208,5 +212,182 @@ pub async fn delete_task(db: &DatabaseConnection, id: Uuid) -> Result<()> {
         println!("SERVICE: 删除任务 ID: {} 的请求处理成功。", id);
         // 删除成功，我们不需要返回任何数据，所以返回 `Ok(())`。
         Ok(())
+    }
+}
+
+// --- 单元测试 ---
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_trait::async_trait;
+    use migration::task_entity;
+    use sea_orm::{ prelude::Uuid, DbErr, DeleteResult };
+    use std::sync::{ Arc, Mutex };
+
+    // 1. 创建模拟仓库 (Mock Repository)
+    // 这个结构体将模拟真实的 TaskRepository，但它不与数据库交互。
+    // 它允许我们精确控制测试场景下的返回值（成功或失败）。
+    #[derive(Default)]
+    struct MockTaskRepository {
+        // 使用 Mutex 来安全地修改测试数据
+        create_result: Mutex<Option<std::result::Result<task_entity::Model, DbErr>>>,
+        find_all_result: Mutex<Option<std::result::Result<Vec<task_entity::Model>, DbErr>>>,
+        find_by_id_result: Mutex<Option<std::result::Result<Option<task_entity::Model>, DbErr>>>,
+        update_result: Mutex<Option<std::result::Result<task_entity::Model, DbErr>>>,
+        delete_result: Mutex<Option<std::result::Result<DeleteResult, DbErr>>>,
+    }
+
+    // 2. 为模拟仓库实现 `TaskRepositoryContract` Trait
+    // 我们在这里实现 trait 的所有方法，但返回的是预设在 Mutex 中的结果。
+    #[async_trait]
+    impl TaskRepositoryContract for MockTaskRepository {
+        async fn create(
+            &self,
+            _data: ActiveModel
+        ) -> std::result::Result<task_entity::Model, DbErr> {
+            self.create_result.lock().unwrap().take().unwrap()
+        }
+        async fn find_all(&self) -> std::result::Result<Vec<task_entity::Model>, DbErr> {
+            self.find_all_result.lock().unwrap().take().unwrap()
+        }
+        async fn find_by_id(
+            &self,
+            _id: Uuid
+        ) -> std::result::Result<Option<task_entity::Model>, DbErr> {
+            self.find_by_id_result.lock().unwrap().take().unwrap()
+        }
+        async fn update(
+            &self,
+            _data: ActiveModel
+        ) -> std::result::Result<task_entity::Model, DbErr> {
+            self.update_result.lock().unwrap().take().unwrap()
+        }
+        async fn delete(&self, _id: Uuid) -> std::result::Result<DeleteResult, DbErr> {
+            self.delete_result.lock().unwrap().take().unwrap()
+        }
+    }
+
+    // 辅助函数，创建一个包含预设数据的 task model
+    fn create_dummy_task_model(id: Uuid, title: &str) -> task_entity::Model {
+        task_entity::Model {
+            id,
+            title: title.to_string(),
+            description: Some("Dummy Description".to_string()),
+            completed: false,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        }
+    }
+
+    // 3. 编写单元测试用例
+    #[tokio::test]
+    async fn test_get_task_by_id_found() {
+        // --- 准备 (Arrange) ---
+        let mock_repo = MockTaskRepository::default();
+        let task_id = Uuid::new_v4();
+        let expected_task = create_dummy_task_model(task_id, "Test Task");
+
+        // 设置模拟仓库的返回值
+        *mock_repo.find_by_id_result.lock().unwrap() = Some(Ok(Some(expected_task.clone())));
+
+        let repo: Arc<dyn TaskRepositoryContract> = Arc::new(mock_repo);
+
+        // --- 执行 (Act) ---
+        let result = get_task_by_id(repo, task_id).await;
+
+        // --- 断言 (Assert) ---
+        assert!(result.is_ok());
+        let task = result.unwrap();
+        assert_eq!(task.id, task_id);
+        assert_eq!(task.title, "Test Task");
+    }
+
+    #[tokio::test]
+    async fn test_get_task_by_id_not_found() {
+        // --- 准备 (Arrange) ---
+        let mock_repo = MockTaskRepository::default();
+        let task_id = Uuid::new_v4();
+
+        // 模拟仓库返回 Ok(None)，表示数据库中没有找到
+        *mock_repo.find_by_id_result.lock().unwrap() = Some(Ok(None));
+
+        let repo: Arc<dyn TaskRepositoryContract> = Arc::new(mock_repo);
+
+        // --- 执行 (Act) ---
+        let result = get_task_by_id(repo, task_id).await;
+
+        // --- 断言 (Assert) ---
+        assert!(result.is_err());
+        match result.err().unwrap() {
+            AppError::TaskNotFound(id) => assert_eq!(id, task_id),
+            _ => panic!("Expected TaskNotFound error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_task_success() {
+        // --- 准备 (Arrange) ---
+        let mock_repo = MockTaskRepository::default();
+        let task_id = Uuid::new_v4();
+        let expected_task_model = create_dummy_task_model(task_id, "New Created Task");
+
+        // 模拟 create 方法成功返回
+        *mock_repo.create_result.lock().unwrap() = Some(Ok(expected_task_model.clone()));
+
+        let repo: Arc<dyn TaskRepositoryContract> = Arc::new(mock_repo);
+        let payload = CreateTaskPayload {
+            title: "New Created Task".to_string(),
+            description: Some("Description".to_string()),
+            completed: false,
+        };
+
+        // --- 执行 (Act) ---
+        let result = create_task(repo, payload).await;
+
+        // --- 断言 (Assert) ---
+        assert!(result.is_ok());
+        let created_task = result.unwrap();
+        assert_eq!(created_task.id, task_id);
+        assert_eq!(created_task.title, "New Created Task");
+    }
+
+    #[tokio::test]
+    async fn test_delete_task_success() {
+        // --- 准备 (Arrange) ---
+        let mock_repo = MockTaskRepository::default();
+        let task_id = Uuid::new_v4();
+
+        // 模拟 delete 方法返回成功，影响了 1 行
+        *mock_repo.delete_result.lock().unwrap() = Some(Ok(DeleteResult { rows_affected: 1 }));
+
+        let repo: Arc<dyn TaskRepositoryContract> = Arc::new(mock_repo);
+
+        // --- 执行 (Act) ---
+        let result = delete_task(repo, task_id).await;
+
+        // --- 断言 (Assert) ---
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_delete_task_not_found() {
+        // --- 准备 (Arrange) ---
+        let mock_repo = MockTaskRepository::default();
+        let task_id = Uuid::new_v4();
+
+        // 模拟 delete 方法返回成功，但影响了 0 行
+        *mock_repo.delete_result.lock().unwrap() = Some(Ok(DeleteResult { rows_affected: 0 }));
+
+        let repo: Arc<dyn TaskRepositoryContract> = Arc::new(mock_repo);
+
+        // --- 执行 (Act) ---
+        let result = delete_task(repo, task_id).await;
+
+        // --- 断言 (Assert) ---
+        assert!(result.is_err());
+        match result.err().unwrap() {
+            AppError::TaskNotFound(id) => assert_eq!(id, task_id),
+            _ => panic!("Expected TaskNotFound error"),
+        }
     }
 }
