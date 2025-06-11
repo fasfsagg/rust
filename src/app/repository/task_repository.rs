@@ -67,7 +67,11 @@ impl TaskRepository {
     ///
     /// # 返回
     /// 成功时返回创建的任务模型 `Model`，失败时返回 `DbErr`。
-    pub async fn create(db: &DatabaseConnection, data: ActiveModel) -> Result<Model, DbErr> {
+    pub async fn create(db: &DatabaseConnection, mut data: ActiveModel) -> Result<Model, DbErr> {
+        // 确保设置了UUID，如果没有则自动生成
+        if data.id.is_not_set() {
+            data.id = sea_orm::Set(Uuid::new_v4());
+        }
         data.insert(db).await
     }
 

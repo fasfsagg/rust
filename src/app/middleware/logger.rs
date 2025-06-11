@@ -45,6 +45,10 @@ use tracing::Level;
 // `SubscriberInitExt`: 扩展 trait，提供 `.init()` 方法来设置全局日志订阅者。
 // `EnvFilter`: 一个日志层，根据环境变量 (通常是 `RUST_LOG`) 来过滤日志事件。
 use tracing_subscriber::{ layer::SubscriberExt, util::SubscriberInitExt, EnvFilter };
+use std::sync::atomic::{AtomicBool, Ordering};
+
+// 静态标记，用于确保日志系统只初始化一次
+static LOGGER_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 /// 设置应用程序的全局日志系统 (Function to Setup Application Logging)
 ///
@@ -68,18 +72,23 @@ use tracing_subscriber::{ layer::SubscriberExt, util::SubscriberInitExt, EnvFilt
 ///    - `.init()`: 将构建好的订阅者设置为【全局默认】日志处理器。
 ///      一旦设置，应用程序中所有通过 `tracing` 宏 (如 `info!`, `debug!`, `error!`) 发出的日志事件都将被这个订阅者处理。
 pub fn setup_logger() {
-    // 创建 EnvFilter，尝试从 RUST_LOG 环境变量读取配置，否则默认为 "info"
-    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    // 检查日志系统是否已经被初始化
+    if LOGGER_INITIALIZED.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+        // 只有在第一次调用时才执行初始化流程
+        
+        // 创建 EnvFilter，尝试从 RUST_LOG 环境变量读取配置，否则默认为 "info"
+        let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
-    // 构建并初始化全局日志订阅者
-    tracing_subscriber
-        ::registry()
-        .with(env_filter) // 应用环境过滤器
-        .with(tracing_subscriber::fmt::layer()) // 添加标准格式化和输出层
-        .init(); // 设置为全局默认
+        // 构建并初始化全局日志订阅者
+        tracing_subscriber
+            ::registry()
+            .with(env_filter) // 应用环境过滤器
+            .with(tracing_subscriber::fmt::layer()) // 添加标准格式化和输出层
+            .init(); // 设置为全局默认
 
-    // 通过日志系统打印一条信息，确认初始化成功
-    tracing::info!("日志系统已初始化 (默认级别: INFO，可通过 RUST_LOG 环境变量覆盖)");
+        // 通过日志系统打印一条信息，确认初始化成功
+        tracing::info!("日志系统已初始化 (默认级别: INFO，可通过 RUST_LOG 环境变量覆盖)");
+    }
 }
 
 /// 创建并返回一个用于 HTTP 请求跟踪的 `TraceLayer` 中间件 (Function to Create Trace Middleware)

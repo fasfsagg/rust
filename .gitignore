@@ -21,4 +21,10 @@
 
 # 运行时配置
 .env
-.env.local 
+.env.local
+.env.test
+.env.*.local
+db_test.sqlite
+
+# 证书目录（包含敏感信息）
+/certs/ 

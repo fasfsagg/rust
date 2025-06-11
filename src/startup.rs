@@ -72,7 +72,7 @@ pub struct AppState {
 /// * `-> Result<Router>`: 返回一个 `anyhow::Result`。
 ///    - `Ok(Router)`: 成功时返回配置好的 `Router`。
 ///    - `Err(error)`: 如果在初始化过程中（如数据库连接失败）发生错误，则返回错误。
-pub async fn init_app(config: AppConfig) -> Result<Router> {
+pub async fn init_app(config: AppConfig) -> Result<(Router, DatabaseConnection)> {
     // --- 步骤 1: 设置日志系统 ---
     middleware::setup_logger();
     println!("STARTUP: 日志系统初始化完成。");
@@ -103,10 +103,10 @@ pub async fn init_app(config: AppConfig) -> Result<Router> {
     println!("STARTUP: 中间件栈构建完成 (Trace, CORS)。");
 
     // --- 步骤 5: 创建应用路由并应用中间件 ---
-    let app = routes::create_routes(app_state).layer(middleware_stack);
+    let app = routes::create_routes(app_state.clone()).layer(middleware_stack);
     println!("STARTUP: 路由创建并应用中间件完成。");
 
-    // --- 步骤 6: 返回配置好的应用 ---
+    // --- 步骤 6: 返回配置好的应用和数据库连接 ---
     println!("STARTUP: 应用初始化流程完成。");
-    Ok(app)
+    Ok((app, app_state.db_connection))
 }
