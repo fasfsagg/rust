@@ -13,7 +13,7 @@
 // 引入通用测试辅助模块
 mod common;
 
-use axum_tutorial::app::repository::task_repository::TaskRepository;
+use axum_tutorial::app::repository::task_repository::{ TaskRepository, TaskRepositoryContract };
 use fake::{ Fake, Faker };
 use migration::task_entity;
 use sea_orm::{ prelude::Uuid, Set };
@@ -23,6 +23,7 @@ use sea_orm::{ prelude::Uuid, Set };
 async fn test_create_task_success() {
     // 准备 (Arrange)
     let app = common::spawn_app().await;
+    let task_repo = TaskRepository::new(app.db_connection.clone());
     let new_task_title = format!("测试任务-{}", Faker.fake::<String>());
     let new_task_description: String = Faker.fake();
     let new_task_data = task_entity::ActiveModel {
@@ -32,16 +33,15 @@ async fn test_create_task_success() {
     };
 
     // 行动 (Act)
-    let created_task = TaskRepository::create(&app.db_connection, new_task_data).await.expect(
-        "创建任务失败"
-    );
+    let created_task = task_repo.create(new_task_data).await.expect("创建任务失败");
 
     // 断言 (Assert)
     assert_eq!(created_task.title, new_task_title);
     assert_eq!(created_task.description.unwrap(), new_task_description);
 
     // 直接从数据库中查询，再次确认数据已成功写入
-    let found_task = TaskRepository::find_by_id(&app.db_connection, created_task.id).await
+    let found_task = task_repo
+        .find_by_id(created_task.id).await
         .expect("从数据库按ID查找任务失败")
         .expect("创建的任务未在数据库中找到");
 
@@ -55,18 +55,22 @@ async fn test_create_task_success() {
 async fn test_find_by_id_success() {
     // 准备
     let app = common::spawn_app().await;
+    let task_repo = TaskRepository::new(app.db_connection.clone());
     let task_title = format!("测试任务-{}", Faker.fake::<String>());
     let task_desc = Some(Faker.fake::<String>());
 
     // 先创建一个任务
-    let created_task = TaskRepository::create(&app.db_connection, task_entity::ActiveModel {
-        title: Set(task_title.clone()),
-        description: Set(task_desc.clone()),
-        ..Default::default()
-    }).await.expect("为测试find_by_id而创建任务时失败");
+    let created_task = task_repo
+        .create(task_entity::ActiveModel {
+            title: Set(task_title.clone()),
+            description: Set(task_desc.clone()),
+            ..Default::default()
+        }).await
+        .expect("为测试find_by_id而创建任务时失败");
 
     // 行动
-    let found_task = TaskRepository::find_by_id(&app.db_connection, created_task.id).await
+    let found_task = task_repo
+        .find_by_id(created_task.id).await
         .expect("执行find_by_id失败")
         .expect("任务应该存在但未找到");
 
@@ -81,12 +85,13 @@ async fn test_find_by_id_success() {
 async fn test_find_by_id_not_found() {
     // 准备
     let app = common::spawn_app().await;
+    let task_repo = TaskRepository::new(app.db_connection.clone());
     let non_existent_id = Uuid::new_v4();
 
     // 行动
-    let result = TaskRepository::find_by_id(&app.db_connection, non_existent_id).await.expect(
-        "执行find_by_id查询未找到的ID时失败"
-    );
+    let result = task_repo
+        .find_by_id(non_existent_id).await
+        .expect("执行find_by_id查询未找到的ID时失败");
 
     // 断言
     assert!(result.is_none());
@@ -97,23 +102,28 @@ async fn test_find_by_id_not_found() {
 async fn test_find_all_success() {
     // 准备
     let app = common::spawn_app().await;
+    let task_repo = TaskRepository::new(app.db_connection.clone());
 
     // 因为 spawn_app 保证了数据库是全新的，所以可以直接开始创建任务
     // 创建两个任务
-    TaskRepository::create(&app.db_connection, task_entity::ActiveModel {
-        title: Set(format!("测试任务1-{}", Faker.fake::<String>())),
-        description: Set(Some(Faker.fake())),
-        ..Default::default()
-    }).await.expect("创建第一个任务失败");
+    task_repo
+        .create(task_entity::ActiveModel {
+            title: Set(format!("测试任务1-{}", Faker.fake::<String>())),
+            description: Set(Some(Faker.fake())),
+            ..Default::default()
+        }).await
+        .expect("创建第一个任务失败");
 
-    TaskRepository::create(&app.db_connection, task_entity::ActiveModel {
-        title: Set(format!("测试任务2-{}", Faker.fake::<String>())),
-        description: Set(Some(Faker.fake())),
-        ..Default::default()
-    }).await.expect("创建第二个任务失败");
+    task_repo
+        .create(task_entity::ActiveModel {
+            title: Set(format!("测试任务2-{}", Faker.fake::<String>())),
+            description: Set(Some(Faker.fake())),
+            ..Default::default()
+        }).await
+        .expect("创建第二个任务失败");
 
     // 行动
-    let tasks = TaskRepository::find_all(&app.db_connection).await.expect("执行find_all失败");
+    let tasks = task_repo.find_all().await.expect("执行find_all失败");
 
     // 断言
     assert_eq!(tasks.len(), 2, "数据库中应该有两个任务");
@@ -124,27 +134,29 @@ async fn test_find_all_success() {
 async fn test_update_task_success() {
     // 准备
     let app = common::spawn_app().await;
+    let task_repo = TaskRepository::new(app.db_connection.clone());
     // 创建一个任务
-    let created_task = TaskRepository::create(&app.db_connection, task_entity::ActiveModel {
-        title: Set("测试任务-更新".to_string()),
-        description: Set(Some("Initial Description".to_string())),
-        ..Default::default()
-    }).await.expect("为测试update而创建任务时失败");
+    let created_task = task_repo
+        .create(task_entity::ActiveModel {
+            title: Set("测试任务-更新".to_string()),
+            description: Set(Some("Initial Description".to_string())),
+            ..Default::default()
+        }).await
+        .expect("为测试update而创建任务时失败");
 
     let updated_description = "Updated Description".to_string();
     let mut task_to_update: task_entity::ActiveModel = created_task.into();
     task_to_update.description = Set(Some(updated_description.clone()));
 
     // 行动
-    let updated_task = TaskRepository::update(&app.db_connection, task_to_update).await.expect(
-        "更新任务失败"
-    );
+    let updated_task = task_repo.update(task_to_update).await.expect("更新任务失败");
 
     // 断言
     assert_eq!(updated_task.description.as_ref(), Some(&updated_description));
 
     // 再次从数据库确认
-    let found_task = TaskRepository::find_by_id(&app.db_connection, updated_task.id).await
+    let found_task = task_repo
+        .find_by_id(updated_task.id).await
         .expect("为验证更新而查询任务时失败")
         .expect("更新后的任务在数据库中未找到");
     assert_eq!(found_task.description, Some(updated_description));
@@ -155,24 +167,23 @@ async fn test_update_task_success() {
 async fn test_delete_task_success() {
     // 准备
     let app = common::spawn_app().await;
+    let task_repo = TaskRepository::new(app.db_connection.clone());
     // 创建一个任务
-    let created_task = TaskRepository::create(&app.db_connection, task_entity::ActiveModel {
-        title: Set(format!("测试任务-删除-{}", Faker.fake::<String>())),
-        description: Set(Some(Faker.fake())),
-        ..Default::default()
-    }).await.expect("为测试delete而创建任务时失败");
+    let created_task = task_repo
+        .create(task_entity::ActiveModel {
+            title: Set(format!("测试任务-删除-{}", Faker.fake::<String>())),
+            description: Set(Some(Faker.fake())),
+            ..Default::default()
+        }).await
+        .expect("为测试delete而创建任务时失败");
 
     // 行动
-    let delete_result = TaskRepository::delete(&app.db_connection, created_task.id).await.expect(
-        "删除任务失败"
-    );
+    let delete_result = task_repo.delete(created_task.id).await.expect("删除任务失败");
 
     // 断言
     assert_eq!(delete_result.rows_affected, 1);
 
     // 确认任务已被删除
-    let result = TaskRepository::find_by_id(&app.db_connection, created_task.id).await.expect(
-        "为验证删除而查询任务时失败"
-    );
+    let result = task_repo.find_by_id(created_task.id).await.expect("为验证删除而查询任务时失败");
     assert!(result.is_none(), "任务删除后，在数据库中应该找不到");
 }
