@@ -55,11 +55,37 @@ use crate::app::controller::{
     get_task_by_id, // 处理 GET /api/tasks/:id
     update_task, // 处理 PUT /api/tasks/:id
     ws_handler, // 处理 GET /ws
+    // 认证相关处理函数
+    login_handler, // 处理 POST /api/auth/login
+    register_handler, // 处理 POST /api/auth/register
 };
 // 导入在 `src/startup.rs` 中定义的唯一的共享应用状态 `AppState`。
 use crate::startup::AppState;
+// 导入JWT认证中间件
+use crate::app::middleware::auth_middleware::create_jwt_auth_middleware;
+// 导入Axum中间件相关功能
+use axum::middleware;
 
 // --- 路由创建函数 ---
+
+/// 创建认证相关路由 (Function to Create Authentication Routes)
+///
+/// 【功能】: 创建并配置所有认证相关的路由，包括用户注册和登录。
+///
+/// # 【参数】
+/// * `app_state: AppState` - 应用程序的共享状态，包含数据库连接等资源。
+///
+/// # 【返回值】
+/// * `-> Router`: 返回配置好的认证路由实例，包含状态注入。
+fn auth_routes(app_state: AppState) -> Router {
+    Router::new()
+        // POST /register - 用户注册
+        .route("/register", post(register_handler))
+        // POST /login - 用户登录
+        .route("/login", post(login_handler))
+        // 注入应用状态，使处理函数可以访问数据库连接等资源
+        .with_state(app_state)
+}
 
 /// 创建并配置应用程序的所有路由 (Function to Create Application Routes)
 ///
@@ -93,6 +119,10 @@ pub fn create_routes(app_state: AppState) -> Router {
         .route("/tasks/:id", put(update_task))
         // 定义 DELETE /tasks/:id 路由，映射到 delete_task 控制器函数。
         .route("/tasks/:id", delete(delete_task))
+        // --- 应用JWT认证中间件到任务路由 ---
+        // 使用 `.route_layer()` 将JWT认证中间件应用到所有上述任务路由
+        // 这确保了只有携带有效JWT令牌的请求才能访问任务相关的API端点
+        .route_layer(middleware::from_fn(create_jwt_auth_middleware(app_state.jwt_secret.clone())))
         // --- 注入共享状态 ---
         // `.with_state(app_state.clone())`: 将 `app_state` 注入到上面定义的所有 API 路由的处理函数中。
         // **重要**: 因为 `AppState` 通常包含 `Arc<...>` 类型（如我们的 `Db`），所以克隆 `app_state` 是一个廉价的操作
@@ -108,7 +138,11 @@ pub fn create_routes(app_state: AppState) -> Router {
         .route("/ws", get(ws_handler))
         // WebSocket 通常不需要共享数据库状态，所以这里没有 `.with_state()`。
         // 如果需要，也可以像 api_routes 一样添加 `.with_state()`。
-        .with_state(app_state); // 如果 ws_handler 需要 AppState，也注入
+        .with_state(app_state.clone()); // 如果 ws_handler 需要 AppState，也注入
+
+    // --- 创建认证路由 ---
+    // 创建认证相关的路由，包括用户注册和登录
+    let auth_routes = auth_routes(app_state.clone());
 
     // --- 组合所有路由 ---
     // 创建最终的根路由，并将上面定义的子路由和静态文件服务组合起来。
@@ -117,6 +151,9 @@ pub fn create_routes(app_state: AppState) -> Router {
         // 例如，之前定义的 `/tasks` 会变成 `/api/tasks`。
         // 这有助于组织路由，将所有 API 相关端点归类。
         .nest("/api", api_routes)
+        // `.nest("/api/auth", auth_routes)`: 将认证路由挂载到 `/api/auth` 路径前缀下。
+        // 例如，`/register` 会变成 `/api/auth/register`，`/login` 会变成 `/api/auth/login`。
+        .nest("/api/auth", auth_routes)
         // `.merge(ws_routes)`: 将 `ws_routes` 定义的路由合并到当前路由层级。
         // 这里 `/ws` 路由仍然是根路径下的 `/ws`。
         .merge(ws_routes)

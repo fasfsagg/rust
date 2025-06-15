@@ -44,9 +44,15 @@
 // 【可见性】: `pub` 使得 `task_controller` 模块本身可以被外部访问。[[关键语法要素: pub, mod]]
 pub mod task_controller;
 
+// 声明认证控制器模块
+pub mod auth_controller;
+
 // --- 重新导出公共项 ---
 // `pub use task_controller::*;`
 // 【作用】: 将 `task_controller` 模块中所有 `pub` 的项（主要是 Handler 函数）引入到当前的 `controller` 模块作用域，并使它们也成为 `pub`。
 // 【效果】: 简化路由层 (`routes.rs`) 定义路由时的处理函数路径。
 // 【* 通配符】: 导出 `task_controller` 模块内的所有公共项。[[关键语法要素: pub, use, * (glob)]]
 pub use task_controller::*;
+
+// 重新导出认证控制器的公共项
+pub use auth_controller::*;

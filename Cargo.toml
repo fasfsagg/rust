@@ -23,7 +23,7 @@ uuid = { version = "1.8.0", features = ["v4", "serde"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 # HTTP 工具库
-tower = "0.4.13"
+tower = { version = "0.4.13", features = ["util"] }
 tower-http = { version = "0.5.2", features = ["trace", "cors", "fs"] }
 # HTTP/3 支持（可选功能）
 quinn = "0.10"
@@ -44,6 +44,15 @@ anyhow = "1.0.82"
 chrono = { version = "0.4.41", features = ["serde"] }
 # 异步 Trait 支持
 async-trait = "0.1"
+
+# --- 认证与验证功能新增依赖 ---
+# 输入验证
+validator = { version = "0.18", features = ["derive"] }
+# 密码哈希 - 使用 Argon2 (更安全的现代密码哈希算法)
+argon2 = { version = "0.5", features = ["password-hash"] }
+# JSON Web Token (JWT)
+jsonwebtoken = "9.3"
+# --- 认证与验证功能新增依赖结束 ---
 
 [dev-dependencies]
 anyhow = "1.0.82"

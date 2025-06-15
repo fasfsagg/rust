@@ -49,23 +49,26 @@
 // --- 导入依赖 ---
 // 导入 Axum 框架的核心组件
 use axum::{
-    extract::{ ws::{ Message, WebSocket, WebSocketUpgrade }, Path, State },
+    extract::{ ws::{ Message, WebSocket, WebSocketUpgrade }, Path, State, Extension },
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
 // 导入标准库的 ControlFlow，用于优雅地控制循环。
 use std::ops::ControlFlow;
-// 导入 UUID 类型。
-use uuid::Uuid;
+
 // 导入模型层定义的载荷结构体。
 // 注意：`Task` DTO 已被移除，因为它在控制器层未被直接使用。
 use crate::app::model::task::{ CreateTaskPayload, UpdateTaskPayload };
 // 导入服务层模块。
 use crate::app::service;
 // 导入自定义错误类型和 Result 别名。
-use crate::error::{ self, Result };
+use crate::error::Result;
 use crate::startup::AppState;
+// 导入认证中间件的用户信息结构体
+use crate::app::middleware::auth_middleware::AuthenticatedUser;
+// 导入工具函数
+use crate::app::utils::{ parse_uuid_string, parse_user_id };
 
 // --- 应用程序共享状态 ---
 
@@ -80,11 +83,14 @@ use crate::startup::AppState;
 /// 【功能】: 处理创建新任务的 HTTP POST 请求。
 /// 【路由】: 通常在 `routes.rs` 中被绑定到 `POST /tasks` 路径。
 /// 【标记】: `pub async fn` - 公共异步处理函数。
+/// 【认证】: 需要有效的JWT令牌，用户信息从请求扩展中提取。
 ///
 /// # 【参数 (Axum Extractors)】
 /// * `State(state): State<AppState>`: [[Axum Extractor: State]]
 ///    - 从应用程序状态中提取 `AppState` 的【克隆】。
 ///    - `State(...)` 语法是解构模式。
+/// * `Extension(user): Extension<AuthenticatedUser>`: [[Axum Extractor: Extension]]
+///    - 从请求扩展中提取认证用户信息，由JWT中间件注入。
 /// * `Json(payload): Json<CreateTaskPayload>`: [[Axum Extractor: Json]]
 ///    - 尝试从 HTTP 请求体中【反序列化】JSON 数据为 `CreateTaskPayload` 类型。
 ///    - `Json(...)` 解构模式。
@@ -103,11 +109,20 @@ use crate::startup::AppState;
 ///      - Axum 会调用 `AppError` 的 `into_response()` 方法将错误转为 HTTP 响应。
 pub async fn create_task(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     Json(payload): Json<CreateTaskPayload>
 ) -> Result<impl IntoResponse> {
-    println!("CONTROLLER: Received create task request");
-    let task = service::create_task(state.task_repo.clone(), payload).await?;
-    println!("CONTROLLER: Task created successfully (ID: {})", task.id);
+    tracing::info!(
+        username = %user.username,
+        user_id = %user.user_id,
+        "收到创建任务请求"
+    );
+
+    // 解析用户ID为UUID
+    let user_uuid = parse_user_id(&user.user_id)?;
+
+    let task = service::create_task(state.task_repo.clone(), payload, user_uuid).await?;
+    tracing::info!(task_id = %task.id, username = %user.username, "任务创建成功");
     Ok((StatusCode::CREATED, Json(task)))
 }
 
@@ -115,18 +130,31 @@ pub async fn create_task(
 ///
 /// 【功能】: 处理获取所有任务列表的 HTTP GET 请求。
 /// 【路由】: 绑定到 `GET /tasks`。
+/// 【认证】: 需要有效的JWT令牌，只返回当前用户的任务。
 ///
 /// # 【参数】
 /// * `State(state): State<AppState>`: 注入共享状态以访问数据库。
+/// * `Extension(user): Extension<AuthenticatedUser>`: 从请求扩展中提取认证用户信息。
 ///
 /// # 【返回值】
 /// * `-> Result<impl IntoResponse>`: 返回 Result 以处理潜在的数据库错误。
 ///    - 【成功路径】: `Ok((StatusCode::OK, Json<Vec<Task>>))`
 ///    - 【失败路径】: 由 `?` 操作符处理。
-pub async fn get_all_tasks(State(state): State<AppState>) -> Result<impl IntoResponse> {
-    println!("CONTROLLER: Received get all tasks request");
-    let tasks = service::get_all_tasks(state.task_repo.clone()).await?;
-    println!("CONTROLLER: Retrieved {} tasks", tasks.len());
+pub async fn get_all_tasks(
+    State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>
+) -> Result<impl IntoResponse> {
+    println!(
+        "CONTROLLER: Received get all tasks request from user: {} (ID: {})",
+        user.username,
+        user.user_id
+    );
+
+    // 解析用户ID为UUID
+    let user_uuid = parse_user_id(&user.user_id)?;
+
+    let tasks = service::get_all_tasks(state.task_repo.clone(), user_uuid).await?;
+    println!("CONTROLLER: Retrieved {} tasks for user: {}", tasks.len(), user.username);
     Ok((StatusCode::OK, Json(tasks)))
 }
 
@@ -134,9 +162,11 @@ pub async fn get_all_tasks(State(state): State<AppState>) -> Result<impl IntoRes
 ///
 /// 【功能】: 处理根据 ID 获取单个任务的 HTTP GET 请求。
 /// 【路由】: 绑定到 `GET /tasks/:id`，其中 `:id` 是路径参数。
+/// 【认证】: 需要有效的JWT令牌，只能获取属于当前用户的任务。
 ///
 /// # 【参数】
 /// * `State(state): State<AppState>`: 注入共享状态。
+/// * `Extension(user): Extension<AuthenticatedUser>`: 从请求扩展中提取认证用户信息。
 /// * `Path(id_str): Path<String>`: [[Axum Extractor: Path]]
 ///    - 从 URL 路径中提取 `:id` 部分作为 `String`。
 ///    - `Path(...)` 解构。
@@ -147,13 +177,23 @@ pub async fn get_all_tasks(State(state): State<AppState>) -> Result<impl IntoRes
 ///    - 【失败路径】: 处理 `InvalidUuid` 和 `TaskNotFound` 错误，Axum 会自动转换。
 pub async fn get_task_by_id(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     Path(id_str): Path<String>
 ) -> Result<impl IntoResponse> {
-    println!("CONTROLLER: Received get task by ID request for '{}'", id_str);
-    let id = parse_uuid(&id_str)?;
-    println!("CONTROLLER: Parsed UUID: {}", id);
-    let task = service::get_task_by_id(state.task_repo.clone(), id).await?;
-    println!("CONTROLLER: Task found for ID: {}", id);
+    println!(
+        "CONTROLLER: Received get task by ID request for '{}' from user: {} (ID: {})",
+        id_str,
+        user.username,
+        user.user_id
+    );
+    let id = parse_uuid_string(&id_str)?;
+    tracing::debug!(task_id = %id, "任务ID解析成功");
+
+    // 解析用户ID为UUID
+    let user_uuid = parse_user_id(&user.user_id)?;
+
+    let task = service::get_task_by_id(state.task_repo.clone(), id, user_uuid).await?;
+    println!("CONTROLLER: Task found for ID: {} for user: {}", id, user.username);
     Ok((StatusCode::OK, Json(task)))
 }
 
@@ -161,9 +201,11 @@ pub async fn get_task_by_id(
 ///
 /// 【功能】: 处理更新现有任务的 HTTP PUT 请求。
 /// 【路由】: 绑定到 `PUT /tasks/:id`。
+/// 【认证】: 需要有效的JWT令牌，只能更新属于当前用户的任务。
 ///
 /// # 【参数】
 /// * `State(state): State<AppState>`: 注入共享状态。
+/// * `Extension(user): Extension<AuthenticatedUser>`: 从请求扩展中提取认证用户信息。
 /// * `Path(id_str): Path<String>`: 提取路径参数 ID。
 /// * `Json(payload): Json<UpdateTaskPayload>`: 从请求体解析 JSON 更新数据。
 ///
@@ -173,14 +215,24 @@ pub async fn get_task_by_id(
 ///    - 【失败路径】: 处理 `InvalidUuid` 和 `TaskNotFound` 等错误。
 pub async fn update_task(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     Path(id_str): Path<String>,
     Json(payload): Json<UpdateTaskPayload>
 ) -> Result<impl IntoResponse> {
-    println!("CONTROLLER: Received update task request for '{}'", id_str);
-    let id = parse_uuid(&id_str)?;
-    println!("CONTROLLER: Parsed UUID: {}", id);
-    let task = service::update_task(state.task_repo.clone(), id, payload).await?;
-    println!("CONTROLLER: Task updated successfully for ID: {}", id);
+    println!(
+        "CONTROLLER: Received update task request for '{}' from user: {} (ID: {})",
+        id_str,
+        user.username,
+        user.user_id
+    );
+    let id = parse_uuid_string(&id_str)?;
+    tracing::debug!(task_id = %id, "任务ID解析成功");
+
+    // 解析用户ID为UUID
+    let user_uuid = parse_user_id(&user.user_id)?;
+
+    let task = service::update_task(state.task_repo.clone(), id, payload, user_uuid).await?;
+    println!("CONTROLLER: Task updated successfully for ID: {} for user: {}", id, user.username);
     Ok((StatusCode::OK, Json(task)))
 }
 
@@ -188,9 +240,11 @@ pub async fn update_task(
 ///
 /// 【功能】: 处理删除任务的 HTTP DELETE 请求。
 /// 【路由】: 绑定到 `DELETE /tasks/:id`。
+/// 【认证】: 需要有效的JWT令牌，只能删除属于当前用户的任务。
 ///
 /// # 【参数】
 /// * `State(state): State<AppState>`: 注入共享状态。
+/// * `Extension(user): Extension<AuthenticatedUser>`: 从请求扩展中提取认证用户信息。
 /// * `Path(id_str): Path<String>`: 提取路径参数 ID。
 ///
 /// # 【返回值】
@@ -200,13 +254,23 @@ pub async fn update_task(
 ///    - 【失败路径】: 处理 `InvalidUuid` 和 `TaskNotFound` 等错误。
 pub async fn delete_task(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     Path(id_str): Path<String>
 ) -> Result<StatusCode> {
-    println!("CONTROLLER: Received delete task request for '{}'", id_str);
-    let id = parse_uuid(&id_str)?;
-    println!("CONTROLLER: Parsed UUID: {}", id);
-    service::delete_task(state.task_repo.clone(), id).await?;
-    println!("CONTROLLER: Task deleted successfully for ID: {}", id);
+    println!(
+        "CONTROLLER: Received delete task request for '{}' from user: {} (ID: {})",
+        id_str,
+        user.username,
+        user.user_id
+    );
+    let id = parse_uuid_string(&id_str)?;
+    tracing::debug!(task_id = %id, "任务ID解析成功");
+
+    // 解析用户ID为UUID
+    let user_uuid = parse_user_id(&user.user_id)?;
+
+    service::delete_task(state.task_repo.clone(), id, user_uuid).await?;
+    println!("CONTROLLER: Task deleted successfully for ID: {} for user: {}", id, user.username);
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -267,9 +331,4 @@ fn process_message(msg: Message) -> ControlFlow<(), ()> {
         }
     }
     ControlFlow::Continue(())
-}
-
-/// 辅助函数：将字符串解析为 UUID
-fn parse_uuid(id_str: &str) -> Result<Uuid> {
-    Uuid::parse_str(id_str).map_err(|_| error::invalid_uuid(id_str))
 }

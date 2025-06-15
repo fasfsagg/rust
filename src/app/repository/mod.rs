@@ -9,7 +9,9 @@
 //! - **提供清晰的 API**: 为服务层提供面向领域的、与数据相关的接口。
 
 pub mod task_repository;
+pub mod user_repository;
 
-// 重新导出 TaskRepository 以便上层模块（主要是 service）可以更方便地使用。
+// 重新导出 Repository 以便上层模块（主要是 service）可以更方便地使用。
 // 使用 `crate::app::repository::TaskRepository` 而不是 `...::task_repository::TaskRepository`
 pub use task_repository::TaskRepository;
+pub use user_repository::UserRepository;

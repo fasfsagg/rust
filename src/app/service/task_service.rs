@@ -91,11 +91,14 @@ use std::sync::Arc;
 // --- 服务函数定义 ---
 
 /// 服务函数：创建新任务
+///
+/// 【认证与授权】: 使用传入的用户ID作为任务的所有者
 pub async fn create_task(
     repo: Arc<dyn TaskRepositoryContract>,
-    payload: CreateTaskPayload
+    payload: CreateTaskPayload,
+    user_id: Uuid
 ) -> Result<Task> {
-    println!("SERVICE: 正在处理创建任务请求...");
+    tracing::info!(user_id = %user_id, "开始处理创建任务请求");
 
     // 将来自 API 的 payload 转换为 SeaORM 的 ActiveModel。
     // ActiveModel 是用于执行插入和更新操作的可变模型。
@@ -104,6 +107,7 @@ pub async fn create_task(
         title: ActiveValue::Set(payload.title),
         description: ActiveValue::Set(payload.description),
         completed: ActiveValue::Set(payload.completed),
+        user_id: ActiveValue::Set(Some(user_id)), // 使用认证用户的ID
         ..Default::default() // 其他字段使用默认值 (如 created_at, updated_at 由数据库生成)
     };
 
@@ -111,17 +115,22 @@ pub async fn create_task(
     // 错误（DbErr）会通过 `?` 操作符自动转换为 AppError::DbErr。
     let created_task = repo.create(new_task).await?;
 
-    println!("SERVICE: 创建任务请求处理完成。");
+    tracing::info!(user_id = %user_id, task_id = %created_task.id, "任务创建成功");
     // 将数据库模型转换为 API DTO 并返回
     Ok(created_task.into())
 }
 
 /// 服务函数：获取所有任务
-pub async fn get_all_tasks(repo: Arc<dyn TaskRepositoryContract>) -> Result<Vec<Task>> {
-    println!("SERVICE: 正在处理获取所有任务请求...");
+///
+/// 【认证与授权】: 只返回属于指定用户的任务
+pub async fn get_all_tasks(
+    repo: Arc<dyn TaskRepositoryContract>,
+    user_id: Uuid
+) -> Result<Vec<Task>> {
+    tracing::info!(user_id = %user_id, "开始处理获取所有任务请求");
 
-    // 直接调用仓库层函数。
-    let db_tasks = repo.find_all().await?;
+    // 调用仓库层函数，传入用户ID进行过滤
+    let db_tasks = repo.find_all_by_user(user_id).await?;
 
     // 使用迭代器的 `map` 和 `collect` 将 Vec<db_model::Model> 转换为 Vec<Task>
     let tasks: Vec<Task> = db_tasks
@@ -129,46 +138,56 @@ pub async fn get_all_tasks(repo: Arc<dyn TaskRepositoryContract>) -> Result<Vec<
         .map(|db_task| db_task.into())
         .collect();
 
-    println!("SERVICE: 获取所有任务请求处理完成，找到 {} 个任务", tasks.len());
+    tracing::info!(user_id = %user_id, task_count = tasks.len(), "获取所有任务请求处理完成");
     Ok(tasks)
 }
 
 /// 服务函数：根据 ID 获取任务
-pub async fn get_task_by_id(repo: Arc<dyn TaskRepositoryContract>, id: Uuid) -> Result<Task> {
-    println!("SERVICE: 正在处理获取任务 ID: {} 的请求...", id);
+///
+/// 【认证与授权】: 只能获取属于指定用户的任务
+pub async fn get_task_by_id(
+    repo: Arc<dyn TaskRepositoryContract>,
+    id: Uuid,
+    user_id: Uuid
+) -> Result<Task> {
+    tracing::info!(task_id = %id, user_id = %user_id, "开始处理获取单个任务请求");
 
-    // 调用仓库层函数。
-    let db_task = repo.find_by_id(id).await?;
+    // 调用仓库层函数，同时检查任务ID和用户ID
+    let db_task = repo.find_by_id_and_user(id, user_id).await?;
 
-    // `find_by_id` 返回 `Option<Model>`，我们需要处理 `None` 的情况。
-    // 如果是 `None`，表示任务未找到，我们返回一个特定的应用错误。
+    // `find_by_id_and_user` 返回 `Option<Model>`，我们需要处理 `None` 的情况。
+    // 如果是 `None`，表示任务未找到或不属于该用户，我们返回一个特定的应用错误。
     // 如果是 `Some(task)`，我们返回任务本身。
     match db_task {
         Some(db_task) => {
-            println!("SERVICE: 获取任务 ID: {} 的请求处理成功。", id);
+            tracing::info!(task_id = %id, user_id = %user_id, "获取单个任务请求处理成功");
             // 将数据库模型转换为 API DTO 并返回
             Ok(db_task.into())
         }
         None => {
-            println!("SERVICE: 获取任务 ID: {} 的请求处理失败（未找到）。", id);
+            tracing::warn!(task_id = %id, user_id = %user_id, "任务未找到或用户无权限访问");
             Err(AppError::TaskNotFound(id))
         }
     }
 }
 
 /// 服务函数：更新任务
+///
+/// 【认证与授权】: 只能更新属于指定用户的任务
 pub async fn update_task(
     repo: Arc<dyn TaskRepositoryContract>,
     id: Uuid,
-    payload: UpdateTaskPayload
+    payload: UpdateTaskPayload,
+    user_id: Uuid
 ) -> Result<Task> {
-    println!("SERVICE: 正在处理更新任务 ID: {} 的请求...", id);
+    tracing::info!(task_id = %id, user_id = %user_id, "开始处理更新任务请求");
 
-    // 1. 根据 ID 从数据库中获取现有的任务实体。
+    // 1. 根据 ID 和用户ID从数据库中获取现有的任务实体。
     //    我们使用 `.into_active_model()` 将其转换为 ActiveModel，以便进行修改。
-    let mut active_task = match repo.find_by_id(id).await? {
+    let mut active_task = match repo.find_by_id_and_user(id, user_id).await? {
         Some(task) => task.into_active_model(),
         None => {
+            tracing::warn!(task_id = %id, user_id = %user_id, "更新任务失败，任务未找到或用户无权限");
             return Err(AppError::TaskNotFound(id));
         }
     };
@@ -189,27 +208,33 @@ pub async fn update_task(
     // 3. 调用仓库层来执行数据库更新。
     let updated_task = repo.update(active_task).await?;
 
-    println!("SERVICE: 更新任务 ID: {} 的请求处理完成。", id);
+    tracing::info!(task_id = %id, user_id = %user_id, "更新任务请求处理完成");
     // 将数据库模型转换为 API DTO 并返回
     Ok(updated_task.into())
 }
 
 /// 服务函数：删除任务
-pub async fn delete_task(repo: Arc<dyn TaskRepositoryContract>, id: Uuid) -> Result<()> {
-    println!("SERVICE: 正在处理删除任务 ID: {} 的请求...", id);
+///
+/// 【认证与授权】: 只能删除属于指定用户的任务
+pub async fn delete_task(
+    repo: Arc<dyn TaskRepositoryContract>,
+    id: Uuid,
+    user_id: Uuid
+) -> Result<()> {
+    tracing::info!(task_id = %id, user_id = %user_id, "开始处理删除任务请求");
 
-    // 调用仓库层执行删除操作。
-    let delete_result = repo.delete(id).await?;
+    // 调用仓库层执行删除操作，同时检查用户权限
+    let delete_result = repo.delete_by_id_and_user(id, user_id).await?;
 
-    // `delete` 返回 `DeleteResult`，其中包含 `rows_affected`。
+    // `delete_by_id_and_user` 返回 `DeleteResult`，其中包含 `rows_affected`。
     // 我们检查这个值来确定是否真的有任务被删除了。
     if delete_result.rows_affected == 0 {
-        // 如果没有行受影响，说明数据库中没有这个 ID 的任务。
-        println!("SERVICE: 删除任务 ID: {} 的请求处理失败（未找到）。", id);
+        // 如果没有行受影响，说明数据库中没有这个 ID 的任务或任务不属于该用户。
+        tracing::warn!(task_id = %id, user_id = %user_id, "删除任务失败，任务未找到或用户无权限");
         Err(AppError::TaskNotFound(id))
     } else {
         // 如果 `rows_affected` 是 1 (或更大，但主键删除应该是1)，说明删除成功。
-        println!("SERVICE: 删除任务 ID: {} 的请求处理成功。", id);
+        tracing::info!(task_id = %id, user_id = %user_id, "删除任务请求处理成功");
         // 删除成功，我们不需要返回任何数据，所以返回 `Ok(())`。
         Ok(())
     }
@@ -265,6 +290,30 @@ mod tests {
         async fn delete(&self, _id: Uuid) -> std::result::Result<DeleteResult, DbErr> {
             self.delete_result.lock().unwrap().take().unwrap()
         }
+
+        // 新增的用户相关方法
+        async fn find_all_by_user(
+            &self,
+            _user_id: Uuid
+        ) -> std::result::Result<Vec<task_entity::Model>, DbErr> {
+            self.find_all_result.lock().unwrap().take().unwrap()
+        }
+
+        async fn find_by_id_and_user(
+            &self,
+            _id: Uuid,
+            _user_id: Uuid
+        ) -> std::result::Result<Option<task_entity::Model>, DbErr> {
+            self.find_by_id_result.lock().unwrap().take().unwrap()
+        }
+
+        async fn delete_by_id_and_user(
+            &self,
+            _id: Uuid,
+            _user_id: Uuid
+        ) -> std::result::Result<DeleteResult, DbErr> {
+            self.delete_result.lock().unwrap().take().unwrap()
+        }
     }
 
     // 辅助函数，创建一个包含预设数据的 task model
@@ -274,6 +323,7 @@ mod tests {
             title: title.to_string(),
             description: Some("Dummy Description".to_string()),
             completed: false,
+            user_id: Some(Uuid::new_v4()), // 测试用的随机用户ID
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         }
@@ -285,6 +335,7 @@ mod tests {
         // --- 准备 (Arrange) ---
         let mock_repo = MockTaskRepository::default();
         let task_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
         let expected_task = create_dummy_task_model(task_id, "Test Task");
 
         // 设置模拟仓库的返回值
@@ -293,7 +344,7 @@ mod tests {
         let repo: Arc<dyn TaskRepositoryContract> = Arc::new(mock_repo);
 
         // --- 执行 (Act) ---
-        let result = get_task_by_id(repo, task_id).await;
+        let result = get_task_by_id(repo, task_id, user_id).await;
 
         // --- 断言 (Assert) ---
         assert!(result.is_ok());
@@ -307,6 +358,7 @@ mod tests {
         // --- 准备 (Arrange) ---
         let mock_repo = MockTaskRepository::default();
         let task_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
 
         // 模拟仓库返回 Ok(None)，表示数据库中没有找到
         *mock_repo.find_by_id_result.lock().unwrap() = Some(Ok(None));
@@ -314,7 +366,7 @@ mod tests {
         let repo: Arc<dyn TaskRepositoryContract> = Arc::new(mock_repo);
 
         // --- 执行 (Act) ---
-        let result = get_task_by_id(repo, task_id).await;
+        let result = get_task_by_id(repo, task_id, user_id).await;
 
         // --- 断言 (Assert) ---
         assert!(result.is_err());
@@ -335,6 +387,7 @@ mod tests {
         *mock_repo.create_result.lock().unwrap() = Some(Ok(expected_task_model.clone()));
 
         let repo: Arc<dyn TaskRepositoryContract> = Arc::new(mock_repo);
+        let user_id = Uuid::new_v4();
         let payload = CreateTaskPayload {
             title: "New Created Task".to_string(),
             description: Some("Description".to_string()),
@@ -342,7 +395,7 @@ mod tests {
         };
 
         // --- 执行 (Act) ---
-        let result = create_task(repo, payload).await;
+        let result = create_task(repo, payload, user_id).await;
 
         // --- 断言 (Assert) ---
         assert!(result.is_ok());
@@ -356,6 +409,7 @@ mod tests {
         // --- 准备 (Arrange) ---
         let mock_repo = MockTaskRepository::default();
         let task_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
 
         // 模拟 delete 方法返回成功，影响了 1 行
         *mock_repo.delete_result.lock().unwrap() = Some(Ok(DeleteResult { rows_affected: 1 }));
@@ -363,7 +417,7 @@ mod tests {
         let repo: Arc<dyn TaskRepositoryContract> = Arc::new(mock_repo);
 
         // --- 执行 (Act) ---
-        let result = delete_task(repo, task_id).await;
+        let result = delete_task(repo, task_id, user_id).await;
 
         // --- 断言 (Assert) ---
         assert!(result.is_ok());
@@ -374,6 +428,7 @@ mod tests {
         // --- 准备 (Arrange) ---
         let mock_repo = MockTaskRepository::default();
         let task_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
 
         // 模拟 delete 方法返回成功，但影响了 0 行
         *mock_repo.delete_result.lock().unwrap() = Some(Ok(DeleteResult { rows_affected: 0 }));
@@ -381,7 +436,7 @@ mod tests {
         let repo: Arc<dyn TaskRepositoryContract> = Arc::new(mock_repo);
 
         // --- 执行 (Act) ---
-        let result = delete_task(repo, task_id).await;
+        let result = delete_task(repo, task_id, user_id).await;
 
         // --- 断言 (Assert) ---
         assert!(result.is_err());

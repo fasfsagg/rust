@@ -21,6 +21,7 @@ pub mod model;
 
 // 声明middleware子模块
 pub mod middleware;
+pub mod utils;
 
 // 声明repository子模块
 pub mod repository;

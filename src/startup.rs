@@ -57,6 +57,8 @@ use crate::routes; // 路由定义模块
 #[derive(Clone)]
 pub struct AppState {
     pub task_repo: Arc<dyn TaskRepositoryContract>, // 任务仓库的抽象 Trait
+    pub db: DatabaseConnection, // 数据库连接，用于创建其他仓库实例
+    pub jwt_secret: String, // JWT 签名密钥
 }
 
 // --- 初始化函数 ---
@@ -99,8 +101,12 @@ pub async fn init_app(config: AppConfig) -> Result<(Router, DatabaseConnection)>
     let task_repo = Arc::new(TaskRepository::new(db_connection.clone())) as Arc<
         dyn TaskRepositoryContract
     >;
-    // 创建应用状态
-    let app_state = AppState { task_repo };
+    // 创建应用状态，包含任务仓库、数据库连接和 JWT 密钥
+    let app_state = AppState {
+        task_repo,
+        db: db_connection.clone(), // 添加数据库连接到应用状态
+        jwt_secret: config.jwt_secret.clone(), // 添加 JWT 密钥到应用状态
+    };
     println!("STARTUP: 应用共享状态 (AppState) 创建完成。");
 
     // --- 步骤 4: 构建中间件栈 ---

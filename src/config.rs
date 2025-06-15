@@ -61,6 +61,11 @@ pub struct AppConfig {
     /// 数据库连接 URL。
     /// 用于连接到应用程序的数据库 (例如 SQLite, PostgreSQL)。
     pub database_url: String,
+
+    /// JWT 签名密钥。
+    /// 用于签名和验证 JWT 令牌的密钥。
+    /// 在生产环境中，这应该是一个强随机字符串。
+    pub jwt_secret: String,
 }
 
 // --- 配置加载实现 ---
@@ -100,11 +105,20 @@ impl AppConfig {
             .unwrap_or_else(|_| "sqlite:task_manager.db?mode=rwc".to_string());
         println!("  - 数据库 URL: {}", database_url);
 
+        // --- 加载 JWT 密钥 ---
+        // 从环境变量获取 JWT 密钥，如果未设置则使用默认值
+        // 注意：在生产环境中，应该使用强随机字符串作为 JWT 密钥
+        let jwt_secret = std::env
+            ::var("JWT_SECRET")
+            .unwrap_or_else(|_| "your-secret-key-change-in-production".to_string());
+        println!("  - JWT 密钥: [已设置]"); // 不打印实际密钥以保证安全
+
         println!("CONFIG: 配置加载完成。");
         // --- 构建并返回 AppConfig 实例 ---
         Self {
             http_addr,
             database_url,
+            jwt_secret,
         }
     }
 }
