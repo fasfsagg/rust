@@ -22,10 +22,12 @@ use migration::task_entity::{ ActiveModel, Entity, Model };
 use sea_orm::{
     prelude::Uuid,
     ActiveModelTrait,
+    ColumnTrait,
     DatabaseConnection,
     DbErr,
     DeleteResult,
     EntityTrait,
+    QueryFilter,
 };
 
 /// 任务仓库结构体。
@@ -53,8 +55,14 @@ pub trait TaskRepositoryContract: Send + Sync {
     /// 查询所有任务。
     async fn find_all(&self) -> Result<Vec<Model>, DbErr>;
 
+    /// 根据用户ID查询所有任务。
+    async fn find_all_by_user(&self, user_id: Uuid) -> Result<Vec<Model>, DbErr>;
+
     /// 根据 ID 查询单个任务。
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Model>, DbErr>;
+
+    /// 根据 ID 和用户ID查询单个任务（用于授权检查）。
+    async fn find_by_id_and_user(&self, id: Uuid, user_id: Uuid) -> Result<Option<Model>, DbErr>;
 
     /// 创建一个新任务。
     async fn create(&self, data: ActiveModel) -> Result<Model, DbErr>;
@@ -64,6 +72,9 @@ pub trait TaskRepositoryContract: Send + Sync {
 
     /// 根据 ID 删除一个任务。
     async fn delete(&self, id: Uuid) -> Result<DeleteResult, DbErr>;
+
+    /// 根据 ID 和用户ID删除一个任务（用于授权检查）。
+    async fn delete_by_id_and_user(&self, id: Uuid, user_id: Uuid) -> Result<DeleteResult, DbErr>;
 }
 
 #[async_trait]
@@ -76,6 +87,19 @@ impl TaskRepositoryContract for TaskRepository {
         Entity::find().all(&self.db).await
     }
 
+    /// 根据用户ID查询所有任务。
+    ///
+    /// # 参数
+    /// - `user_id`: 要查找任务的用户的 UUID。
+    ///
+    /// # 返回
+    /// 成功时返回包含该用户所有任务模型的 `Vec<Model>`，失败时返回 `DbErr`。
+    async fn find_all_by_user(&self, user_id: Uuid) -> Result<Vec<Model>, DbErr> {
+        Entity::find()
+            .filter(migration::task_entity::Column::UserId.eq(user_id))
+            .all(&self.db).await
+    }
+
     /// 根据 ID 查询单个任务。
     ///
     /// # 参数
@@ -86,6 +110,21 @@ impl TaskRepositoryContract for TaskRepository {
     /// 失败时返回 `DbErr`。
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Model>, DbErr> {
         Entity::find_by_id(id).one(&self.db).await
+    }
+
+    /// 根据 ID 和用户ID查询单个任务（用于授权检查）。
+    ///
+    /// # 参数
+    /// - `id`: 要查找的任务的 UUID。
+    /// - `user_id`: 任务所有者的用户 UUID。
+    ///
+    /// # 返回
+    /// 成功时返回 `Option<Model>`，如果找到且属于该用户则为 `Some(task)`，否则为 `None`。
+    /// 失败时返回 `DbErr`。
+    async fn find_by_id_and_user(&self, id: Uuid, user_id: Uuid) -> Result<Option<Model>, DbErr> {
+        Entity::find_by_id(id)
+            .filter(migration::task_entity::Column::UserId.eq(user_id))
+            .one(&self.db).await
     }
 
     /// 创建一个新任务。
@@ -129,5 +168,21 @@ impl TaskRepositoryContract for TaskRepository {
     /// 是否为 1 来确认删除是否成功。失败时返回 `DbErr`。
     async fn delete(&self, id: Uuid) -> Result<DeleteResult, DbErr> {
         Entity::delete_by_id(id).exec(&self.db).await
+    }
+
+    /// 根据 ID 和用户ID删除一个任务（用于授权检查）。
+    ///
+    /// # 参数
+    /// - `id`: 要删除的任务的 UUID。
+    /// - `user_id`: 任务所有者的用户 UUID。
+    ///
+    /// # 返回
+    /// 成功时返回 `DeleteResult`，其中包含了受影响的行数。如果任务不存在或不属于该用户，
+    /// `rows_affected` 将为 0。失败时返回 `DbErr`。
+    async fn delete_by_id_and_user(&self, id: Uuid, user_id: Uuid) -> Result<DeleteResult, DbErr> {
+        Entity::delete_many()
+            .filter(migration::task_entity::Column::Id.eq(id))
+            .filter(migration::task_entity::Column::UserId.eq(user_id))
+            .exec(&self.db).await
     }
 }

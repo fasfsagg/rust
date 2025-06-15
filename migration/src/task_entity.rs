@@ -31,6 +31,12 @@ pub struct Model {
 
     pub completed: bool,
 
+    /// 关联的用户ID，建立任务与用户的一对多关系
+    /// 每个任务都必须属于一个用户
+    /// 暂时设为可空，以便兼容现有数据，后续可通过迁移改为非空
+    #[sea_orm(column_type = "Uuid", nullable)]
+    pub user_id: Option<Uuid>,
+
     // 对于自动时间戳，我们可以在 ActiveModelBehavior 中处理，
     // 但为了简化，这里暂时移除 before_save 的逻辑，
     // 让数据库自己通过 `DEFAULT CURRENT_TIMESTAMP` 来处理。
@@ -40,9 +46,23 @@ pub struct Model {
 }
 
 /// `Relation` 枚举，定义表之间的关系。
-/// SeaORM 的宏要求这个枚举存在，即使它是空的。
+/// 定义任务与用户之间的多对一关系（一个用户可以有多个任务）
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
+pub enum Relation {
+    #[sea_orm(
+        belongs_to = "super::user_entity::Entity",
+        from = "Column::UserId",
+        to = "super::user_entity::Column::Id"
+    )]
+    User,
+}
+
+/// 实现与用户实体的关联关系
+impl Related<super::user_entity::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::User.def()
+    }
+}
 
 /// `ActiveModelBehavior` trait 允许我们挂接实体的生命周期事件。
 /// 通过提供一个空的实现，我们满足了 `DeriveEntityModel` 的 trait 约束，

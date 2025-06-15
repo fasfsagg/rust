@@ -85,6 +85,22 @@ pub enum AppError {
 
     /// 500 Internal Server Error - 包装了来自数据库的错误。
     DbErr(DbErr),
+
+    // --- 认证相关错误 ---
+    /// 409 Conflict - 用户名已存在（注册时）
+    UserAlreadyExists(String),
+
+    /// 401 Unauthorized - 无效的登录凭据（用户名或密码错误）
+    InvalidCredentials,
+
+    /// 500 Internal Server Error - 密码哈希处理错误
+    PasswordHashError(String),
+
+    /// 500 Internal Server Error - JWT 令牌生成错误
+    TokenGenerationError(String),
+
+    /// 401 Unauthorized - JWT 令牌无效或过期
+    InvalidToken(String),
 }
 
 // --- 实现 IntoResponse ---
@@ -114,6 +130,22 @@ impl IntoResponse for AppError {
                 (StatusCode::INTERNAL_SERVER_ERROR, "服务器内部错误".to_string())
             }
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
+
+            // --- 认证相关错误处理 ---
+            AppError::UserAlreadyExists(username) =>
+                (StatusCode::CONFLICT, format!("用户名 '{}' 已存在", username)),
+            AppError::InvalidCredentials =>
+                (StatusCode::UNAUTHORIZED, "用户名或密码错误".to_string()),
+            AppError::PasswordHashError(msg) => {
+                eprintln!("[PASSWORD_HASH_ERROR] 密码哈希处理失败: {}", msg);
+                (StatusCode::INTERNAL_SERVER_ERROR, "服务器内部错误".to_string())
+            }
+            AppError::TokenGenerationError(msg) => {
+                eprintln!("[TOKEN_ERROR] JWT令牌生成失败: {}", msg);
+                (StatusCode::INTERNAL_SERVER_ERROR, "服务器内部错误".to_string())
+            }
+            AppError::InvalidToken(msg) =>
+                (StatusCode::UNAUTHORIZED, format!("无效的令牌: {}", msg)),
         };
 
         let body: Value =

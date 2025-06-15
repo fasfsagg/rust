@@ -9,7 +9,14 @@
 // 它定义了一个名为logger的模块。
 pub mod logger;
 
+// 声明auth_middleware子模块
+// JWT 认证中间件模块
+pub mod auth_middleware;
+
 // 重新导出logger模块中的所有公共项
 // 这样，其他模块可以通过 `use crate::app::middleware::setup_logger` 直接访问函数，
 // 而不需要 `use crate::app::middleware::logger::setup_logger`。
-pub use logger::*; 
+pub use logger::*;
+
+// 重新导出auth_middleware模块中的所有公共项
+pub use auth_middleware::*;

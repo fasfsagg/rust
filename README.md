@@ -16,21 +16,22 @@
 - 📝 **日志记录**: 集成了 `tracing` 和 `tower_http` 的日志中间件。
 - 🛡️ **错误处理**: 统一的 `AppError` 类型和 `IntoResponse` 实现。
 - 📄 **静态文件服务**: 使用 `ServeDir` 提供静态资源 (HTML, CSS)。
+- ✅ **全面测试**: 包含了针对仓库层、服务层和 API 层的单元与集成测试。
 
 ## 技术栈示意图
 
 ```mermaid
 graph TD
     subgraph "客户端 (Client)"
-        C1[浏览器/HTTP 客户端 (Client)] -->|HTTP/1.1, WebSocket| S(Axum 服务器)
+        C1[浏览器/HTTP 客户端] -->|HTTP/1.1, WebSocket| S(Axum 服务器)
     end
 
     subgraph "服务器 (Server - Axum 应用)"
         S --> R(路由层 - `routes.rs`);
         R --> M(中间件层 - `middleware/`)
-        M --> CTRL(控制器层 - `controller/`);
-        CTRL --> SRV(服务层 - `service/`);
-        SRV --> REPO(仓库层 - `repository/`);
+        M --> CTRL(控制器层 - `app/controller/`);
+        CTRL --> SRV(服务层 - `app/service/`);
+        SRV --> REPO(仓库层 - `app/repository/`);
         REPO --> ORM(SeaORM);
         ORM -->|SQL| DB[SQLite 数据库];
         
@@ -38,9 +39,9 @@ graph TD
             CONF(配置 - `config.rs`) --> S;
             ERR(错误处理 - `error.rs`) --> CTRL;
             ERR --> SRV;
-            MOD(模型/实体 - `model/` & `entity/`) --> REPO;
+            MOD(模型/实体 - `app/model/` & `migration/`) --> REPO;
             MOD --> SRV;
-            LOG(日志 - `tracing` 框架) --> S;
+            LOG(日志 - `tracing`) --> S;
             LOG --> M;
         end
         
@@ -53,30 +54,34 @@ graph TD
         S --> MAIN(入口文件 - `main.rs`);
         MAIN --> START;
     end
-
 ```
 
 ## 项目进展跟踪
 
 ### ✅ 已完成的功能 (Completed Features)
 - [x] **基础架构**: 搭建了 Controller-Service-Repository 的分层架构。
-- [x] **数据库集成**: **项目已从内存存储迁移到由 SeaORM 管理的 SQLite 持久化数据库。**
+- [x] **数据库集成**: 实现了由 SeaORM 管理的 SQLite 持久化数据库。
 - [x] **核心 API**: 实现了任务 (Task) 的完整 CRUD (增删改查) 功能。
 - [x] **实时通信**: 添加了 WebSocket 实时交互端点。
 - [x] **配置管理**: 实现了从环境变量加载应用配置。
 - [x] **日志系统**: 集成了 `tracing` 用于结构化日志和请求跟踪。
 - [x] **错误处理**: 定义了统一的 `AppError` 类型进行错误管理。
 - [x] **静态服务**: 配置了静态文件（HTML/CSS/JS）的托管。
+- [x] **全面测试**: 为仓库层、服务层和 API 端点编写了完整的单元和集成测试。
 - [x] **技术升级**: **项目已从 Rust 2021 Edition 迁移至 2024 Edition。**
+- [x] **用户认证系统**: 实现了完整的用户注册、登录功能，使用 Argon2 进行密码哈希。
+- [x] **JWT 认证与授权**: 实现了 JWT 令牌生成、验证和基于用户身份的授权控制。
+- [x] **输入验证**: 使用 `validator` crate 为所有 API 请求添加了数据验证规则。
+- [x] **安全保护**: 所有任务相关 API 都受到 JWT 认证保护，用户只能操作自己的任务。
 
 ### 🚧 正在进行的工作 (Work in Progress)
-- 暂无
+- 无正在进行的工作
 
 ### 🚀 未来规划 (Future Plans)
-- [ ] **用户认证**: 添加用户注册、登录功能，并使用 JWT (JSON Web Tokens) 进行 API 认证。
-- [ ] **输入验证**: 为 API 请求体 (Payload) 添加输入验证逻辑 (例如使用 `validator` crate)。
-- [ ] **单元与集成测试**: 为 Service 层和 Controller 层编写全面的单元测试和集成测试。
+- [x] **用户认证与授权**: ✅ **已完成** - 实现了完整的用户系统，包括用户注册、登录、JWT 认证与授权。
+- [x] **输入验证**: ✅ **已完成** - 使用 `validator` crate 为 API 请求体添加了输入验证逻辑。
 - [ ] **容器化**: 为项目编写 `Dockerfile` 以便容器化部署。
+- [ ] **HTTP/3 支持**: 将服务器升级以支持 QUIC 和 HTTP/3。
 - [ ] **高级查询**: 实现更复杂的查询功能，如分页、排序和过滤。
 
 ## 目录结构说明
@@ -94,16 +99,11 @@ graph TD
 | `app/`               | 目录   | **核心应用逻辑根目录**                                         | -                                                  |
 | `app/mod.rs`         | 文件   | 声明 `app` 下的子模块 (`controller`, `service`, etc.)。        | `pub mod`                                          |
 | `app/controller/`    | 目录   | **控制器层 (Controller)**：处理 HTTP 请求，调用服务层。      | HTTP 交互, 参数提取, 响应构建                       |
-| `app/controller/task_controller.rs` | 文件 | 实现 `/tasks` 相关 API 的处理函数。                            | `axum::extract`, `Json`, `Path`, `State`, `.await` |
-| `app/service/`       | 目录   | **服务层 (Service)**：实现核心业务逻辑，调用仓库层。     | 业务规则, 数据协调, 事务管理 (如果需要)           |
-| `app/service/task_service.rs` | 文件 | 实现任务相关的业务操作函数。                                 | `async fn`, 依赖注入 (参数传递 `&DatabaseConnection`)            |
+| `app/service/`       | 目录   | **服务层 (Service)**：实现核心业务逻辑，调用仓库层。     | 业务规则, 数据协调, 依赖注入                      |
 | `app/repository/`    | 目录   | **仓库层 (Repository)**：封装数据访问逻辑，与数据库直接交互。 | `SeaORM`, `ActiveModelTrait`, `EntityTrait`, `DatabaseConnection` |
-| `app/repository/task_repository.rs` | 文件 | 实现任务相关的数据库 CRUD 操作。 | `Task::find_by_id()`, `Task::find()`, `save()`, `delete()` |
 | `app/model/`         | 目录   | **模型层 (Model)**：定义数据传输对象 (DTO) 和请求载荷。                 | `serde::{Serialize, Deserialize}`, `struct` |
-| `app/model/task.rs`  | 文件   | 定义 `CreateTaskPayload`, `UpdateTaskPayload` 等。 | `struct`, `Uuid`, `serde` |
-| `app/entity/`        | 目录   | **实体层 (Entity)**：定义数据库表对应的 `SeaORM` 实体。 | `#[derive(Clone, PartialEq, Eq, DeriveEntityModel)]` |
-| `app/entity/task.rs` | 文件   | 定义 `task` 表的 `SeaORM` 实体 (`entity::task::Entity`)。 | `EntityTrait`, `ActiveModelBehavior` |
 | `app/middleware/`    | 目录   | **中间件层 (Middleware)**：提供可重用的横切关注点逻辑。        | 日志, CORS, (可选) 认证/授权等                  |
+| `tests/`             | 目录   | **集成测试**：存放所有集成测试文件。                         | `#[tokio::test]`, `mod common`                     |
 | `static/`            | 目录   | **静态资源**：存放前端 HTML, CSS, JS 等文件。                | -                                                  |
 | `static/index.html`  | 文件   | 用于测试 API 和 WebSocket 的简单前端页面。                   | HTML, JavaScript (Fetch API, WebSocket API)      |
 
@@ -114,21 +114,19 @@ flowchart LR
     subgraph "准备阶段"
         A[克隆项目: `git clone ...`] --> B[进入目录: `cd axum-tutorial`];
         B --> C{安装 `sea-orm-cli` (如果未安装): `cargo install sea-orm-cli`};
-        C --> D[构建项目 (下载依赖): `cargo build` 命令];
+        C --> D[构建项目 (下载依赖): `cargo build`];
     end
 
     subgraph "运行阶段"
         D --> E{运行服务器: `cargo run` 命令};
         E -- 首次运行或模型变更 --> F[自动创建 `db.sqlite` 并应用迁移];
-        F --> G[服务器在 http://localhost:3000 (HTTP/1.1) 启动];
+        F --> G[服务器在 http://localhost:3000 启动];
         G --> H[打开浏览器访问 http://localhost:3000];
         H --> I[使用前端页面测试 API 或 WebSocket];
     end
 
-    subgraph "测试 API (示例)"
-        J[使用 Postman/curl 等工具]
-        J --> K[发送 POST (提交) 请求到 /api/tasks 创建任务];
-        J --> L[发送 GET (获取) 请求到 /api/tasks 获取任务列表];
+    subgraph "测试"
+        J[运行所有测试: `cargo test`] --> K[验证所有功能是否正常];
     end
 ```
 
@@ -139,7 +137,7 @@ sequenceDiagram
     participant C as 客户端 (浏览器/JS)
     participant S as Axum 服务器
     participant RL as 路由层 (`routes.rs`)
-    participant MW as 中间件层 (`TraceLayer`, `CorsLayer`)
+    participant MW as 中间件层 (`TraceLayer`)
     participant TC as 任务控制器 (`task_controller.rs`)
     participant TS as 任务服务 (`task_service.rs`)
     participant TR as 任务仓库 (`task_repository.rs`)
@@ -147,16 +145,16 @@ sequenceDiagram
     participant DB as SQLite 数据库
 
     C->>+S: 发送 POST /api/tasks 请求 (含 JSON)
-    S->>+MW: 请求进入中间件
+    S->>+MW: 请求进入日志中间件
     MW->>-S: 中间件处理完毕
     S->>+RL: 路由层匹配到 `create_task`
     RL->>-S: 找到处理函数
     S->>+TC: 调用 `create_task(State, Json)`
     TC->>TC: 解析 JSON 载荷
-    TC->>+TS: 调用 `task_service::create_task(&db_conn, payload).await`
-    TS->>+TR: 调用 `TaskRepository::create(&db_conn, payload).await`
+    TC->>+TS: 调用 `task_service::create_task(...)`
+    TS->>+TR: 调用 `TaskRepository::create(...)`
     TR->>TR: 将 `payload` 转换为 `task::ActiveModel`
-    TR->>+ORM: 调用 `task_active_model.save(&db_conn).await`
+    TR->>+ORM: 调用 `.save()` 方法
     ORM->>ORM: 生成 `INSERT INTO task ...` SQL 语句
     ORM->>+DB: 执行 SQL
     DB->>-ORM: 返回插入的行
@@ -195,7 +193,7 @@ cargo build
 
 - **迁移文件位置**: `migration/src/`
 - **自动迁移**: 应用启动时 (`cargo run`) 会自动检查并运行所有尚未应用的迁移。
-- **手动创建迁移**: 当你修改了 `app/entity/` 中的实体后，可以运行以下命令创建一个新的迁移文件：
+- **手动创建迁移**: 当你修改了 `app/entity/` 或 `migration` 目录中的实体后，可以运行以下命令创建一个新的迁移文件：
   ```bash
   sea-orm-cli migrate generate <migration_name>
   ```
@@ -212,6 +210,12 @@ cargo run
 服务器默认在 `http://localhost:3000` 启动，并会自动创建和迁移位于项目根目录的 `db.sqlite` 文件。
 
 你可以通过设置 `.env` 文件或环境变量来修改配置。
+
+### 运行测试
+
+```bash
+cargo test
+```
 
 ## API 使用指南
 
@@ -270,15 +274,11 @@ DELETE /api/tasks/:id
 1.  **理解分层结构**: 先看懂 `README.md` 中的【技术栈示意图】和【目录结构说明】，理解各层职责和依赖关系。
 2.  **跟踪请求流程**: 阅读【前后端交互流程 (创建任务示例)】图，了解一个请求是如何从客户端流经服务器各层，最终返回响应的。
 3.  **阅读源码与注释**: 从 `main.rs` 和 `startup.rs` 开始，按照代码执行流程阅读。重点关注每个模块的 `.rs` 文件顶部的注释块。
-4.  **理解 SeaORM**:
-    *   **Entity (`app/entity/`)**: 定义了如何将 Rust 结构体映射到数据库表。
-    *   **ActiveModel**: 用于创建和更新操作，代表一个可变的、待保存到数据库的实体。
-    *   **Repository (`app/repository/`)**: 学习如何使用 `EntityTrait` 和 `ActiveModelTrait` 来执行具体的数据库查询。
-5.  **运行与调试**: 运行项目 (`cargo run`)，使用浏览器或 Postman 等工具实际调用 API，观察控制台输出的日志，加深理解。
-6.  **动手实践**: 尝试修改代码或添加新功能：
-    *   为 `Task` 实体添加一个截止日期 (`due_date: Option<DateTime<Utc>>`) 字段，然后创建一个新的数据库迁移并更新所有 CRUD 操作。
-    *   添加一个新的 API 端点，例如 `/api/tasks/search?q=...` 用于根据标题或描述搜索任务。
-    *   为 WebSocket 添加更复杂的功能，如房间或用户认证。
+4.  **学习测试**: 查看 `tests/` 目录下的测试文件，理解如何为不同层级的代码编写单元测试和集成测试。
+5.  **运行与调试**: 运行项目 (`cargo run`) 和测试 (`cargo test`)，使用浏览器或 Postman 等工具实际调用 API，观察控制台输出的日志，加深理解。
+6.  **动手实践**: 尝试修改代码或添加新功能，并为其编写测试：
+    *   为 `Task` 实体添加一个截止日期 (`due_date: Option<DateTime<Utc>>`) 字段，然后创建一个新的数据库迁移并更新所有 CRUD 操作和测试。
+    *   添加一个新的 API 端点，例如 `/api/tasks/search?q=...` 用于根据标题或描述搜索任务，并编写测试验证其功能。
 
 ## 许可证
 

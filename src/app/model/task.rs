@@ -31,6 +31,9 @@ pub struct Task {
     pub title: String,
     pub description: Option<String>,
     pub completed: bool,
+    /// 关联的用户ID，表示任务的所有者
+    /// 暂时设为可空，以便兼容现有数据
+    pub user_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -46,6 +49,7 @@ impl From<db_model::Model> for Task {
             title: model.title,
             description: model.description,
             completed: model.completed,
+            user_id: model.user_id,
             created_at: model.created_at,
             updated_at: model.updated_at,
         }

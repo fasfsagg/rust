@@ -16,6 +16,20 @@
 // |          |             - CreateTaskPayload                     |
 // |          |             - UpdateTaskPayload                     |
 // |          |                                                    |
+// |          +-- pub mod user_entity; (声明子模块)                 |
+// |          |      |                                             |
+// |          |      +--> src/app/model/user_entity.rs (子模块文件) |
+// |          |             - UserEntity                             |
+// |          |             - CreateUserEntityPayload               |
+// |          |             - UpdateUserEntityPayload               |
+// |          |                                                    |
+// |          +-- pub mod auth; (声明子模块)                        |
+// |          |      |                                             |
+// |          |      +--> src/app/model/auth.rs (子模块文件)         |
+// |          |             - AuthEntity                             |
+// |          |             - CreateAuthEntityPayload               |
+// |          |             - UpdateAuthEntityPayload               |
+// |          |                                                    |
 // |          +-- pub use task::*; (重新导出子模块公共项)            |
 // |                 |                                             |
 // |                 +--> 使外部可以直接 use crate::app::model::Task |
@@ -37,7 +51,9 @@
 //
 // 【本文件具体作用】
 // 1. 通过 `pub mod task;` 声明了 `task` 这个子模块（对应 `task.rs` 文件）。 `pub` 关键字使得 `task` 模块本身可以被 `model` 模块之外的代码访问（如果需要的话，例如 `use crate::app::model::task;`）。
-// 2. 通过 `pub use task::*;` 将 `task` 模块中所有【公共的 (public)】项（如 `Task`, `CreateTaskPayload`, `UpdateTaskPayload` 结构体）直接【提升】到 `model` 模块的作用域中。
+// 2. 通过 `pub mod user_entity;` 声明了 `user_entity` 这个子模块（对应 `user_entity.rs` 文件）。 `pub` 关键字使得 `user_entity` 模块本身可以被 `model` 模块之外的代码访问（如果需要的话，例如 `use crate::app::model::user_entity;`）。
+// 3. 通过 `pub mod auth;` 声明 `auth` 子模块 (对应 `auth.rs` 文件).
+// 4. 通过 `pub use task::*;` 将 `task` 模块中所有【公共的 (public)】项（如 `Task`, `CreateTaskPayload`, `UpdateTaskPayload` 结构体）直接【提升】到 `model` 模块的作用域中。
 //    - 这意味着其他代码可以直接写 `use crate::app::model::Task;` 来导入 `Task` 结构体，而不需要写更长的 `use crate::app::model::task::Task;`。
 //    - `*` 是通配符，表示导出 `task` 模块内所有公共项。
 
@@ -47,6 +63,8 @@
 // 【查找规则】: Rust 编译器会查找 `src/app/model/task.rs` 文件。
 // 【可见性】: `pub` 使得 `task` 模块本身可以被外部访问 (虽然我们通常通过重新导出的项来访问其内容)。[[关键语法要素: pub, mod]]
 pub mod task;
+pub mod user_entity;
+pub mod auth;
 
 // --- 重新导出公共项 ---
 // `pub use task::*;`
@@ -54,4 +72,5 @@ pub mod task;
 // 【效果】: 简化外部模块的导入路径。
 // 【举例】: 如果 `task.rs` 中定义了 `pub struct Task { ... }`，那么其他文件现在可以通过 `use crate::app::model::Task;` 来使用它。
 // 【`*` 通配符】: 表示导出 `task` 模块内的所有公共项。有时为了更清晰，也会选择性地重新导出，例如 `pub use task::{Task, CreateTaskPayload};`。[[关键语法要素: pub, use, * (glob)]]
-// pub use task::*;
+pub use task::*;
+pub use auth::*;

@@ -43,9 +43,20 @@
 // 【可见性】: `pub` 使得 `task_service` 模块本身可以被外部访问。[[关键语法要素: pub, mod]]
 pub mod task_service;
 
+// `pub mod auth_service;`
+// 【作用】: 声明存在一个名为 `auth_service` 的公共子模块。
+// 【查找规则】: Rust 编译器会查找 `src/app/service/auth_service.rs` 文件。
+// 【可见性】: `pub` 使得 `auth_service` 模块本身可以被外部访问。
+pub mod auth_service;
+
 // --- 重新导出公共项 ---
 // `pub use task_service::*;`
 // 【作用】: 将 `task_service` 模块中所有 `pub` 的项（主要是服务函数）引入到当前的 `service` 模块作用域，并使它们也成为 `pub`。
 // 【效果】: 简化 Controller 层及其他调用者的导入和调用路径。
 // 【* 通配符】: 导出 `task_service` 模块内的所有公共项。[[关键语法要素: pub, use, * (glob)]]
 pub use task_service::*;
+
+// `pub use auth_service::*;`
+// 【作用】: 将 `auth_service` 模块中所有 `pub` 的项（主要是服务函数）引入到当前的 `service` 模块作用域，并使它们也成为 `pub`。
+// 【效果】: 简化 Controller 层及其他调用者的导入和调用路径。
+pub use auth_service::*;
