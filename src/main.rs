@@ -22,6 +22,10 @@ use axum_tutorial::run;
 /// `#[tokio::main]` 宏设置并启动 Tokio 异步运行时。
 #[tokio::main]
 async fn main() -> Result<()> {
+    // --- 步骤 0: 加载 .env 文件 ---
+    // 加载 .env 文件中的环境变量（如果存在）
+    dotenvy::dotenv().ok(); // 忽略错误，因为 .env 文件可能不存在
+
     // --- 步骤 1: 加载应用程序配置 ---
     // 从环境变量或 .env 文件中加载配置。
     let config = AppConfig::from_env();

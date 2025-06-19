@@ -358,115 +358,69 @@
         </div>
     </div>
     
-    <!-- 引入依赖的 JavaScript 文件 -->
-    <script src="/js/api-client.js"></script>
-    <script src="/js/auth-manager.js"></script>
-    <script src="/js/task-manager.js"></script>
-
-    <!-- JavaScript 代码部分 -->
+    <!-- 简化的 JavaScript 代码 -->
     <script>
         // ==== 全局变量和状态 ====
-        // 定义 API 的基础 URL
         const API_BASE_URL = '/api';
-        // 根据当前页面地址构建 WebSocket 的 URL
         const WS_URL = `ws://${window.location.host}/ws`;
-        // WebSocket 连接对象，初始为 null
         let socket = null;
-        // 认证管理器实例
-        let authManager = null;
-        // API 客户端实例
-        let apiClient = null;
-        // 任务管理器实例
-        let taskManager = null;
-        
-        // ==== 页面加载时执行 ====
-        // 当整个 HTML 文档加载并解析完毕后执行
-        document.addEventListener('DOMContentLoaded', async () => {
-            // 首先初始化认证管理器
-            await initializeAuth();
+        let authToken = null;
+        let currentUser = null;
+        let tasks = [];
+        let currentFilter = 'all';
 
-            // 绑定 WebSocket 相关事件处理器
+        // ==== 页面加载时执行 ====
+        document.addEventListener('DOMContentLoaded', () => {
+            // 绑定事件处理器
+            document.getElementById('loginForm').addEventListener('submit', handleLogin);
+            document.getElementById('registerForm').addEventListener('submit', handleRegister);
+            document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+            document.getElementById('createTaskForm').addEventListener('submit', handleCreateTask);
+            document.getElementById('refreshTasksBtn').addEventListener('click', fetchTasks);
+
+            // WebSocket 事件
             document.getElementById('wsConnectBtn').addEventListener('click', connectWebSocket);
             document.getElementById('wsDisconnectBtn').addEventListener('click', disconnectWebSocket);
             document.getElementById('wsSendForm').addEventListener('submit', sendWebSocketMessage);
 
-            // 绑定认证相关事件处理器
-            document.getElementById('loginForm').addEventListener('submit', handleLogin);
-            document.getElementById('registerForm').addEventListener('submit', handleRegister);
-            document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+            // 初始化UI
+            updateAuthUI();
         });
-        
-        // ==== 认证管理函数 ====
 
-        // 初始化认证管理器
-        async function initializeAuth() {
+        // ==== 简化的API调用函数 ====
+        async function apiCall(method, url, data = null) {
+            const options = {
+                method,
+                headers: { 'Content-Type': 'application/json' }
+            };
+
+            if (authToken) {
+                options.headers.Authorization = `Bearer ${authToken}`;
+            }
+
+            if (data) {
+                options.body = JSON.stringify(data);
+            }
+
             try {
-                // 创建 API 客户端实例
-                apiClient = new ApiClient(API_BASE_URL);
+                const response = await fetch(url, options);
+                const result = response.status === 204 ? null : await response.json();
 
-                // 创建认证管理器实例
-                authManager = new AuthManager({ apiClient });
+                // 更新API响应显示
+                updateApiResponse(`${method} ${url}`, response, result);
 
-                // 创建任务管理器实例
-                taskManager = new TaskManager({
-                    apiClient: apiClient,
-                    authManager: authManager,
-                    updateApiResponse: updateApiResponse
-                });
+                if (!response.ok) {
+                    throw new Error(result?.message || `HTTP ${response.status}`);
+                }
 
-                // 添加认证事件监听器
-                authManager.addEventListener('login', async (data) => {
-                    console.log('用户登录成功:', data.user.username);
-                    updateAuthUI();
-                    showAuthMessage('loginMessage', '登录成功！', 'success');
-                    // 登录成功后获取任务列表
-                    await taskManager.fetchTasks();
-                });
-
-                authManager.addEventListener('logout', () => {
-                    console.log('用户已登出');
-                    updateAuthUI();
-                    showAuthMessage('loginMessage', '已登出', 'info');
-                    // 登出后任务管理器会自动处理清空任务列表
-                });
-
-                authManager.addEventListener('register', (data) => {
-                    console.log('用户注册成功:', data.user.username);
-                    showAuthMessage('registerMessage', '注册成功！可以登录了', 'success');
-                });
-
-                authManager.addEventListener('loginError', (data) => {
-                    console.error('登录失败:', data.error);
-                    showAuthMessage('loginMessage', `登录失败: ${data.error}`, 'error');
-                });
-
-                authManager.addEventListener('registerError', (data) => {
-                    console.error('注册失败:', data.error);
-                    showAuthMessage('registerMessage', `注册失败: ${data.error}`, 'error');
-                });
-
-                authManager.addEventListener('tokenExpired', () => {
-                    console.log('令牌已过期');
-                    updateAuthUI();
-                    showAuthMessage('loginMessage', '登录已过期，请重新登录', 'error');
-                    // 令牌过期后任务管理器会自动处理清空任务列表
-                });
-
-                // 初始化任务管理器
-                await taskManager.initialize();
-
-                // 初始化 UI 状态
-                updateAuthUI();
-
-                console.log('认证管理器和任务管理器初始化完成');
-
+                return result;
             } catch (error) {
-                console.error('系统初始化失败:', error);
-                showAuthMessage('loginMessage', '系统初始化失败', 'error');
+                updateApiResponse(`${method} ${url}`, null, { error: error.message });
+                throw error;
             }
         }
 
-        // 处理用户登录
+        // ==== 认证相关函数 ====
         async function handleLogin(event) {
             event.preventDefault();
 
@@ -474,16 +428,21 @@
             const password = document.getElementById('loginPassword').value;
 
             try {
-                await authManager.login(username, password);
-                // 清空登录表单
-                document.getElementById('loginForm').reset();
+                const result = await apiCall('POST', '/api/auth/login', { username, password });
+
+                if (result?.access_token) {
+                    authToken = result.access_token;
+                    currentUser = result.user;
+                    updateAuthUI();
+                    showAuthMessage('loginMessage', '登录成功！', 'success');
+                    document.getElementById('loginForm').reset();
+                    await fetchTasks();
+                }
             } catch (error) {
-                // 错误已经通过事件处理
-                console.error('登录失败:', error.message);
+                showAuthMessage('loginMessage', `登录失败: ${error.message}`, 'error');
             }
         }
 
-        // 处理用户注册
         async function handleRegister(event) {
             event.preventDefault();
 
@@ -491,45 +450,42 @@
             const password = document.getElementById('registerPassword').value;
             const confirmPassword = document.getElementById('confirmPassword').value;
 
+            if (password !== confirmPassword) {
+                showAuthMessage('registerMessage', '密码和确认密码不匹配', 'error');
+                return;
+            }
+
             try {
-                await authManager.register(username, password, confirmPassword);
-                // 清空注册表单
+                await apiCall('POST', '/api/auth/register', { username, password, confirmPassword });
+                showAuthMessage('registerMessage', '注册成功！可以登录了', 'success');
                 document.getElementById('registerForm').reset();
             } catch (error) {
-                // 错误已经通过事件处理
-                console.error('注册失败:', error.message);
+                showAuthMessage('registerMessage', `注册失败: ${error.message}`, 'error');
             }
         }
 
-        // 处理用户登出
-        async function handleLogout() {
-            try {
-                await authManager.logout();
-            } catch (error) {
-                console.error('登出失败:', error.message);
-            }
+        function handleLogout() {
+            authToken = null;
+            currentUser = null;
+            tasks = [];
+            updateAuthUI();
+            renderTasks();
+            showAuthMessage('loginMessage', '已登出', 'info');
         }
 
-        // 更新认证 UI 状态
         function updateAuthUI() {
-            const isAuthenticated = authManager ? authManager.isAuthenticated() : false;
-            const currentUser = authManager ? authManager.getCurrentUser() : null;
-
-            // 更新认证状态显示
             const statusElement = document.getElementById('authStatus');
             const userElement = document.getElementById('currentUser');
             const logoutBtn = document.getElementById('logoutBtn');
             const authForms = document.getElementById('authForms');
 
-            if (isAuthenticated && currentUser) {
-                // 已认证状态
+            if (authToken && currentUser) {
                 statusElement.textContent = '已认证';
                 statusElement.className = 'status-badge authenticated';
                 userElement.textContent = `欢迎，${currentUser.username}`;
                 logoutBtn.classList.remove('hidden');
                 authForms.classList.add('hidden');
             } else {
-                // 未认证状态
                 statusElement.textContent = '未认证';
                 statusElement.className = 'status-badge unauthenticated';
                 userElement.textContent = '未登录';
@@ -538,192 +494,245 @@
             }
         }
 
-        // 显示认证消息
         function showAuthMessage(elementId, message, type) {
             const element = document.getElementById(elementId);
             element.innerHTML = `<div class="auth-message ${type}">${message}</div>`;
-
-            // 3秒后清除消息
-            setTimeout(() => {
-                element.innerHTML = '';
-            }, 3000);
+            setTimeout(() => element.innerHTML = '', 3000);
         }
 
-        // ==== 任务管理全局函数（与 TaskManager 集成） ====
+        // ==== 任务管理函数 ====
+        async function fetchTasks() {
+            if (!authToken) {
+                document.getElementById('tasksList').innerHTML = '<li>请先登录以查看任务</li>';
+                return;
+            }
 
-        // 这些函数作为全局接口，供 HTML 中的 onclick 事件调用
-        // 实际功能由 TaskManager 实例处理
-
-        function viewTask(id) {
-            if (taskManager) {
-                taskManager.viewTask(id);
+            try {
+                document.getElementById('tasksList').innerHTML = '<li>正在加载...</li>';
+                tasks = await apiCall('GET', '/api/tasks');
+                renderTasks();
+            } catch (error) {
+                document.getElementById('tasksList').innerHTML = `<li>获取任务失败: ${error.message}</li>`;
             }
         }
 
-        function updateTask(id, payload) {
-            if (taskManager) {
-                taskManager.updateTask(id, payload);
+        async function handleCreateTask(event) {
+            event.preventDefault();
+
+            if (!authToken) {
+                alert('请先登录');
+                return;
+            }
+
+            const title = document.getElementById('title').value.trim();
+            const description = document.getElementById('description').value.trim();
+            const completed = document.getElementById('completed').checked;
+
+            if (!title) {
+                alert('任务标题不能为空');
+                return;
+            }
+
+            try {
+                await apiCall('POST', '/api/tasks', { title, description, completed });
+                document.getElementById('createTaskForm').reset();
+                await fetchTasks();
+            } catch (error) {
+                alert(`创建任务失败: ${error.message}`);
             }
         }
 
-        function deleteTask(id) {
-            if (taskManager) {
-                taskManager.deleteTask(id);
+        // 简化的任务操作函数
+        async function viewTask(id) {
+            if (!authToken) return;
+            await apiCall('GET', `/api/tasks/${id}`);
+        }
+
+        async function updateTask(id, payload) {
+            if (!authToken) return;
+            try {
+                await apiCall('PUT', `/api/tasks/${id}`, payload);
+                await fetchTasks();
+            } catch (error) {
+                alert(`更新任务失败: ${error.message}`);
             }
         }
 
-        function toggleEditMode(id) {
-            if (taskManager) {
-                taskManager.toggleEditMode(id);
-            }
-        }
-
-        function cancelEdit(id) {
-            if (taskManager) {
-                taskManager.cancelEdit(id);
-            }
-        }
-
-        function handleSaveTask(id) {
-            if (taskManager) {
-                taskManager.handleSaveTask(id);
+        async function deleteTask(id) {
+            if (!authToken) return;
+            try {
+                await apiCall('DELETE', `/api/tasks/${id}`);
+                await fetchTasks();
+            } catch (error) {
+                alert(`删除任务失败: ${error.message}`);
             }
         }
 
         function confirmDelete(id, title) {
-            if (taskManager) {
-                taskManager.confirmDelete(id, title);
+            if (confirm(`确定要删除任务 "${title}" 吗？`)) {
+                deleteTask(id);
             }
         }
 
         function setFilter(filter) {
-            if (taskManager) {
-                taskManager.setFilter(filter);
+            currentFilter = filter;
+
+            // 更新按钮状态
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelector(`.filter-btn[onclick="setFilter('${filter}')"]`).classList.add('active');
+
+            renderTasks();
+        }
+
+        function renderTasks() {
+            const tasksList = document.getElementById('tasksList');
+
+            if (!authToken) {
+                tasksList.innerHTML = '<li>请先登录以查看任务</li>';
+                return;
+            }
+
+            if (!tasks.length) {
+                tasksList.innerHTML = '<li>没有任务</li>';
+                return;
+            }
+
+            // 简化的筛选逻辑
+            const filteredTasks = tasks.filter(task => {
+                if (currentFilter === 'completed') return task.completed;
+                if (currentFilter === 'active') return !task.completed;
+                return true;
+            });
+
+            if (!filteredTasks.length) {
+                tasksList.innerHTML = '<li>没有符合条件的任务</li>';
+                return;
+            }
+
+            tasksList.innerHTML = filteredTasks.map(task => `
+                <li class="task-item ${task.completed ? 'completed' : ''}">
+                    <h4>${escapeHtml(task.title)}</h4>
+                    <p>${task.description ? escapeHtml(task.description) : '(无描述)'}</p>
+                    <p>状态: <strong>${task.completed ? '已完成' : '未完成'}</strong></p>
+                    <p class="timestamp">创建于: ${formatDate(task.created_at)} | 更新于: ${formatDate(task.updated_at)}</p>
+                    <div class="task-controls">
+                        <button onclick="viewTask('${task.id}')">查看</button>
+                        <button onclick="updateTask('${task.id}', { completed: ${!task.completed} })">
+                            ${task.completed ? '标记为未完成' : '标记为已完成'}
+                        </button>
+                        <button class="delete-btn" onclick="confirmDelete('${task.id}', '${escapeHtml(task.title)}')">删除</button>
+                    </div>
+                </li>
+            `).join('');
+        }
+
+        // 简化的编辑功能（移除复杂的编辑模式）
+        function toggleEditMode(id) {
+            const newTitle = prompt('请输入新的任务标题:');
+            if (newTitle && newTitle.trim()) {
+                updateTask(id, { title: newTitle.trim() });
             }
         }
 
-        // ==== API 响应显示函数 ====
+        function cancelEdit(id) {
+            // 简化版本不需要取消编辑
+        }
 
-        // 更新 API 响应显示区域的内容
+        function handleSaveTask(id) {
+            // 简化版本不需要保存编辑
+        }
+
+
+        // ==== 工具函数 ====
         function updateApiResponse(action, response, data) {
-            // 获取 API 响应显示区域元素
             const responseArea = document.getElementById('apiResponse');
-            
-            // 获取当前时间作为时间戳
             const timestamp = new Date().toLocaleTimeString();
-            // 构建状态文本，如果 response 存在则显示状态码和状态文本，否则显示 'Error'
-            let statusText = response ? `${response.status} ${response.statusText}` : 'Error';
-            // 将响应数据格式化为易读的 JSON 字符串
-            let content = JSON.stringify(data, null, 2);
-            
-            // 更新显示区域的 HTML 内容
+            const statusText = response ? `${response.status} ${response.statusText}` : 'Error';
+            const content = JSON.stringify(data, null, 2);
+
             responseArea.innerHTML = `[${timestamp}] ${action} - ${statusText}\n${content}`;
-            // 滚动到底部，显示最新消息
             responseArea.scrollTop = responseArea.scrollHeight;
         }
-        
-        // ==== WebSocket函数 ====
-        
-        // 连接 WebSocket 服务器
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatDate(timestamp) {
+            if (!timestamp) return 'N/A';
+            try {
+                return new Date(timestamp).toLocaleString();
+            } catch {
+                return '无效日期';
+            }
+        }
+
+        // ==== 简化的WebSocket函数 ====
         function connectWebSocket() {
-            // 如果 socket 对象已存在（已连接或正在连接），则不再重复连接
             if (socket !== null) {
                 logWebSocketMessage('已经连接到WebSocket服务器');
                 return;
             }
-            
+
             try {
-                // 创建一个新的 WebSocket 连接
                 socket = new WebSocket(WS_URL);
-                
-                // 监听连接成功事件
+
                 socket.onopen = () => {
-                    // 更新 WebSocket 状态显示为已连接
                     updateWebSocketStatus(true);
-                    // 记录连接成功的消息
                     logWebSocketMessage('已连接到WebSocket服务器');
                 };
-                
-                // 监听收到消息事件
+
                 socket.onmessage = (event) => {
-                    // 记录收到的消息内容
                     logWebSocketMessage(`收到: ${event.data}`);
                 };
-                
-                // 监听连接关闭事件
+
                 socket.onclose = () => {
-                    // 更新 WebSocket 状态显示为未连接
                     updateWebSocketStatus(false);
-                    // 记录连接关闭的消息
                     logWebSocketMessage('WebSocket连接已关闭');
-                    // 将 socket 对象设为 null
                     socket = null;
                 };
-                
-                // 监听连接错误事件
+
                 socket.onerror = (error) => {
-                    // 记录错误信息
                     logWebSocketMessage(`WebSocket错误: ${error}`);
-                    // 更新 WebSocket 状态显示为未连接
                     updateWebSocketStatus(false);
                 };
             } catch (error) {
-                // 如果创建 WebSocket 对象时发生错误，打印错误信息到控制台
-                console.error('WebSocket连接失败:', error);
-                // 记录连接失败的消息
                 logWebSocketMessage(`连接失败: ${error.message}`);
             }
         }
-        
-        // 断开 WebSocket 连接
+
         function disconnectWebSocket() {
-            // 如果 socket 对象为 null，表示未连接，直接返回
-            if (socket === null) {
-                return;
-            }
-            
-            // 关闭 WebSocket 连接
+            if (socket === null) return;
             socket.close();
-            // 连接关闭后，onclose 事件处理器会自动更新 UI
         }
-        
-        // 发送 WebSocket 消息
+
         function sendWebSocketMessage(event) {
-            // 阻止表单的默认提交行为
             event.preventDefault();
-            
-            // 如果 socket 对象为 null 或连接未打开，则提示未连接并返回
+
             if (socket === null || socket.readyState !== WebSocket.OPEN) {
                 logWebSocketMessage('未连接到WebSocket服务器');
                 return;
             }
-            
-            // 获取消息输入框元素和消息内容
+
             const messageInput = document.getElementById('wsMessage');
-            const message = messageInput.value;
-            
-            // 如果消息内容为空白字符，则不发送
-            if (message.trim() === '') {
-                return;
-            }
-            
-            // 发送消息到 WebSocket 服务器
+            const message = messageInput.value.trim();
+
+            if (!message) return;
+
             socket.send(message);
-            // 记录发送的消息
             logWebSocketMessage(`发送: ${message}`);
-            // 清空消息输入框
             messageInput.value = '';
         }
-        
-        // 更新 WebSocket 状态显示和按钮的可用状态
+
         function updateWebSocketStatus(connected) {
-            // 获取状态显示元素、连接按钮、断开按钮和发送按钮
             const statusElem = document.getElementById('wsStatus');
             const connectBtn = document.getElementById('wsConnectBtn');
             const disconnectBtn = document.getElementById('wsDisconnectBtn');
             const sendBtn = document.getElementById('wsSendForm').querySelector('button');
-            
-            // 根据连接状态更新文本、类名和按钮的禁用状态
+
             if (connected) {
                 statusElem.textContent = '已连接';
                 statusElem.className = 'connected';
@@ -738,28 +747,15 @@
                 sendBtn.disabled = true;
             }
         }
-        
-        // 记录 WebSocket 消息到消息记录区域
+
         function logWebSocketMessage(message) {
-            // 获取消息记录区域元素
             const messagesElem = document.getElementById('webSocketMessages');
-            // 获取当前时间作为时间戳
             const timestamp = new Date().toLocaleTimeString();
-            
-            // 创建一个新的 div 元素用于显示消息
             const messageElem = document.createElement('div');
-            // 设置消息的 HTML 内容，包含时间戳和消息文本
             messageElem.innerHTML = `<span class="timestamp">[${timestamp}]</span> ${message}`;
-            
-            // 将新消息添加到消息记录区域的末尾
             messagesElem.appendChild(messageElem);
-            // 滚动到底部，显示最新消息
             messagesElem.scrollTop = messagesElem.scrollHeight;
         }
-        
-
-
-
     </script>
 </body>
 </html>
