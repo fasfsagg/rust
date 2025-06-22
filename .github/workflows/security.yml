@@ -1,0 +1,241 @@
+name: Security Audit
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # 每天 UTC 02:00 运行安全检查
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    # 允许手动触发
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy, rustfmt
+        
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+          
+    - name: Install security tools
+      run: |
+        cargo install --locked cargo-deny || true
+        cargo install --locked cargo-audit || true
+        cargo install --locked cargo-outdated || true
+        
+    - name: Run cargo audit
+      run: |
+        echo "::group::Cargo Audit - Security Vulnerabilities"
+        cargo audit
+        echo "::endgroup::"
+        
+    - name: Run cargo deny - advisories
+      run: |
+        echo "::group::Cargo Deny - Security Advisories"
+        cargo deny check advisories
+        echo "::endgroup::"
+        
+    - name: Run cargo deny - licenses
+      run: |
+        echo "::group::Cargo Deny - License Compliance"
+        cargo deny check licenses
+        echo "::endgroup::"
+        
+    - name: Run cargo deny - bans
+      run: |
+        echo "::group::Cargo Deny - Banned Dependencies"
+        cargo deny check bans
+        echo "::endgroup::"
+        
+    - name: Run cargo deny - sources
+      run: |
+        echo "::group::Cargo Deny - Dependency Sources"
+        cargo deny check sources
+        echo "::endgroup::"
+        
+    - name: Check for outdated dependencies
+      run: |
+        echo "::group::Outdated Dependencies Check"
+        cargo outdated --root-deps-only || true
+        echo "::endgroup::"
+        
+    - name: Generate dependency report
+      if: always()
+      run: |
+        echo "::group::Dependency Report"
+        echo "## Dependency Tree" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        cargo tree --depth 2 >> $GITHUB_STEP_SUMMARY || true
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        
+        echo "## Security Audit Summary" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        cargo audit 2>&1 >> $GITHUB_STEP_SUMMARY || echo "Security issues found" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "::endgroup::"
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Dependency Review
+      uses: actions/dependency-review-action@v4
+      with:
+        fail-on-severity: moderate
+        allow-licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Unicode-3.0, OpenSSL, MPL-2.0
+
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy, rustfmt
+        
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+          
+    - name: Check formatting
+      run: |
+        echo "::group::Rust Format Check"
+        cargo fmt --all -- --check
+        echo "::endgroup::"
+        
+    - name: Run clippy
+      run: |
+        echo "::group::Clippy Lints"
+        cargo clippy --all-targets --all-features -- -D warnings
+        echo "::endgroup::"
+        
+    - name: Run tests
+      run: |
+        echo "::group::Unit Tests"
+        cargo test --all-features
+        echo "::endgroup::"
+
+  supply-chain-security:
+    name: Supply Chain Security
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: Install cargo-geiger
+      run: cargo install --locked cargo-geiger || true
+      
+    - name: Run cargo-geiger (unsafe code detection)
+      run: |
+        echo "::group::Unsafe Code Detection"
+        cargo geiger --format GitHubMarkdown >> $GITHUB_STEP_SUMMARY || true
+        echo "::endgroup::"
+        
+    - name: Check for yanked dependencies
+      run: |
+        echo "::group::Yanked Dependencies Check"
+        # 检查是否有被撤回的依赖
+        if cargo tree --format "{p} {f}" | grep -q "YANKED"; then
+          echo "⚠️ Found yanked dependencies!" >> $GITHUB_STEP_SUMMARY
+          cargo tree --format "{p} {f}" | grep "YANKED" >> $GITHUB_STEP_SUMMARY || true
+        else
+          echo "✅ No yanked dependencies found" >> $GITHUB_STEP_SUMMARY
+        fi
+        echo "::endgroup::"
+
+  notification:
+    name: Security Notification
+    runs-on: ubuntu-latest
+    needs: [security-audit, code-quality, supply-chain-security]
+    if: failure() && github.event_name == 'schedule'
+    
+    steps:
+    - name: Create Issue on Security Failure
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const title = `🚨 Security Audit Failed - ${new Date().toISOString().split('T')[0]}`;
+          const body = `
+          ## Security Audit Failure
+          
+          The scheduled security audit has failed. Please review the following:
+          
+          - Check the [workflow run](${context.payload.repository.html_url}/actions/runs/${context.runId}) for details
+          - Review security vulnerabilities in dependencies
+          - Update affected dependencies
+          - Ensure all tests pass after updates
+          
+          ### Next Steps
+          1. Run \`./scripts/dependency-audit.sh --check-only\` locally
+          2. Fix any identified issues
+          3. Update dependencies if necessary
+          4. Re-run tests to ensure stability
+          
+          **Workflow Run**: ${context.payload.repository.html_url}/actions/runs/${context.runId}
+          **Triggered by**: Scheduled security check
+          `;
+          
+          // 检查是否已存在相同的 issue
+          const issues = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            state: 'open',
+            labels: 'security,automated'
+          });
+          
+          const existingIssue = issues.data.find(issue => 
+            issue.title.includes('Security Audit Failed') && 
+            issue.title.includes(new Date().toISOString().split('T')[0])
+          );
+          
+          if (!existingIssue) {
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['security', 'automated', 'high-priority']
+            });
+          }
