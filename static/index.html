@@ -94,10 +94,43 @@
             background-color: #c0392b;
         }
         
-        /* 新增：编辑模式下的输入框样式 */
+        /* 编辑模式下的输入框样式 */
         .edit-input {
             width: calc(100% - 18px); /* 减去padding和border */
             margin-bottom: 5px;
+        }
+
+        /* 编辑模式下的任务项样式 */
+        .task-item.editing {
+            border-left-color: #f39c12;
+            background-color: #fef9e7;
+        }
+
+        /* 编辑按钮样式 */
+        .edit-btn {
+            background-color: #f39c12;
+        }
+
+        .edit-btn:hover {
+            background-color: #e67e22;
+        }
+
+        /* 保存按钮样式 */
+        .save-btn {
+            background-color: #27ae60;
+        }
+
+        .save-btn:hover {
+            background-color: #229954;
+        }
+
+        /* 取消按钮样式 */
+        .cancel-btn {
+            background-color: #95a5a6;
+        }
+
+        .cancel-btn:hover {
+            background-color: #7f8c8d;
         }
         
         #webSocketMessages {
@@ -548,13 +581,42 @@
             await apiCall('GET', `/api/tasks/${id}`);
         }
 
+        /**
+         * 更新任务
+         * @param {string} id - 任务ID
+         * @param {Object} payload - 更新数据
+         * @param {string} [payload.title] - 任务标题
+         * @param {string} [payload.description] - 任务描述
+         * @param {boolean} [payload.completed] - 完成状态
+         */
         async function updateTask(id, payload) {
-            if (!authToken) return;
+            if (!authToken) {
+                alert('请先登录');
+                return;
+            }
+
+            if (!id || !payload) {
+                console.error('更新任务失败：缺少必要参数', { id, payload });
+                alert('更新任务失败：参数错误');
+                return;
+            }
+
             try {
-                await apiCall('PUT', `/api/tasks/${id}`, payload);
+                console.log(`更新任务 ${id}，数据:`, payload);
+
+                // 调用后端 PUT API
+                const updatedTask = await apiCall('PUT', `/api/tasks/${id}`, payload);
+
+                console.log(`任务 ${id} 更新成功:`, updatedTask);
+
+                // 刷新任务列表以显示最新数据
                 await fetchTasks();
+
+                return updatedTask;
             } catch (error) {
+                console.error(`更新任务 ${id} 失败:`, error);
                 alert(`更新任务失败: ${error.message}`);
+                throw error;
             }
         }
 
@@ -610,36 +672,160 @@
             }
 
             tasksList.innerHTML = filteredTasks.map(task => `
-                <li class="task-item ${task.completed ? 'completed' : ''}">
-                    <h4>${escapeHtml(task.title)}</h4>
-                    <p>${task.description ? escapeHtml(task.description) : '(无描述)'}</p>
-                    <p>状态: <strong>${task.completed ? '已完成' : '未完成'}</strong></p>
-                    <p class="timestamp">创建于: ${formatDate(task.created_at)} | 更新于: ${formatDate(task.updated_at)}</p>
+                <li class="task-item ${task.completed ? 'completed' : ''}" id="task-${task.id}">
+                    <div class="task-content" id="content-${task.id}">
+                        <h4>${escapeHtml(task.title)}</h4>
+                        <p>${task.description ? escapeHtml(task.description) : '(无描述)'}</p>
+                        <p>状态: <strong>${task.completed ? '已完成' : '未完成'}</strong></p>
+                        <p class="timestamp">创建于: ${formatDate(task.created_at)} | 更新于: ${formatDate(task.updated_at)}</p>
+                    </div>
+                    <div class="task-edit-form" id="edit-${task.id}" style="display: none;">
+                        <input type="text" class="edit-input" id="edit-title-${task.id}" value="${escapeHtml(task.title)}" placeholder="任务标题">
+                        <textarea class="edit-input" id="edit-description-${task.id}" placeholder="任务描述（可选）">${task.description ? escapeHtml(task.description) : ''}</textarea>
+                        <label>
+                            <input type="checkbox" id="edit-completed-${task.id}" ${task.completed ? 'checked' : ''}>
+                            已完成
+                        </label>
+                    </div>
                     <div class="task-controls">
-                        <button onclick="viewTask('${task.id}')">查看</button>
-                        <button onclick="updateTask('${task.id}', { completed: ${!task.completed} })">
-                            ${task.completed ? '标记为未完成' : '标记为已完成'}
-                        </button>
-                        <button class="delete-btn" onclick="confirmDelete('${task.id}', '${escapeHtml(task.title)}')">删除</button>
+                        <div class="normal-controls" id="normal-controls-${task.id}">
+                            <button onclick="viewTask('${task.id}')">查看</button>
+                            <button class="edit-btn" onclick="toggleEditMode('${task.id}')">编辑</button>
+                            <button onclick="updateTask('${task.id}', { completed: ${!task.completed} })">
+                                ${task.completed ? '标记为未完成' : '标记为已完成'}
+                            </button>
+                            <button class="delete-btn" onclick="confirmDelete('${task.id}', '${escapeHtml(task.title)}')">删除</button>
+                        </div>
+                        <div class="edit-controls" id="edit-controls-${task.id}" style="display: none;">
+                            <button class="save-btn" onclick="handleSaveTask('${task.id}')">保存更改</button>
+                            <button class="cancel-btn" onclick="cancelEdit('${task.id}')">取消</button>
+                        </div>
                     </div>
                 </li>
             `).join('');
         }
 
-        // 简化的编辑功能（移除复杂的编辑模式）
+        // ==== 完整的编辑功能实现 ====
+
+        /**
+         * 切换任务的编辑模式
+         * @param {string} id - 任务ID
+         */
         function toggleEditMode(id) {
-            const newTitle = prompt('请输入新的任务标题:');
-            if (newTitle && newTitle.trim()) {
-                updateTask(id, { title: newTitle.trim() });
+            const taskItem = document.getElementById(`task-${id}`);
+            const contentDiv = document.getElementById(`content-${id}`);
+            const editForm = document.getElementById(`edit-${id}`);
+            const normalControls = document.getElementById(`normal-controls-${id}`);
+            const editControls = document.getElementById(`edit-controls-${id}`);
+
+            if (!taskItem || !contentDiv || !editForm || !normalControls || !editControls) {
+                console.error('编辑模式切换失败：找不到必要的DOM元素', id);
+                return;
             }
+
+            // 切换到编辑模式
+            taskItem.classList.add('editing');
+            contentDiv.style.display = 'none';
+            editForm.style.display = 'block';
+            normalControls.style.display = 'none';
+            editControls.style.display = 'flex';
+
+            // 聚焦到标题输入框
+            const titleInput = document.getElementById(`edit-title-${id}`);
+            if (titleInput) {
+                titleInput.focus();
+                titleInput.select();
+            }
+
+            console.log(`任务 ${id} 进入编辑模式`);
         }
 
+        /**
+         * 取消编辑模式，恢复到查看模式
+         * @param {string} id - 任务ID
+         */
         function cancelEdit(id) {
-            // 简化版本不需要取消编辑
+            const taskItem = document.getElementById(`task-${id}`);
+            const contentDiv = document.getElementById(`content-${id}`);
+            const editForm = document.getElementById(`edit-${id}`);
+            const normalControls = document.getElementById(`normal-controls-${id}`);
+            const editControls = document.getElementById(`edit-controls-${id}`);
+
+            if (!taskItem || !contentDiv || !editForm || !normalControls || !editControls) {
+                console.error('取消编辑失败：找不到必要的DOM元素', id);
+                return;
+            }
+
+            // 恢复原始数据（从当前任务数据重新填充表单）
+            const task = tasks.find(t => t.id === id);
+            if (task) {
+                const titleInput = document.getElementById(`edit-title-${id}`);
+                const descriptionInput = document.getElementById(`edit-description-${id}`);
+                const completedInput = document.getElementById(`edit-completed-${id}`);
+
+                if (titleInput) titleInput.value = task.title || '';
+                if (descriptionInput) descriptionInput.value = task.description || '';
+                if (completedInput) completedInput.checked = task.completed || false;
+            }
+
+            // 切换回查看模式
+            taskItem.classList.remove('editing');
+            contentDiv.style.display = 'block';
+            editForm.style.display = 'none';
+            normalControls.style.display = 'flex';
+            editControls.style.display = 'none';
+
+            console.log(`任务 ${id} 取消编辑模式`);
         }
 
-        function handleSaveTask(id) {
-            // 简化版本不需要保存编辑
+        /**
+         * 保存任务编辑
+         * @param {string} id - 任务ID
+         */
+        async function handleSaveTask(id) {
+            const titleInput = document.getElementById(`edit-title-${id}`);
+            const descriptionInput = document.getElementById(`edit-description-${id}`);
+            const completedInput = document.getElementById(`edit-completed-${id}`);
+
+            if (!titleInput || !descriptionInput || !completedInput) {
+                console.error('保存任务失败：找不到输入元素', id);
+                alert('保存失败：找不到输入元素');
+                return;
+            }
+
+            // 获取编辑后的数据
+            const title = titleInput.value.trim();
+            const description = descriptionInput.value.trim();
+            const completed = completedInput.checked;
+
+            // 验证必填字段
+            if (!title) {
+                alert('任务标题不能为空');
+                titleInput.focus();
+                return;
+            }
+
+            // 构建更新数据
+            const updateData = {
+                title: title,
+                description: description || null,
+                completed: completed
+            };
+
+            try {
+                console.log(`保存任务 ${id}，数据:`, updateData);
+
+                // 调用更新API
+                await updateTask(id, updateData);
+
+                // 成功后退出编辑模式
+                cancelEdit(id);
+
+                console.log(`任务 ${id} 保存成功`);
+            } catch (error) {
+                console.error(`保存任务 ${id} 失败:`, error);
+                alert(`保存失败: ${error.message}`);
+            }
         }
 
 
