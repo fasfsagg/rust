@@ -15,7 +15,7 @@
 //! - `create`: 创建一个新用户（用于注册）。
 
 use async_trait::async_trait;
-use migration::user_entity::{ActiveModel, Entity, Model};
+use migration::user_entity::{ ActiveModel, Entity, Model };
 use sea_orm::{
     prelude::Uuid,
     ActiveModelTrait,
@@ -44,7 +44,9 @@ impl UserRepository {
 /// 用户仓库的抽象 Trait。
 ///
 /// 定义了用户仓库必须实现的所有功能协定。
-/// 使用 `#[async_trait]` 宏来支持在 trait 中定义异步函数。
+/// 注意：在 Axum 0.8.4 升级中，此 trait 保留 `#[async_trait]` 宏，
+/// 因为项目中大量使用 `Arc<dyn UserRepositoryContract>` 需要 dyn compatible trait。
+/// 原生异步 trait 语法不支持 dyn compatibility，所以继续使用 async_trait。
 /// `Send + Sync` 约束是让它能在多线程环境下安全地共享。
 #[async_trait]
 pub trait UserRepositoryContract: Send + Sync {
@@ -70,8 +72,7 @@ impl UserRepositoryContract for UserRepository {
     async fn find_by_username(&self, username: &str) -> Result<Option<Model>, DbErr> {
         Entity::find()
             .filter(migration::user_entity::Column::Username.eq(username))
-            .one(&self.db)
-            .await
+            .one(&self.db).await
     }
 
     /// 创建一个新用户。

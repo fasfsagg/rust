@@ -9,32 +9,32 @@ authors = ["Rust学习者"]
 description = "Axum框架的分层架构学习项目"
 
 [dependencies]
-# Axum Web 框架核心组件
-axum = { version = "0.7.5", features = ["ws", "macros"] }
-# axum-extra = { version = "0.9.3", features = ["spa"] }
-# Tokio 异步运行时
-tokio = { version = "1.37.0", features = ["full"] }
-# 序列化与反序列化库
+# Axum Web 框架核心组件 - 升级到 0.8.4
+axum = { version = "0.8.4", features = ["ws", "macros"] }
+# axum-extra = { version = "0.10.1", features = ["spa"] }
+# Tokio 异步运行时 - 升级到最新稳定版本
+tokio = { version = "1.45.1", features = ["full"] }
+# 序列化与反序列化库 - 保持最新
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-# 唯一ID生成
-uuid = { version = "1.8.0", features = ["v4", "serde"] }
-# 日志与跟踪
-tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
-# HTTP 工具库
-tower = { version = "0.4.13", features = ["util"] }
-tower-http = { version = "0.5.2", features = ["trace", "cors", "fs"] }
-# HTTP/3 支持（可选功能）
-quinn = "0.10"
-h3 = "0.0.4"
-h3-quinn = "0.0.4"
-# TLS 支持
-rustls = "0.22"
-tokio-rustls = "0.25"
-# 证书生成工具（用于 HTTP/3 演示）
-rcgen = "0.12"
-# 同步原语
+# 唯一ID生成 - 升级到最新版本
+uuid = { version = "1.11", features = ["v4", "serde"] }
+# 日志与跟踪 - 升级到最新版本
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# HTTP 工具库 - 升级到与 Axum 0.8.4 兼容的版本
+tower = { version = "0.5.2", features = ["util"] }
+tower-http = { version = "0.6.6", features = ["trace", "cors", "fs"] }
+# HTTP/3 支持（可选功能）- 暂时注释掉以简化升级过程
+# quinn = "0.11"
+# h3 = "0.0.6"
+# h3-quinn = "0.0.7"
+# TLS 支持 - 暂时注释掉以简化升级过程
+# rustls = "0.23"
+# tokio-rustls = "0.26"
+# 证书生成工具（用于 HTTP/3 演示）- 暂时注释掉以简化升级过程
+# rcgen = "0.13"
+# 同步原语 - 升级到最新版本
 parking_lot = "0.12"
 # SeaORM
 sea-orm = { version = "0.12", features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
@@ -42,7 +42,7 @@ sea-orm = { version = "0.12", features = ["sqlx-sqlite", "runtime-tokio-rustls"]
 migration = { path = "migration" }
 anyhow = "1.0.82"
 chrono = { version = "0.4.41", features = ["serde"] }
-# 异步 Trait 支持
+# 异步 Trait 支持 - 在 Axum 0.8.4 中仍然需要用于 dyn compatible traits
 async-trait = "0.1"
 
 # --- 认证与验证功能新增依赖 ---
@@ -50,6 +50,8 @@ async-trait = "0.1"
 validator = { version = "0.18", features = ["derive"] }
 # 密码哈希 - 使用 Argon2 (更安全的现代密码哈希算法)
 argon2 = { version = "0.5", features = ["password-hash"] }
+# 随机数生成器 - 用于生成盐值
+rand_core = { version = "0.6", features = ["getrandom"] }
 # JSON Web Token (JWT)
 jsonwebtoken = "9.3"
 # 环境变量加载

@@ -23,9 +23,10 @@ use crate::app::model::user_entity::UserResponse;
 use crate::app::repository::user_repository::UserRepositoryContract;
 use crate::error::{ AppError, Result };
 use argon2::{
-    password_hash::{ rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString },
+    password_hash::{ PasswordHash, PasswordHasher, PasswordVerifier, SaltString },
     Argon2,
 };
+use rand_core::OsRng;
 use chrono::{ Duration, Utc };
 use jsonwebtoken::{ encode, EncodingKey, Header };
 use migration::user_entity::ActiveModel;
@@ -99,7 +100,6 @@ pub async fn register_user(
         id: ActiveValue::Set(Uuid::new_v4()),
         username: ActiveValue::Set(payload.username.clone()),
         password_hash: ActiveValue::Set(password_hash),
-        ..Default::default()
     };
 
     // 4. 保存到数据库

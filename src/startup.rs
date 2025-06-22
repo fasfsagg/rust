@@ -43,7 +43,7 @@ use std::sync::Arc;
 
 // --- 导入项目内部模块 ---
 use crate::app::middleware; // 中间件模块 (日志等)
-use crate::app::repository::task_repository::{ TaskRepository, TaskRepositoryContract }; // 导入仓库
+use crate::app::repository::task_repository::TaskRepository; // 导入仓库
 use crate::config::AppConfig; // 应用配置结构体
 use crate::routes; // 路由定义模块
 
@@ -56,7 +56,7 @@ use crate::routes; // 路由定义模块
 ///          `DatabaseConnection` 本身是设计为可以被克隆的（它内部使用了 `Arc`）。
 #[derive(Clone)]
 pub struct AppState {
-    pub task_repo: Arc<dyn TaskRepositoryContract>, // 任务仓库的抽象 Trait
+    pub task_repo: Arc<TaskRepository>, // 任务仓库的具体实现
     pub db: DatabaseConnection, // 数据库连接，用于创建其他仓库实例
     pub jwt_secret: String, // JWT 签名密钥
 }
@@ -98,9 +98,7 @@ pub async fn init_app(config: AppConfig) -> Result<(Router, DatabaseConnection)>
 
     // --- 步骤 3: 创建仓库和应用状态 ---
     // 创建仓库实例
-    let task_repo = Arc::new(TaskRepository::new(db_connection.clone())) as Arc<
-        dyn TaskRepositoryContract
-    >;
+    let task_repo = Arc::new(TaskRepository::new(db_connection.clone()));
     // 创建应用状态，包含任务仓库、数据库连接和 JWT 密钥
     let app_state = AppState {
         task_repo,

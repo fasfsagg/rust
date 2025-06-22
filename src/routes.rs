@@ -94,12 +94,12 @@ fn auth_routes(app_state: AppState) -> Router {
 ///
 /// # 【参数】
 /// * `app_state: AppState` - 应用程序的共享状态。[[所有权: 移动]]
-///                           它通常包含数据库连接池 (`Db`) 或其他需要在多个请求处理函数之间共享的资源。
-///                           这个 `AppState` 会被注入到需要它的路由处理函数中。
+///   它通常包含数据库连接池 (`Db`) 或其他需要在多个请求处理函数之间共享的资源。
+///   这个 `AppState` 会被注入到需要它的路由处理函数中。
 ///
 /// # 【返回值】
 /// * `-> Router`: 返回一个完全配置好的 `axum::Router` 实例。
-///                这个 `Router` 实例随后会被传递给 `axum::serve` 来启动服务器。
+///   这个 `Router` 实例随后会被传递给 `axum::serve` 来启动服务器。
 pub fn create_routes(app_state: AppState) -> Router {
     // --- 定义 API 相关路由 ---
     // 创建一个专门用于处理 `/api` 前缀下所有请求的子路由。
@@ -111,14 +111,14 @@ pub fn create_routes(app_state: AppState) -> Router {
         // 定义 POST /tasks 路由，映射到 create_task 控制器函数。
         // 注意: 同一个路径 "/tasks" 可以根据 HTTP 方法 (GET vs POST) 映射到不同的处理函数。
         .route("/tasks", post(create_task))
-        // 定义 GET /tasks/:id 路由，映射到 get_task_by_id 控制器函数。
-        // `:id` 是一个【路径参数】(Path Parameter)。[[Axum 功能: 路径参数]]
+        // 定义 GET /tasks/{id} 路由，映射到 get_task_by_id 控制器函数。
+        // `{id}` 是一个【路径参数】(Path Parameter)。[[Axum 功能: 路径参数]]
         // Axum 会自动解析 URL 中的这部分，并通过 `axum::extract::Path` 提取器将其传递给处理函数。
-        .route("/tasks/:id", get(get_task_by_id))
-        // 定义 PUT /tasks/:id 路由，映射到 update_task 控制器函数。
-        .route("/tasks/:id", put(update_task))
-        // 定义 DELETE /tasks/:id 路由，映射到 delete_task 控制器函数。
-        .route("/tasks/:id", delete(delete_task))
+        .route("/tasks/{id}", get(get_task_by_id))
+        // 定义 PUT /tasks/{id} 路由，映射到 update_task 控制器函数。
+        .route("/tasks/{id}", put(update_task))
+        // 定义 DELETE /tasks/{id} 路由，映射到 delete_task 控制器函数。
+        .route("/tasks/{id}", delete(delete_task))
         // --- 应用JWT认证中间件到任务路由 ---
         // 使用 `.route_layer()` 将JWT认证中间件应用到所有上述任务路由
         // 这确保了只有携带有效JWT令牌的请求才能访问任务相关的API端点
@@ -157,13 +157,13 @@ pub fn create_routes(app_state: AppState) -> Router {
         // `.merge(ws_routes)`: 将 `ws_routes` 定义的路由合并到当前路由层级。
         // 这里 `/ws` 路由仍然是根路径下的 `/ws`。
         .merge(ws_routes)
-        // `.nest_service("/", ServeDir::new("static"))`: 配置静态文件服务。
-        //   - `"/"`: 匹配根路径及其下的所有子路径（如果未被前面的路由匹配）。
+        // `.fallback_service(ServeDir::new("static"))`: 配置静态文件服务。
+        //   - Axum 0.8.4 变更：根路径的 nest_service 不再支持，改用 fallback_service
         //   - `ServeDir::new("static")`: 创建一个服务，它会查找并返回 `static` 目录下对应的文件。
-        //   - `nest_service`: 将一个 `Service` (实现了 Tower 的 `Service` trait) 挂载到指定的路径下。
+        //   - `fallback_service`: 当所有路由都不匹配时，使用此服务处理请求。
         //   【效果】: 当请求 `http://localhost:3000/` 时，会返回 `static/index.html`。
         //           当请求 `http://localhost:3000/styles.css` 时，会返回 `static/styles.css`。
         //           这对于提供前端页面、CSS、JavaScript 文件非常有用。
-        // **重要**: 静态文件服务通常放在路由定义的【最后】，因为它会匹配所有未被前面更具体路由捕获的路径。
-        .nest_service("/", ServeDir::new("static"))
+        // **重要**: 静态文件服务作为 fallback，会处理所有未被前面更具体路由捕获的路径。
+        .fallback_service(ServeDir::new("static"))
 }

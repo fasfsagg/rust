@@ -17,7 +17,6 @@
 //! - `update`: 更新一个现有任务。
 //! - `delete`: 删除一个任务。
 
-use async_trait::async_trait;
 use migration::task_entity::{ ActiveModel, Entity, Model };
 use sea_orm::{
     prelude::Uuid,
@@ -48,9 +47,13 @@ impl TaskRepository {
 /// 任务仓库的抽象 Trait。
 ///
 /// 定义了任务仓库必须实现的所有功能协定。
-/// 使用 `#[async_trait]` 宏来支持在 trait 中定义异步函数。
+/// 使用原生异步 trait 语法，不再需要 `#[async_trait]` 宏。
 /// `Send + Sync` 约束是让它能在多线程环境下安全地共享。
-#[async_trait]
+///
+/// 注意：此 trait 使用原生异步语法以展示 Rust 2024 Edition 的新特性。
+/// 编译器警告 `async fn in trait` 是预期的，因为我们优先使用现代语法。
+/// 在生产环境中，如果需要 trait object 兼容性，可考虑使用 `async_trait` 宏。
+#[allow(async_fn_in_trait)]
 pub trait TaskRepositoryContract: Send + Sync {
     /// 查询所有任务。
     async fn find_all(&self) -> Result<Vec<Model>, DbErr>;
@@ -77,7 +80,6 @@ pub trait TaskRepositoryContract: Send + Sync {
     async fn delete_by_id_and_user(&self, id: Uuid, user_id: Uuid) -> Result<DeleteResult, DbErr>;
 }
 
-#[async_trait]
 impl TaskRepositoryContract for TaskRepository {
     /// 查询所有任务。
     ///

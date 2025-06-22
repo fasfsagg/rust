@@ -6,7 +6,7 @@
 
 **项目亮点:**
 
-- ✨ **现代 Rust Web 开发**: 基于 Axum 0.7+ 和 Tokio 构建。
+- ✨ **现代 Rust Web 开发**: 基于 Axum 0.8.4 和 Tokio 1.45.1 构建。
 - 📚 **学习友好**: 包含极其详尽的中文注释和模块级文档，解释了每个部分的作用和 Rust 的关键概念。
 - 🏗️ **清晰的分层架构**: 采用 **控制器 (Controller) - 服务 (Service) - 仓库 (Repository)** 模式，实现关注点分离。
 - 🗃️ **持久化存储**: 使用 **SeaORM** 与 **SQLite** 数据库，并包含自动化的数据库迁移。
@@ -69,10 +69,12 @@ graph TD
 - [x] **静态服务**: 配置了静态文件（HTML/CSS/JS）的托管。
 - [x] **全面测试**: 为仓库层、服务层和 API 端点编写了完整的单元和集成测试。
 - [x] **技术升级**: **项目已从 Rust 2021 Edition 迁移至 2024 Edition。**
+- [x] **Axum 框架升级**: **项目已从 Axum 0.7.5 成功升级至 0.8.4，包含路径参数语法更新和原生异步 trait 支持。**
 - [x] **用户认证系统**: 实现了完整的用户注册、登录功能，使用 Argon2 进行密码哈希。
 - [x] **JWT 认证与授权**: 实现了 JWT 令牌生成、验证和基于用户身份的授权控制。
 - [x] **输入验证**: 使用 `validator` crate 为所有 API 请求添加了数据验证规则。
 - [x] **安全保护**: 所有任务相关 API 都受到 JWT 认证保护，用户只能操作自己的任务。
+- [x] **编译器警告修复**: 解决了 TaskRepository 中 `async fn in trait` 的编译器警告，使用 `#[allow(async_fn_in_trait)]` 属性保持现代 Rust 异步 trait 语法。
 
 ### 🚧 正在进行的工作 (Work in Progress)
 - 无正在进行的工作
@@ -168,6 +170,41 @@ sequenceDiagram
     S->>-C: 返回 201 Created 响应 (含 JSON)
 ```
 
+## Axum 0.8.4 升级说明
+
+本项目已成功从 Axum 0.7.5 升级至 0.8.4，主要变更包括：
+
+### 🔄 主要变更点
+
+1. **路径参数语法变更**
+   - **旧语法**: `/api/tasks/:id`
+   - **新语法**: `/api/tasks/{id}`
+   - 所有路由定义已更新为新语法
+
+2. **原生异步 Trait 支持**
+   - 移除了部分 `#[async_trait]` 宏的使用
+   - TaskRepository 现在使用原生异步 trait 语法
+   - UserRepository 保留 `async_trait` 以支持 `dyn` 兼容性
+
+3. **静态文件服务更新**
+   - 从 `nest_service` 更新为 `fallback_service`
+   - 提供更好的静态资源处理性能
+
+4. **依赖版本升级**
+   - Axum: 0.7.5 → 0.8.4
+   - Tower: 0.4 → 0.5.2
+   - Tower-HTTP: 0.5 → 0.6.6
+   - Tokio: 1.37.0 → 1.45.1
+
+### ✅ 升级验证
+
+- ✅ 所有单元测试通过 (23个测试)
+- ✅ 集成测试验证通过
+- ✅ 手动功能测试确认
+- ✅ 路径参数解析正常工作
+- ✅ 静态文件服务正常
+- ✅ JWT 认证功能正常
+
 ## 安装与设置
 
 ### 前提条件
@@ -241,13 +278,13 @@ GET /api/tasks
 
 #### 获取单个任务
 ```http
-GET /api/tasks/:id
+GET /api/tasks/{id}
 ```
 **示例**: `GET /api/tasks/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
 
 #### 更新任务
 ```http
-PUT /api/tasks/:id
+PUT /api/tasks/{id}
 Content-Type: application/json
 
 {
@@ -259,7 +296,7 @@ Content-Type: application/json
 
 #### 删除任务
 ```http
-DELETE /api/tasks/:id
+DELETE /api/tasks/{id}
 ```
 
 ### WebSocket
@@ -304,12 +341,12 @@ MIT
 
 -   **编程语言和主要技术栈**:
     -   **语言**: Rust (2024 Edition)
-    -   **Web 框架**: Axum 0.7.5
-    -   **异步运行时**: Tokio 1.37.0
+    -   **Web 框架**: Axum 0.8.4
+    -   **异步运行时**: Tokio 1.45.1
     -   **数据库 ORM**: SeaORM 0.12 (配合 SQLite)
     -   **序列化/反序列化**: Serde
     -   **日志与跟踪**: Tracing
-    -   **HTTP 工具**: Tower-HTTP
+    -   **HTTP 工具**: Tower-HTTP 0.6.6
 
 -   **许可证类型**:
     **MIT License**，这是一种非常宽松的开源许可证，允许他人自由地使用、修改和分发代码。
@@ -357,9 +394,9 @@ MIT
     项目提供了一套符合 RESTful 风格的 API，挂载在 `/api` 前缀下。
     - `POST /tasks`: 创建任务
     - `GET /tasks`: 获取所有任务
-    - `GET /tasks/:id`: 获取单个任务
-    - `PUT /tasks/:id`: 更新任务
-    - `DELETE /tasks/:id`: 删除任务
+    - `GET /tasks/{id}`: 获取单个任务
+    - `PUT /tasks/{id}`: 更新任务
+    - `DELETE /tasks/{id}`: 删除任务
     API 设计直观，易于理解和使用。
 
 ### 4. 依赖关系分析

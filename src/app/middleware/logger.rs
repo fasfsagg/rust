@@ -45,7 +45,7 @@ use tracing::Level;
 // `SubscriberInitExt`: 扩展 trait，提供 `.init()` 方法来设置全局日志订阅者。
 // `EnvFilter`: 一个日志层，根据环境变量 (通常是 `RUST_LOG`) 来过滤日志事件。
 use tracing_subscriber::{ layer::SubscriberExt, util::SubscriberInitExt, EnvFilter };
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{ AtomicBool, Ordering };
 
 // 静态标记，用于确保日志系统只初始化一次
 static LOGGER_INITIALIZED: AtomicBool = AtomicBool::new(false);
@@ -75,9 +75,11 @@ pub fn setup_logger() {
     // 检查日志系统是否已经被初始化
     if LOGGER_INITIALIZED.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
         // 只有在第一次调用时才执行初始化流程
-        
+
         // 创建 EnvFilter，尝试从 RUST_LOG 环境变量读取配置，否则默认为 "info"
-        let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+        let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_|
+            EnvFilter::new("info")
+        );
 
         // 构建并初始化全局日志订阅者
         tracing_subscriber
@@ -99,8 +101,8 @@ pub fn setup_logger() {
 ///
 /// # 【返回值】
 /// * `-> TraceLayer<...>`: 返回一个 `TraceLayer` 实例。
-///                       具体的泛型参数 `SharedClassifier<ServerErrorsAsFailures>` 是 `TraceLayer` 内部使用的请求分类器，
-///                       通常我们不需要关心它的具体类型，只需知道它是一个实现了 `Layer` trait 的中间件即可。
+///   具体的泛型参数 `SharedClassifier<ServerErrorsAsFailures>` 是 `TraceLayer` 内部使用的请求分类器，
+///   通常我们不需要关心它的具体类型，只需知道它是一个实现了 `Layer` trait 的中间件即可。
 pub fn trace_layer() -> TraceLayer<tower_http::classify::SharedClassifier<tower_http::classify::ServerErrorsAsFailures>> {
     // `TraceLayer::new_for_http()`: 创建一个针对 HTTP 优化的 TraceLayer。
     // 它使用一个默认的分类器，将 HTTP 状态码 4xx 和 5xx 视为失败。

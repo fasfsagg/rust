@@ -16,11 +16,7 @@ impl MigrationTrait for Migration {
 
         // 检查是否已经有 user_id 列
         let user_id_exists = result.iter().any(|row| {
-            if let Some(name) = row.try_get::<String>("", "name").ok() {
-                name == "user_id"
-            } else {
-                false
-            }
+            if let Ok(name) = row.try_get::<String>("", "name") { name == "user_id" } else { false }
         });
 
         // 只有当 user_id 列不存在时才添加
