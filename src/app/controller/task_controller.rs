@@ -50,7 +50,7 @@
 // 导入 Axum 框架的核心组件
 use axum::{
     extract::{ ws::{ Message, WebSocket, WebSocketUpgrade }, Path, State, Extension },
-    http::StatusCode,
+    http::{ StatusCode, HeaderMap, Uri },
     response::IntoResponse,
     Json,
 };
@@ -274,58 +274,102 @@ pub async fn delete_task(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Handler: WebSocket 处理器 (GET /ws)
+/// Handler: WebSocket 处理器 (GET /ws) - 带身份验证
 ///
-/// 【功能】: 处理客户端发起的 WebSocket 握手请求。
+/// 【功能】: 处理客户端发起的 WebSocket 握手请求，包含 JWT 身份验证。
 /// 【路由】: 通常绑定到 `GET /ws` 或类似路径。
+/// 【安全】: 要求客户端提供有效的 JWT token（通过查询参数或协议头）。
 ///
 /// # 【参数】
 /// * `ws: WebSocketUpgrade`: [[Axum Extractor: WebSocketUpgrade]]
 ///    - 用于检测 WebSocket 升级请求，并提供 `.on_upgrade()` 方法。
 /// * `State(state): State<AppState>`: 注入共享状态，以便后续的 `handle_socket` 可以访问。
+/// * `headers: HeaderMap`: 请求头，用于提取 JWT token
+/// * `uri: Uri`: 请求 URI，用于从查询参数提取 JWT token
 ///
 /// # 【返回值】
-/// * `-> impl IntoResponse`: 返回由 `ws.on_upgrade()` 生成的特殊响应，告知客户端同意升级协议。
-pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
+/// * `-> Result<impl IntoResponse, StatusCode>`:
+///   - 成功时返回 WebSocket 升级响应
+///   - 失败时返回 401 Unauthorized
+pub async fn ws_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    uri: Uri
+) -> impl IntoResponse {
+    use crate::app::utils::AuthService;
+
     println!("CONTROLLER: Received WebSocket upgrade request");
-    ws.on_upgrade(move |socket| handle_socket(socket, state))
+
+    // 使用统一的 AuthService 进行 WebSocket 认证
+    let auth_service = AuthService::new(state.jwt_secret.clone());
+    match auth_service.authenticate_websocket_request(&uri, &headers) {
+        Ok(claims) => {
+            println!(
+                "CONTROLLER: WebSocket 连接已授权：用户 {} (ID: {})",
+                claims.username,
+                claims.sub
+            );
+            // 升级到 WebSocket 连接，传递用户信息
+            ws.on_upgrade(move |socket| handle_socket(socket, state, claims)).into_response()
+        }
+        Err(err) => {
+            println!("CONTROLLER: WebSocket 连接被拒绝：JWT 验证失败 {:?}", err);
+            StatusCode::UNAUTHORIZED.into_response()
+        }
+    }
 }
 
-/// 处理单个 WebSocket 连接
-async fn handle_socket(mut socket: WebSocket, _state: AppState) {
+/// 处理单个 WebSocket 连接（已认证）
+async fn handle_socket(mut socket: WebSocket, _state: AppState, claims: crate::app::utils::Claims) {
+    println!("WS: 已认证用户 {} (ID: {}) 建立 WebSocket 连接", claims.username, claims.sub);
+
+    // 发送欢迎消息
+    let welcome_msg = format!("欢迎, {}! 您已成功连接到 WebSocket。", claims.username);
+    if let Err(_) = socket.send(Message::Text(welcome_msg.into())).await {
+        println!("WS: 发送欢迎消息失败");
+        return;
+    }
+
+    // 处理消息循环
     while let Some(msg) = socket.recv().await {
         if let Ok(msg) = msg {
-            if process_message(msg) == ControlFlow::Break(()) {
+            if process_message(msg, &claims) == ControlFlow::Break(()) {
                 break;
             }
         } else {
-            println!("WS: Client disconnected.");
+            println!("WS: 用户 {} 断开连接", claims.username);
             break;
         }
     }
 }
 
-/// 辅助函数：处理单个 WebSocket 消息
+/// 辅助函数：处理单个 WebSocket 消息（已认证）
 #[allow(dead_code)]
-fn process_message(msg: Message) -> ControlFlow<(), ()> {
+fn process_message(msg: Message, claims: &crate::app::utils::Claims) -> ControlFlow<(), ()> {
     match msg {
         Message::Text(t) => {
-            println!("WS: Received text message: {}", t);
+            println!("WS: 用户 {} 发送文本消息: {}", claims.username, t);
         }
         Message::Binary(b) => {
-            println!("WS: Received binary message: {:?}", b);
+            println!("WS: 用户 {} 发送二进制消息: {:?}", claims.username, b);
         }
         Message::Ping(p) => {
-            println!("WS: Received ping: {:?}", p);
+            println!("WS: 用户 {} 发送 ping: {:?}", claims.username, p);
         }
         Message::Pong(p) => {
-            println!("WS: Received pong: {:?}", p);
+            println!("WS: 用户 {} 发送 pong: {:?}", claims.username, p);
         }
         Message::Close(c) => {
             if let Some(cf) = c {
-                println!("WS: Received close with code {} and reason '{}'", cf.code, cf.reason);
+                println!(
+                    "WS: 用户 {} 关闭连接，代码: {} 原因: '{}'",
+                    claims.username,
+                    cf.code,
+                    cf.reason
+                );
             } else {
-                println!("WS: Received close message without details");
+                println!("WS: 用户 {} 关闭连接", claims.username);
             }
             return ControlFlow::Break(());
         }

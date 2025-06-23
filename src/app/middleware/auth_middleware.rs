@@ -21,28 +21,13 @@
 
 use axum::{
     extract::Request,
-    http::{ header::AUTHORIZATION, StatusCode },
+    http::{ header::SEC_WEBSOCKET_PROTOCOL, StatusCode, HeaderMap, Uri },
     middleware::Next,
     response::Response,
 };
-use jsonwebtoken::{ decode, DecodingKey, Validation };
-use serde::{ Deserialize, Serialize };
+use crate::app::utils::{ Claims, JwtUtils, AuthService };
 
-/// JWT 声明结构体
-/// 用于解析和验证 JWT 令牌中的用户信息
-///
-/// 注意：这个结构体必须与 auth_service.rs 中的 Claims 结构体保持一致
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Claims {
-    /// 用户 ID (Subject)
-    pub sub: String,
-    /// 用户名
-    pub username: String,
-    /// 令牌过期时间（Unix 时间戳）
-    pub exp: i64,
-    /// 令牌签发时间（Unix 时间戳）
-    pub iat: i64,
-}
+// Claims 结构体现在从 utils 模块导入，避免重复定义
 
 /// 认证用户信息结构体
 /// 用于在请求扩展中存储认证后的用户信息
@@ -86,16 +71,15 @@ pub fn create_jwt_auth_middleware(
     }
 }
 
-/// JWT 认证中间件的核心实现
+/// JWT 认证中间件的核心实现（使用统一的 AuthService）
 ///
-/// 这个函数验证请求头中的 JWT 令牌，并将认证后的用户信息
-/// 注入到请求的扩展中，供下游的处理器使用。
+/// 这个函数使用统一的 AuthService 验证请求头中的 JWT 令牌，
+/// 并将认证后的用户信息注入到请求的扩展中，供下游的处理器使用。
 ///
 /// # 工作流程
-/// 1. 从 `Authorization: Bearer <token>` 请求头中提取 JWT
-/// 2. 使用 `jsonwebtoken::decode` 验证令牌的签名和有效期
-/// 3. 验证成功后，将用户信息存入请求的 `extensions` 中
-/// 4. 调用下一个中间件或处理器
+/// 1. 使用 AuthService 从 HTTP 请求头中提取并验证 JWT
+/// 2. 验证成功后，将用户信息存入请求的 `extensions` 中
+/// 3. 调用下一个中间件或处理器
 ///
 /// # 参数
 /// - `req`: HTTP 请求对象
@@ -111,46 +95,18 @@ async fn jwt_auth_impl(
 ) -> Result<Response, StatusCode> {
     println!("AUTH_MIDDLEWARE: 开始验证 JWT 令牌");
 
-    // 1. 从请求头中提取 Authorization 头
-    let auth_header = req
-        .headers()
-        .get(AUTHORIZATION)
-        .and_then(|header| header.to_str().ok());
-
-    let auth_header = match auth_header {
-        Some(header) => header,
-        None => {
-            println!("AUTH_MIDDLEWARE: 缺少 Authorization 头");
-            return Err(StatusCode::UNAUTHORIZED);
-        }
-    };
-
-    // 2. 检查是否是 Bearer 令牌格式
-    if !auth_header.starts_with("Bearer ") {
-        println!("AUTH_MIDDLEWARE: Authorization 头格式错误，应为 'Bearer <token>'");
-        return Err(StatusCode::UNAUTHORIZED);
-    }
-
-    // 3. 提取令牌部分
-    let token = &auth_header[7..]; // 跳过 "Bearer " 前缀
-
-    // 4. 验证 JWT 令牌
-    let token_data = match
-        decode::<Claims>(
-            token,
-            &DecodingKey::from_secret(jwt_secret.as_ref()),
-            &Validation::default()
-        )
-    {
-        Ok(data) => data,
+    // 使用统一的 AuthService 进行认证
+    let auth_service = AuthService::new(jwt_secret);
+    let claims = match auth_service.authenticate_http_request(req.headers()) {
+        Ok(claims) => claims,
         Err(err) => {
             println!("AUTH_MIDDLEWARE: JWT 验证失败: {:?}", err);
             return Err(StatusCode::UNAUTHORIZED);
         }
     };
 
-    // 5. 将认证用户信息注入到请求扩展中
-    let authenticated_user = AuthenticatedUser::from(token_data.claims);
+    // 将认证用户信息注入到请求扩展中
+    let authenticated_user = AuthenticatedUser::from(claims);
     println!(
         "AUTH_MIDDLEWARE: JWT 验证成功，用户: {} (ID: {})",
         authenticated_user.username,
@@ -159,16 +115,93 @@ async fn jwt_auth_impl(
 
     req.extensions_mut().insert(authenticated_user);
 
-    // 6. 调用下一个中间件或处理器
+    // 调用下一个中间件或处理器
     Ok(next.run(req).await)
+}
+
+// --- WebSocket JWT 认证相关功能 ---
+
+// WebSocket 认证错误类型现在使用统一的 JwtError
+pub use crate::app::utils::JwtError as WebSocketAuthError;
+
+/// 从 WebSocket 请求中提取 JWT token（保持向后兼容）
+///
+/// 支持两种方式：
+/// 1. 查询参数: `ws://localhost:3000/ws?token=<jwt-token>`
+/// 2. Sec-WebSocket-Protocol 头: `access_token.<jwt-token>`
+///
+/// 注意：这个函数保持向后兼容，新代码建议使用 AuthService
+pub fn extract_websocket_token(uri: &Uri, headers: &HeaderMap) -> Option<String> {
+    let auth_service = AuthService::new("dummy".to_string()); // 只用于提取，不需要真实密钥
+    match auth_service.authenticate_websocket_request(uri, headers) {
+        Ok(_) => {
+            // 如果认证成功，说明 token 存在，我们需要重新提取它
+            // 这里为了保持向后兼容，我们仍然使用原来的逻辑
+            extract_websocket_token_legacy(uri, headers)
+        }
+        Err(_) => extract_websocket_token_legacy(uri, headers), // 即使失败也尝试提取
+    }
+}
+
+/// 传统的 WebSocket token 提取逻辑（内部使用）
+fn extract_websocket_token_legacy(uri: &Uri, headers: &HeaderMap) -> Option<String> {
+    // 1. 尝试从查询参数中提取 token
+    if let Some(query) = uri.query() {
+        if let Some(token) = extract_token_from_query(query) {
+            return Some(token);
+        }
+    }
+
+    // 2. 尝试从 Sec-WebSocket-Protocol 头中提取 token
+    extract_token_from_protocol_header(headers)
+}
+
+/// 从查询参数中提取 JWT token
+fn extract_token_from_query(query: &str) -> Option<String> {
+    use std::collections::HashMap;
+    let params: HashMap<String, String> = serde_urlencoded::from_str(query).ok()?;
+    params.get("token").cloned()
+}
+
+/// 从 Sec-WebSocket-Protocol 头中提取 JWT token
+fn extract_token_from_protocol_header(headers: &HeaderMap) -> Option<String> {
+    let protocol_header = headers.get(SEC_WEBSOCKET_PROTOCOL)?;
+    let protocol_str = protocol_header.to_str().ok()?;
+
+    // 支持格式: "access_token.<jwt-token>" 或 "chat, access_token.<jwt-token>"
+    for protocol in protocol_str.split(',') {
+        let protocol = protocol.trim();
+        if protocol.starts_with("access_token.") {
+            return Some(protocol.strip_prefix("access_token.").unwrap().to_string());
+        }
+    }
+    None
+}
+
+/// 验证 WebSocket JWT token（使用统一的 AuthService）
+pub async fn validate_websocket_jwt_token(
+    token: &str,
+    jwt_secret: &str
+) -> Result<Claims, WebSocketAuthError> {
+    let jwt_utils = JwtUtils::new(jwt_secret.to_string());
+    jwt_utils.validate_token(token)
+}
+
+/// 验证 WebSocket 请求的完整认证（推荐使用）
+pub async fn authenticate_websocket_request(
+    uri: &Uri,
+    headers: &HeaderMap,
+    jwt_secret: &str
+) -> Result<Claims, WebSocketAuthError> {
+    let auth_service = AuthService::new(jwt_secret.to_string());
+    auth_service.authenticate_websocket_request(uri, headers)
 }
 
 // --- 单元测试 ---
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{ Duration, Utc };
-    use jsonwebtoken::{ encode, EncodingKey, Header };
+    use crate::app::utils::JwtError;
 
     /// 测试 JWT 声明结构体的序列化和反序列化
     #[test]
@@ -208,101 +241,48 @@ mod tests {
         assert_eq!(auth_user.username, "anotheruser");
     }
 
-    /// 测试 JWT 令牌的创建和验证
+    /// 测试 JWT 令牌的创建和验证（使用 JwtUtils）
     #[test]
     fn test_jwt_token_creation_and_validation() {
-        let secret = "test-secret-key";
-        let now = Utc::now();
-
-        let claims = Claims {
-            sub: "test_user".to_string(),
-            username: "testuser".to_string(),
-            exp: (now + Duration::hours(1)).timestamp(),
-            iat: now.timestamp(),
-        };
+        let jwt_utils = JwtUtils::new("test-secret-key".to_string());
 
         // 创建 JWT 令牌
-        let token = encode(
-            &Header::default(),
-            &claims,
-            &EncodingKey::from_secret(secret.as_ref())
-        ).unwrap();
+        let token = jwt_utils.create_token("test_user", "testuser", 1).unwrap();
 
         // 验证令牌不为空
         assert!(!token.is_empty());
         assert!(token.contains('.'));
 
         // 验证令牌可以被解码
-        let decoded = jsonwebtoken
-            ::decode::<Claims>(
-                &token,
-                &jsonwebtoken::DecodingKey::from_secret(secret.as_ref()),
-                &jsonwebtoken::Validation::default()
-            )
-            .unwrap();
-
-        assert_eq!(decoded.claims.sub, "test_user");
-        assert_eq!(decoded.claims.username, "testuser");
+        let claims = jwt_utils.validate_token(&token).unwrap();
+        assert_eq!(claims.sub, "test_user");
+        assert_eq!(claims.username, "testuser");
     }
 
-    /// 测试过期令牌的验证失败
+    /// 测试过期令牌的验证失败（使用 JwtUtils）
     #[test]
     fn test_expired_token_validation_fails() {
-        let secret = "test-secret-key";
-        let now = Utc::now();
+        let jwt_utils = JwtUtils::new("test-secret-key".to_string());
 
         // 创建一个已过期的令牌
-        let claims = Claims {
-            sub: "test_user".to_string(),
-            username: "testuser".to_string(),
-            exp: (now - Duration::hours(1)).timestamp(), // 1小时前过期
-            iat: (now - Duration::hours(2)).timestamp(),
-        };
-
-        let token = encode(
-            &Header::default(),
-            &claims,
-            &EncodingKey::from_secret(secret.as_ref())
-        ).unwrap();
+        let expired_token = jwt_utils.create_expired_test_token("test_user", "testuser");
 
         // 验证过期令牌应该失败
-        let result = jsonwebtoken::decode::<Claims>(
-            &token,
-            &jsonwebtoken::DecodingKey::from_secret(secret.as_ref()),
-            &jsonwebtoken::Validation::default()
-        );
-
-        assert!(result.is_err());
+        let result = jwt_utils.validate_token(&expired_token);
+        assert_eq!(result, Err(JwtError::TokenExpired));
     }
 
-    /// 测试错误密钥的验证失败
+    /// 测试错误密钥的验证失败（使用 JwtUtils）
     #[test]
     fn test_wrong_secret_validation_fails() {
-        let secret = "correct-secret";
-        let wrong_secret = "wrong-secret";
-        let now = Utc::now();
-
-        let claims = Claims {
-            sub: "test_user".to_string(),
-            username: "testuser".to_string(),
-            exp: (now + Duration::hours(1)).timestamp(),
-            iat: now.timestamp(),
-        };
+        let jwt_utils_correct = JwtUtils::new("correct-secret".to_string());
+        let jwt_utils_wrong = JwtUtils::new("wrong-secret".to_string());
 
         // 用正确密钥创建令牌
-        let token = encode(
-            &Header::default(),
-            &claims,
-            &EncodingKey::from_secret(secret.as_ref())
-        ).unwrap();
+        let token = jwt_utils_correct.create_token("test_user", "testuser", 1).unwrap();
 
         // 用错误密钥验证应该失败
-        let result = jsonwebtoken::decode::<Claims>(
-            &token,
-            &jsonwebtoken::DecodingKey::from_secret(wrong_secret.as_ref()),
-            &jsonwebtoken::Validation::default()
-        );
-
-        assert!(result.is_err());
+        let result = jwt_utils_wrong.validate_token(&token);
+        assert_eq!(result, Err(JwtError::TokenInvalid));
     }
 }

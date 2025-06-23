@@ -3,9 +3,9 @@
 use sea_orm::entity::prelude::*;
 use serde::{ Deserialize, Serialize };
 
-/// Defines the `user` entity, which will be mapped to the `users` table in the database.
+/// Defines the `user` entity, which will be mapped to the `user` table in the database.
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Deserialize)]
-#[sea_orm(table_name = "users")]
+#[sea_orm(table_name = "user")]
 pub struct Model {
     /// The unique identifier for the user, using a UUID.
     #[sea_orm(primary_key, auto_increment = false, column_type = "Uuid")]

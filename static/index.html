@@ -402,6 +402,73 @@
         let tasks = [];
         let currentFilter = 'all';
 
+        // ==== 认证存储管理函数 ====
+        /**
+         * 保存认证信息到localStorage
+         * @param {string} token - JWT令牌
+         * @param {Object} user - 用户信息对象
+         */
+        function saveAuthToStorage(token, user) {
+            try {
+                const authData = { token, user, timestamp: Date.now() };
+                localStorage.setItem('axum_auth', JSON.stringify(authData));
+                console.log('认证信息已保存到localStorage');
+            } catch (error) {
+                console.warn('无法保存认证信息到localStorage:', error);
+            }
+        }
+
+        /**
+         * 从localStorage加载认证信息
+         * @returns {Object|null} 认证数据对象或null（如果不存在或已过期）
+         */
+        function loadAuthFromStorage() {
+            try {
+                const authData = localStorage.getItem('axum_auth');
+                if (!authData) return null;
+
+                const parsed = JSON.parse(authData);
+                if (isTokenExpired(parsed.token)) {
+                    clearAuthFromStorage();
+                    return null;
+                }
+                return parsed;
+            } catch (error) {
+                console.warn('加载认证信息失败:', error);
+                clearAuthFromStorage();
+                return null;
+            }
+        }
+
+        /**
+         * 清除localStorage中的认证信息
+         */
+        function clearAuthFromStorage() {
+            try {
+                localStorage.removeItem('axum_auth');
+                console.log('认证信息已从localStorage清除');
+            } catch (error) {
+                console.warn('清除认证信息失败:', error);
+            }
+        }
+
+        /**
+         * 检查JWT令牌是否已过期
+         * @param {string} token - JWT令牌
+         * @returns {boolean} true表示已过期，false表示未过期
+         */
+        function isTokenExpired(token) {
+            try {
+                // 解析JWT payload（第二部分）
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                // 检查过期时间（exp字段，单位为秒，需要转换为毫秒）
+                return payload.exp * 1000 < Date.now();
+            } catch (error) {
+                // 解析失败视为过期
+                return true;
+            }
+        }
+
         // ==== 页面加载时执行 ====
         document.addEventListener('DOMContentLoaded', () => {
             // 绑定事件处理器
@@ -416,12 +483,30 @@
             document.getElementById('wsDisconnectBtn').addEventListener('click', disconnectWebSocket);
             document.getElementById('wsSendForm').addEventListener('submit', sendWebSocketMessage);
 
-            // 初始化UI
-            updateAuthUI();
+            // 尝试从localStorage恢复认证状态
+            const savedAuth = loadAuthFromStorage();
+            if (savedAuth) {
+                authToken = savedAuth.token;
+                currentUser = savedAuth.user;
+                console.log('已从localStorage恢复登录状态:', currentUser.username);
+                updateAuthUI();
+                fetchTasks(); // 自动加载任务列表
+            } else {
+                // 初始化UI为未登录状态
+                updateAuthUI();
+            }
         });
 
         // ==== 简化的API调用函数 ====
         async function apiCall(method, url, data = null) {
+            // 检查令牌是否过期
+            if (authToken && isTokenExpired(authToken)) {
+                console.warn('JWT令牌已过期，自动登出');
+                handleLogout();
+                showAuthMessage('loginMessage', '登录已过期，请重新登录', 'info');
+                throw new Error('登录已过期，请重新登录');
+            }
+
             const options = {
                 method,
                 headers: { 'Content-Type': 'application/json' }
@@ -441,6 +526,14 @@
 
                 // 更新API响应显示
                 updateApiResponse(`${method} ${url}`, response, result);
+
+                // 处理401未授权响应（可能是令牌在服务端过期）
+                if (response.status === 401 && authToken) {
+                    console.warn('收到401响应，可能令牌已在服务端过期');
+                    handleLogout();
+                    showAuthMessage('loginMessage', '认证失效，请重新登录', 'info');
+                    throw new Error('认证失效，请重新登录');
+                }
 
                 if (!response.ok) {
                     throw new Error(result?.message || `HTTP ${response.status}`);
@@ -466,6 +559,10 @@
                 if (result?.access_token) {
                     authToken = result.access_token;
                     currentUser = result.user;
+
+                    // 保存认证信息到localStorage
+                    saveAuthToStorage(authToken, currentUser);
+
                     updateAuthUI();
                     showAuthMessage('loginMessage', '登录成功！', 'success');
                     document.getElementById('loginForm').reset();
@@ -501,6 +598,10 @@
             authToken = null;
             currentUser = null;
             tasks = [];
+
+            // 清除localStorage中的认证信息
+            clearAuthFromStorage();
+
             updateAuthUI();
             renderTasks();
             showAuthMessage('loginMessage', '已登出', 'info');
@@ -511,6 +612,7 @@
             const userElement = document.getElementById('currentUser');
             const logoutBtn = document.getElementById('logoutBtn');
             const authForms = document.getElementById('authForms');
+            const wsConnectBtn = document.getElementById('wsConnectBtn');
 
             if (authToken && currentUser) {
                 statusElement.textContent = '已认证';
@@ -518,12 +620,28 @@
                 userElement.textContent = `欢迎，${currentUser.username}`;
                 logoutBtn.classList.remove('hidden');
                 authForms.classList.add('hidden');
+
+                // 启用 WebSocket 连接按钮
+                if (wsConnectBtn && socket === null) {
+                    wsConnectBtn.disabled = false;
+                }
             } else {
                 statusElement.textContent = '未认证';
                 statusElement.className = 'status-badge unauthenticated';
                 userElement.textContent = '未登录';
                 logoutBtn.classList.add('hidden');
                 authForms.classList.remove('hidden');
+
+                // 禁用 WebSocket 连接按钮，并断开现有连接
+                if (wsConnectBtn) {
+                    wsConnectBtn.disabled = true;
+                }
+                if (socket !== null) {
+                    socket.close();
+                    socket = null;
+                    updateWebSocketStatus(false);
+                    logWebSocketMessage('用户登出，WebSocket连接已断开');
+                }
             }
         }
 
@@ -863,21 +981,33 @@
                 return;
             }
 
+            // 检查是否已登录
+            if (!authToken) {
+                logWebSocketMessage('错误: 请先登录后再连接WebSocket');
+                return;
+            }
+
             try {
-                socket = new WebSocket(WS_URL);
+                // 在WebSocket URL中添加JWT token作为查询参数
+                const wsUrlWithToken = `${WS_URL}?token=${authToken}`;
+                socket = new WebSocket(wsUrlWithToken);
 
                 socket.onopen = () => {
                     updateWebSocketStatus(true);
-                    logWebSocketMessage('已连接到WebSocket服务器');
+                    logWebSocketMessage('已连接到WebSocket服务器（已认证）');
                 };
 
                 socket.onmessage = (event) => {
                     logWebSocketMessage(`收到: ${event.data}`);
                 };
 
-                socket.onclose = () => {
+                socket.onclose = (event) => {
                     updateWebSocketStatus(false);
-                    logWebSocketMessage('WebSocket连接已关闭');
+                    if (event.code === 1006) {
+                        logWebSocketMessage('WebSocket连接被拒绝：可能是认证失败');
+                    } else {
+                        logWebSocketMessage('WebSocket连接已关闭');
+                    }
                     socket = null;
                 };
 

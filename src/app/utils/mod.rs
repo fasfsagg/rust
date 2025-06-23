@@ -5,7 +5,11 @@
 
 pub mod uuid_utils;
 pub mod validation_utils;
+pub mod jwt_utils;
+pub mod auth_service;
 
 // 重新导出常用的工具函数
 pub use uuid_utils::*;
 pub use validation_utils::*;
+pub use jwt_utils::{ Claims, JwtError, JwtUtils };
+pub use auth_service::{ AuthService, TokenExtractionMethod };

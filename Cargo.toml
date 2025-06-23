@@ -56,6 +56,8 @@ rand_core = { version = "0.6", features = ["getrandom"] }
 jsonwebtoken = "9.3"
 # 环境变量加载
 dotenvy = "0.15"
+# URL 编码解析（用于 WebSocket 查询参数）
+serde_urlencoded = "0.7"
 # --- 认证与验证功能新增依赖结束 ---
 
 [dev-dependencies]
@@ -68,4 +70,12 @@ wiremock = "0.6.0"
 serde_json = "1.0.117"
 fake = { version = "2.9", features = ["chrono"] }
 # 模拟测试库
-mockall = "0.12" 
+mockall = "0.12"
+# URL 编码解析（用于 WebSocket 测试）
+serde_urlencoded = "0.7"
+# WebSocket 客户端（用于集成测试）
+tokio-tungstenite = "0.21"
+# Axum 测试工具
+axum-test = "14.0"
+# Futures 工具
+futures-util = "0.3"
