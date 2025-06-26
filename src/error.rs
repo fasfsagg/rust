@@ -54,6 +54,7 @@ use axum::{ // 导入 Axum 框架相关的类型
 use serde_json::{ json, Value }; // 导入 `serde_json` 用于创建 JSON 值 (`Value`)
 use uuid::Uuid; // 导入 UUID 类型，用于错误消息
 use sea_orm::DbErr; // 导入 SeaORM 的数据库错误类型
+use tracing_error::{ SpanTrace, ExtractSpanTrace }; // 导入 tracing-error 用于错误上下文跟踪
 
 // --- 自定义错误枚举 ---
 
@@ -101,6 +102,38 @@ pub enum AppError {
 
     /// 401 Unauthorized - JWT 令牌无效或过期
     InvalidToken(String),
+
+    /// 带有 SpanTrace 上下文的错误包装器
+    /// 用于捕获错误发生时的 tracing span 上下文信息
+    TracedError {
+        /// 原始错误信息
+        message: String,
+        /// 错误发生时的 span 跟踪信息
+        span_trace: SpanTrace,
+        /// HTTP 状态码
+        status_code: StatusCode,
+    },
+}
+
+// --- 实现 Display trait ---
+
+/// 为 `AppError` 实现 `Display` trait
+///
+/// 【目的】: 允许将 `AppError` 转换为字符串，用于日志记录和错误消息显示
+impl std::fmt::Display for AppError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AppError::TaskNotFound(id) => write!(f, "未找到ID为 {} 的任务", id),
+            AppError::BadRequest(msg) => write!(f, "请求错误: {}", msg),
+            AppError::DbErr(db_err) => write!(f, "数据库错误: {}", db_err),
+            AppError::UserAlreadyExists(username) => write!(f, "用户名 '{}' 已存在", username),
+            AppError::InvalidCredentials => write!(f, "用户名或密码错误"),
+            AppError::PasswordHashError(msg) => write!(f, "密码哈希错误: {}", msg),
+            AppError::TokenGenerationError(msg) => write!(f, "令牌生成错误: {}", msg),
+            AppError::InvalidToken(msg) => write!(f, "无效的令牌: {}", msg),
+            AppError::TracedError { message, .. } => write!(f, "{}", message),
+        }
+    }
 }
 
 // --- 实现 IntoResponse ---
@@ -146,6 +179,18 @@ impl IntoResponse for AppError {
             }
             AppError::InvalidToken(msg) =>
                 (StatusCode::UNAUTHORIZED, format!("无效的令牌: {}", msg)),
+
+            // 处理带有 SpanTrace 的错误
+            AppError::TracedError { message, span_trace, status_code } => {
+                // 记录详细的错误信息，包括 span 跟踪
+                tracing::error!(
+                    error_message = %message,
+                    span_trace = %span_trace,
+                    status_code = %status_code,
+                    "TracedError occurred with span context"
+                );
+                (status_code, message)
+            }
         };
 
         let body: Value =
@@ -208,4 +253,192 @@ pub type Result<T> = std::result::Result<T, AppError>;
 /// * `AppError` - 一个配置好的 `AppError::BadRequest` 实例。
 pub fn invalid_uuid(id: &str) -> AppError {
     AppError::BadRequest(format!("无效的UUID格式: {}", id))
+}
+
+// --- SpanTrace 错误处理扩展 ---
+
+impl AppError {
+    /// 创建一个带有当前 span 跟踪信息的错误
+    ///
+    /// 【功能】：捕获当前 tracing span 的上下文信息，并创建一个 TracedError
+    ///
+    /// # 参数
+    /// * `message` - 错误消息
+    /// * `status_code` - HTTP 状态码
+    ///
+    /// # 返回值
+    /// * `AppError::TracedError` - 包含 span 跟踪信息的错误
+    ///
+    /// # 示例
+    /// ```rust,no_run
+    /// use axum_tutorial::error::AppError;
+    /// use axum::http::StatusCode;
+    ///
+    /// let error = AppError::with_span_trace(
+    ///     "数据库连接失败".to_string(),
+    ///     StatusCode::INTERNAL_SERVER_ERROR
+    /// );
+    /// ```
+    pub fn with_span_trace(message: String, status_code: StatusCode) -> Self {
+        Self::TracedError {
+            message,
+            span_trace: SpanTrace::capture(),
+            status_code,
+        }
+    }
+
+    /// 将现有错误包装为带有 span 跟踪信息的错误
+    ///
+    /// 【功能】：将任何实现了 std::error::Error 的错误类型包装为 TracedError
+    ///
+    /// # 参数
+    /// * `error` - 原始错误
+    /// * `status_code` - HTTP 状态码
+    ///
+    /// # 返回值
+    /// * `AppError::TracedError` - 包含 span 跟踪信息的错误
+    pub fn wrap_with_span_trace<E: std::error::Error>(error: E, status_code: StatusCode) -> Self {
+        Self::TracedError {
+            message: error.to_string(),
+            span_trace: SpanTrace::capture(),
+            status_code,
+        }
+    }
+}
+
+/// 为 AppError 实现 ExtractSpanTrace trait
+///
+/// 【功能】：允许从 AppError 中提取 SpanTrace 信息
+impl ExtractSpanTrace for AppError {
+    fn span_trace(&self) -> Option<&SpanTrace> {
+        match self {
+            AppError::TracedError { span_trace, .. } => Some(span_trace),
+            _ => None,
+        }
+    }
+}
+
+// --- Result 扩展 trait ---
+
+/// Result 扩展 trait，提供便捷的错误跟踪方法
+///
+/// 【功能】：为 Result 类型添加便捷方法，自动捕获当前 span 的跟踪信息
+pub trait InstrumentResult<T, E> {
+    /// 在当前 span 中包装错误
+    ///
+    /// 【功能】：如果 Result 是 Err，则自动捕获当前 span 的跟踪信息并包装错误
+    ///
+    /// # 参数
+    /// * `status_code` - 要使用的 HTTP 状态码
+    ///
+    /// # 返回值
+    /// * `Result<T, AppError>` - 包装后的结果
+    ///
+    /// # 示例
+    /// ```rust,no_run
+    /// use axum_tutorial::error::{InstrumentResult, Result};
+    /// use axum::http::StatusCode;
+    ///
+    /// fn example_function() -> Result<String> {
+    ///     std::fs::read_to_string("file.txt")
+    ///         .in_current_span(StatusCode::INTERNAL_SERVER_ERROR)
+    /// }
+    /// ```
+    fn in_current_span(self, status_code: StatusCode) -> Result<T>;
+}
+
+impl<T, E: std::error::Error> InstrumentResult<T, E> for std::result::Result<T, E> {
+    fn in_current_span(self, status_code: StatusCode) -> Result<T> {
+        self.map_err(|e| AppError::wrap_with_span_trace(e, status_code))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::StatusCode;
+    use std::io;
+
+    #[test]
+    fn test_app_error_with_span_trace() {
+        let error = AppError::with_span_trace(
+            "测试错误".to_string(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+
+        match error {
+            AppError::TracedError { message, status_code, .. } => {
+                assert_eq!(message, "测试错误");
+                assert_eq!(status_code, StatusCode::INTERNAL_SERVER_ERROR);
+            }
+            _ => panic!("Expected TracedError variant"),
+        }
+    }
+
+    #[test]
+    fn test_app_error_wrap_with_span_trace() {
+        let io_error = io::Error::new(io::ErrorKind::NotFound, "文件未找到");
+        let app_error = AppError::wrap_with_span_trace(io_error, StatusCode::NOT_FOUND);
+
+        match app_error {
+            AppError::TracedError { message, status_code, .. } => {
+                assert!(message.contains("文件未找到"));
+                assert_eq!(status_code, StatusCode::NOT_FOUND);
+            }
+            _ => panic!("Expected TracedError variant"),
+        }
+    }
+
+    #[test]
+    fn test_extract_span_trace() {
+        let traced_error = AppError::with_span_trace(
+            "测试错误".to_string(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+
+        // 测试 ExtractSpanTrace trait
+        assert!(traced_error.span_trace().is_some());
+
+        // 测试其他错误类型不包含 span trace
+        let regular_error = AppError::BadRequest("普通错误".to_string());
+        assert!(regular_error.span_trace().is_none());
+    }
+
+    #[test]
+    fn test_instrument_result_success() {
+        let success_result: std::result::Result<String, io::Error> = Ok("成功".to_string());
+        let instrumented = success_result.in_current_span(StatusCode::INTERNAL_SERVER_ERROR);
+
+        assert!(instrumented.is_ok());
+        assert_eq!(instrumented.unwrap(), "成功");
+    }
+
+    #[test]
+    fn test_instrument_result_error() {
+        let error_result: std::result::Result<String, io::Error> = Err(
+            io::Error::new(io::ErrorKind::PermissionDenied, "权限被拒绝")
+        );
+        let instrumented = error_result.in_current_span(StatusCode::FORBIDDEN);
+
+        assert!(instrumented.is_err());
+        match instrumented.unwrap_err() {
+            AppError::TracedError { message, status_code, .. } => {
+                assert!(message.contains("权限被拒绝"));
+                assert_eq!(status_code, StatusCode::FORBIDDEN);
+            }
+            _ => panic!("Expected TracedError variant"),
+        }
+    }
+
+    #[test]
+    fn test_invalid_uuid_helper() {
+        let error = invalid_uuid("invalid-uuid-string");
+        match error {
+            AppError::BadRequest(msg) => {
+                assert!(msg.contains("无效的UUID格式"));
+                assert!(msg.contains("invalid-uuid-string"));
+            }
+            _ => panic!("Expected BadRequest variant"),
+        }
+    }
 }

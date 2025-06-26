@@ -1,0 +1,28 @@
+2025-06-25T10:39:26.628987Z  INFO main ThreadId(01) axum_tutorial::app::middleware::logger: src\app\middleware\logger.rs:307: 文件轮转日志系统已初始化 json_format=false file_logging=true log_directory=demo_logs rotation=Minutely file_name_prefix=demo_app non_blocking=true max_log_files=5 max_file_size=1048576 error_tracing=true show_spans=true
+2025-06-25T10:39:26.631395Z  INFO main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:52: 这是第 1 次日志记录 iteration=1 timestamp=2025-06-25 10:39:26.631351 UTC
+2025-06-25T10:39:28.636161Z  INFO main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:52: 这是第 2 次日志记录 iteration=2 timestamp=2025-06-25 10:39:28.636143200 UTC
+2025-06-25T10:39:30.638799Z  INFO main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:52: 这是第 3 次日志记录 iteration=3 timestamp=2025-06-25 10:39:30.638777600 UTC
+2025-06-25T10:39:30.638955Z  WARN main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:60: 这是一个警告日志 - 迭代 3 iteration=3
+2025-06-25T10:39:32.652670Z  INFO main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:52: 这是第 4 次日志记录 iteration=4 timestamp=2025-06-25 10:39:32.652648 UTC
+2025-06-25T10:39:34.668023Z  INFO main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:52: 这是第 5 次日志记录 iteration=5 timestamp=2025-06-25 10:39:34.668000100 UTC
+2025-06-25T10:39:34.668207Z ERROR main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:68: 这是一个错误日志 - 迭代 5 iteration=5 error_code="DEMO_ERROR"
+2025-06-25T10:39:36.680207Z  INFO main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:52: 这是第 6 次日志记录 iteration=6 timestamp=2025-06-25 10:39:36.680179700 UTC
+2025-06-25T10:39:36.680344Z  WARN main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:60: 这是一个警告日志 - 迭代 6 iteration=6
+2025-06-25T10:39:38.691568Z  INFO main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:52: 这是第 7 次日志记录 iteration=7 timestamp=2025-06-25 10:39:38.691542 UTC
+2025-06-25T10:39:38.691764Z DEBUG main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:77: 调试日志 - 迭代 7 iteration=7 debug_info="详细调试信息"
+2025-06-25T10:39:40.704939Z  INFO main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:52: 这是第 8 次日志记录 iteration=8 timestamp=2025-06-25 10:39:40.704909100 UTC
+2025-06-25T10:39:42.713209Z  INFO main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:52: 这是第 9 次日志记录 iteration=9 timestamp=2025-06-25 10:39:42.713182700 UTC
+2025-06-25T10:39:42.713334Z  WARN main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:60: 这是一个警告日志 - 迭代 9 iteration=9
+2025-06-25T10:39:44.724279Z  INFO main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:52: 这是第 10 次日志记录 iteration=10 timestamp=2025-06-25 10:39:44.724251800 UTC
+2025-06-25T10:39:44.724414Z ERROR main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:68: 这是一个错误日志 - 迭代 10 iteration=10 error_code="DEMO_ERROR"
+2025-06-25T10:39:46.754325Z  INFO main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:52: 这是第 11 次日志记录 iteration=11 timestamp=2025-06-25 10:39:46.754297800 UTC
+2025-06-25T10:39:48.761149Z  INFO main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:52: 这是第 12 次日志记录 iteration=12 timestamp=2025-06-25 10:39:48.761118700 UTC
+2025-06-25T10:39:48.761257Z  WARN main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:60: 这是一个警告日志 - 迭代 12 iteration=12
+2025-06-25T10:39:50.773553Z  INFO main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:52: 这是第 13 次日志记录 iteration=13 timestamp=2025-06-25 10:39:50.773531800 UTC
+2025-06-25T10:39:52.785748Z  INFO main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:52: 这是第 14 次日志记录 iteration=14 timestamp=2025-06-25 10:39:52.785721200 UTC
+2025-06-25T10:39:52.785897Z DEBUG main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:77: 调试日志 - 迭代 14 iteration=14 debug_info="详细调试信息"
+2025-06-25T10:39:54.788121Z  INFO main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:52: 这是第 15 次日志记录 iteration=15 timestamp=2025-06-25 10:39:54.788091 UTC
+2025-06-25T10:39:54.788245Z  WARN main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:60: 这是一个警告日志 - 迭代 15 iteration=15
+2025-06-25T10:39:54.788277Z ERROR main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:68: 这是一个错误日志 - 迭代 15 iteration=15 error_code="DEMO_ERROR"
+2025-06-25T10:39:56.799417Z  INFO main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:52: 这是第 16 次日志记录 iteration=16 timestamp=2025-06-25 10:39:56.799394500 UTC
+2025-06-25T10:39:58.801817Z  INFO main ThreadId(01) log_rotation_demo: examples\log_rotation_demo.rs:52: 这是第 17 次日志记录 iteration=17 timestamp=2025-06-25 10:39:58.801796 UTC

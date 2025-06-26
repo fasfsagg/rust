@@ -11,9 +11,9 @@ const { test, expect } = require('@playwright/test');
  * 4. 过期或无效的 token 无法建立连接
  */
 
-// 测试用户凭据
+// 测试用户凭据 - 使用时间戳确保唯一性
 const TEST_USER = {
-  username: 'testuser_ws',
+  username: `testuser_ws_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
   password: 'testpass123'
 };
 
@@ -35,13 +35,16 @@ test.describe('WebSocket 安全测试', () => {
     // WebSocket 连接按钮应该被禁用
     const wsConnectBtn = page.locator('#wsConnectBtn');
     await expect(wsConnectBtn).toBeDisabled();
-    
-    // 尝试点击连接按钮（虽然被禁用）
-    await wsConnectBtn.click({ force: true });
-    
+
+    // 由于按钮被禁用，我们需要直接调用JavaScript函数来测试错误消息
+    await page.evaluate(() => {
+      // 直接调用连接函数来触发错误消息
+      window.connectWebSocket();
+    });
+
     // 检查是否显示错误消息
     const wsMessages = page.locator('#webSocketMessages');
-    await expect(wsMessages).toContainText('请先登录后再连接WebSocket');
+    await expect(wsMessages).toContainText('错误: 请先登录后再连接WebSocket');
     
     // 确认 WebSocket 状态仍然是未连接
     const wsStatus = page.locator('#wsStatus');
@@ -96,7 +99,13 @@ test.describe('WebSocket 安全测试', () => {
     const wsDisconnectBtn = page.locator('#wsDisconnectBtn');
     await expect(wsDisconnectBtn).toBeEnabled();
     await wsDisconnectBtn.click();
-    
+
+    // 等待断开操作完成
+    await page.waitForTimeout(1000);
+
+    // 等待WebSocket状态变为"未连接"
+    await expect(wsStatus).toHaveText('未连接', { timeout: 10000 });
+
     // 12. 验证断开状态
     await expect(wsStatus).toHaveText('未连接');
     await expect(wsStatus).toHaveClass(/disconnected/);
@@ -106,9 +115,13 @@ test.describe('WebSocket 安全测试', () => {
     // 1. 注册并登录用户
     await registerUser(page, TEST_USER);
     await loginUser(page, TEST_USER);
-    
-    // 2. 建立 WebSocket 连接
+
+    // 2. 等待登录状态完全更新
+    await page.waitForTimeout(1000);
+
+    // 3. 建立 WebSocket 连接
     const wsConnectBtn = page.locator('#wsConnectBtn');
+    await expect(wsConnectBtn).toBeEnabled({ timeout: 10000 });
     await wsConnectBtn.click();
     await page.waitForTimeout(1000);
     
@@ -119,20 +132,37 @@ test.describe('WebSocket 安全测试', () => {
     // 4. 登出用户
     const logoutBtn = page.locator('#logoutBtn');
     await logoutBtn.click();
-    
+
+    // 等待登出操作完成
+    await page.waitForTimeout(2000);
+
     // 5. 验证登出状态
     const authStatus = page.locator('#authStatus');
     await expect(authStatus).toHaveText('未认证');
-    
+
     // 6. 验证 WebSocket 连接自动断开
     await expect(wsStatus).toHaveText('未连接');
     await expect(wsStatus).toHaveClass(/disconnected/);
-    
+
     // 7. 验证断开消息
     const wsMessages = page.locator('#webSocketMessages');
     await expect(wsMessages).toContainText('用户登出，WebSocket连接已断开');
-    
-    // 8. 验证连接按钮被禁用
+
+    // 8. 等待更长时间确保所有状态更新完成
+    await page.waitForTimeout(3000);
+
+    // 9. 检查JavaScript中的socket状态
+    const socketState = await page.evaluate(() => {
+      return {
+        socketExists: window.socket !== null,
+        socketState: window.socket ? window.socket.readyState : 'null',
+        authToken: window.authToken,
+        currentUser: window.currentUser
+      };
+    });
+    console.log('Socket状态:', socketState);
+
+    // 10. 验证连接按钮被禁用
     await expect(wsConnectBtn).toBeDisabled();
   });
 
@@ -163,26 +193,27 @@ test.describe('WebSocket 安全测试', () => {
 
 // 辅助函数：注册用户
 async function registerUser(page, user) {
-  // 切换到注册表单
-  const registerTab = page.locator('button:has-text("注册")');
+  // 切换到注册表单 - 使用更精确的选择器
+  const registerTab = page.locator('#registerTab');
   await registerTab.click();
-  
+
   // 填写注册表单
   await page.locator('#registerUsername').fill(user.username);
   await page.locator('#registerPassword').fill(user.password);
-  
+  await page.locator('#confirmPassword').fill(user.password);
+
   // 提交注册
   const registerBtn = page.locator('#registerForm button[type="submit"]');
   await registerBtn.click();
-  
-  // 等待注册完成
-  await page.waitForTimeout(1000);
+
+  // 等待注册完成 - 增加等待时间
+  await page.waitForTimeout(3000);
 }
 
 // 辅助函数：登录用户
 async function loginUser(page, user) {
-  // 切换到登录表单
-  const loginTab = page.locator('button:has-text("登录")');
+  // 切换到登录表单 - 使用更精确的选择器
+  const loginTab = page.locator('#loginTab');
   await loginTab.click();
   
   // 填写登录表单
@@ -192,7 +223,7 @@ async function loginUser(page, user) {
   // 提交登录
   const loginBtn = page.locator('#loginForm button[type="submit"]');
   await loginBtn.click();
-  
-  // 等待登录完成
-  await page.waitForTimeout(1000);
+
+  // 等待登录完成 - 增加等待时间
+  await page.waitForTimeout(3000);
 }

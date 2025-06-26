@@ -54,10 +54,20 @@ use crate::app::controller::{
     get_all_tasks, // 处理 GET /api/tasks
     get_task_by_id, // 处理 GET /api/tasks/:id
     update_task, // 处理 PUT /api/tasks/:id
+    get_online_users, // 【任务7实现】处理 GET /api/online-users
     ws_handler, // 处理 GET /ws
     // 认证相关处理函数
     login_handler, // 处理 POST /api/auth/login
     register_handler, // 处理 POST /api/auth/register
+    // 消息相关处理函数
+    search_messages, // 处理 GET /api/messages/search
+    get_chat_room_messages, // 处理 GET /api/messages/chat-room/:id
+    // 性能监控相关处理函数
+    get_performance_stats, // 处理 GET /api/performance/stats
+    health_check, // 处理 GET /api/performance/health
+    get_detailed_metrics, // 处理 GET /api/performance/metrics
+    // Favicon处理函数
+    favicon_handler, // 处理 GET /favicon.ico
 };
 // 导入在 `src/startup.rs` 中定义的唯一的共享应用状态 `AppState`。
 use crate::startup::AppState;
@@ -119,6 +129,16 @@ pub fn create_routes(app_state: AppState) -> Router {
         .route("/tasks/{id}", put(update_task))
         // 定义 DELETE /tasks/{id} 路由，映射到 delete_task 控制器函数。
         .route("/tasks/{id}", delete(delete_task))
+        // 【任务7实现】定义 GET /online-users 路由，映射到 get_online_users 控制器函数。
+        // 用于获取当前在线用户列表，支持聊天大厅的在线用户显示功能。
+        .route("/online-users", get(get_online_users))
+        // 【任务9实现】消息搜索和过滤路由
+        // 定义 GET /messages/search 路由，映射到 search_messages 控制器函数。
+        // 支持关键词搜索、高级过滤和分页，为企业级聊天应用提供强大的消息检索功能。
+        .route("/messages/search", get(search_messages))
+        // 定义 GET /messages/chat-room/{id} 路由，映射到 get_chat_room_messages 控制器函数。
+        // 获取特定聊天室的消息列表，支持过滤和分页功能。
+        .route("/messages/chat-room/{id}", get(get_chat_room_messages))
         // --- 应用JWT认证中间件到任务路由 ---
         // 使用 `.route_layer()` 将JWT认证中间件应用到所有上述任务路由
         // 这确保了只有携带有效JWT令牌的请求才能访问任务相关的API端点
@@ -144,9 +164,41 @@ pub fn create_routes(app_state: AppState) -> Router {
     // 创建认证相关的路由，包括用户注册和登录
     let auth_routes = auth_routes(app_state.clone());
 
+    // --- 创建性能监控路由（公开访问，无需认证）---
+    // 创建性能监控相关的路由，用于系统监控和健康检查
+    let performance_routes = Router::new()
+        // 【任务11.5实现】性能监控和指标日志路由
+        // 定义 GET /performance/stats 路由，映射到 get_performance_stats 控制器函数。
+        // 获取当前的性能统计信息，包括请求数、连接数、成功率等。
+        .route("/performance/stats", get(get_performance_stats))
+        // 定义 GET /performance/health 路由，映射到 health_check 控制器函数。
+        // 系统健康检查，包括数据库连接、内存使用等状态检查。
+        .route("/performance/health", get(health_check))
+        // 定义 GET /performance/metrics 路由，映射到 get_detailed_metrics 控制器函数。
+        // 获取详细的性能指标，包括系统信息和应用信息。
+        .route("/performance/metrics", get(get_detailed_metrics))
+        // 注入应用状态，使处理函数可以访问性能指标收集器等资源
+        .with_state(app_state.clone());
+
+    // --- 创建错误恢复监控路由（公开访问，无需认证）---
+    // 创建错误恢复相关的路由，用于监控错误恢复状态和统计
+    let error_recovery_routes = Router::new()
+        // 【任务11.7实现】错误恢复状态监控路由
+        // 定义 GET /error-recovery/status 路由，映射到 error_recovery_status_handler 控制器函数。
+        // 获取当前的错误恢复状态，包括重试统计、断路器状态、降级状态等。
+        .route(
+            "/error-recovery/status",
+            get(crate::app::middleware::error_recovery_middleware::error_recovery_status_handler)
+        )
+        // 注入应用状态，使处理函数可以访问错误恢复管理器等资源
+        .with_state(app_state.clone());
+
     // --- 组合所有路由 ---
     // 创建最终的根路由，并将上面定义的子路由和静态文件服务组合起来。
     Router::new()
+        // 【Favicon路由】：专门处理 /favicon.ico 请求，避免404错误
+        // 使用专门的路由处理器，确保在静态文件服务之前匹配
+        .route("/favicon.ico", get(favicon_handler))
         // `.nest("/api", api_routes)`: 将 `api_routes` 下定义的所有路由挂载到 `/api` 路径前缀下。
         // 例如，之前定义的 `/tasks` 会变成 `/api/tasks`。
         // 这有助于组织路由，将所有 API 相关端点归类。
@@ -154,6 +206,12 @@ pub fn create_routes(app_state: AppState) -> Router {
         // `.nest("/api/auth", auth_routes)`: 将认证路由挂载到 `/api/auth` 路径前缀下。
         // 例如，`/register` 会变成 `/api/auth/register`，`/login` 会变成 `/api/auth/login`。
         .nest("/api/auth", auth_routes)
+        // `.nest("/api", performance_routes)`: 将性能监控路由挂载到 `/api` 路径前缀下。
+        // 例如，`/performance/stats` 会变成 `/api/performance/stats`。
+        .nest("/api", performance_routes)
+        // `.nest("/api", error_recovery_routes)`: 将错误恢复监控路由挂载到 `/api` 路径前缀下。
+        // 例如，`/error-recovery/status` 会变成 `/api/error-recovery/status`。
+        .nest("/api", error_recovery_routes)
         // `.merge(ws_routes)`: 将 `ws_routes` 定义的路由合并到当前路由层级。
         // 这里 `/ws` 路由仍然是根路径下的 `/ws`。
         .merge(ws_routes)

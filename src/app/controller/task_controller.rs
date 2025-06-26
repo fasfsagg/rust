@@ -56,14 +56,21 @@ use axum::{
 };
 // 导入标准库的 ControlFlow，用于优雅地控制循环。
 use std::ops::ControlFlow;
+// 导入 futures_util 用于 WebSocket 流分割
+use futures_util::{ SinkExt, StreamExt };
+// 导入 tokio 同步原语
+use tokio::sync::mpsc;
+// 导入 UUID 生成
+use uuid::Uuid;
 
 // 导入模型层定义的载荷结构体。
 // 注意：`Task` DTO 已被移除，因为它在控制器层未被直接使用。
 use crate::app::model::task::{ CreateTaskPayload, UpdateTaskPayload };
 // 导入服务层模块。
 use crate::app::service;
+
 // 导入自定义错误类型和 Result 别名。
-use crate::error::Result;
+use crate::error::{ Result, InstrumentResult };
 use crate::startup::AppState;
 // 导入认证中间件的用户信息结构体
 use crate::app::middleware::auth_middleware::AuthenticatedUser;
@@ -274,6 +281,75 @@ pub async fn delete_task(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Handler: 获取在线用户列表 (GET /online-users)
+///
+/// 【功能】: 处理获取当前在线用户列表的 HTTP GET 请求。
+/// 【路由】: 绑定到 `GET /online-users`。
+/// 【认证】: 需要有效的JWT令牌。
+/// 【任务7实现】: 实现在线用户列表管理功能的核心API端点。
+///
+/// # 【参数】
+/// * `State(state): State<AppState>`: 注入共享状态以访问连接管理器。
+/// * `Extension(user): Extension<AuthenticatedUser>`: 从请求扩展中提取认证用户信息。
+///
+/// # 【返回值】
+/// * `-> Result<impl IntoResponse>`: 返回 `Result`。
+///    - 【成功路径】: `Ok((StatusCode::OK, Json<OnlineUsersResponse>))` - 返回 200 OK 和在线用户列表 JSON。
+///    - 【失败路径】: 处理潜在的连接管理器错误。
+///
+/// # 【响应格式】
+/// ```json
+/// {
+///   "online_users": [
+///     {
+///       "user_id": "uuid",
+///       "username": "string",
+///       "connected_at": "timestamp",
+///       "connection_count": number
+///     }
+///   ],
+///   "total_users": number,
+///   "total_connections": number,
+///   "timestamp": "timestamp"
+/// }
+/// ```
+pub async fn get_online_users(
+    State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>
+) -> Result<impl IntoResponse> {
+    println!(
+        "CONTROLLER: Received get online users request from user: {} (ID: {})",
+        user.username,
+        user.user_id
+    );
+
+    // 从连接管理器获取在线用户列表
+    let online_users = state.connection_manager.get_online_users().await;
+    let total_connections = state.connection_manager.get_connection_count().await;
+
+    // 将OnlineUser转换为UserInfo
+    let users: Vec<crate::app::model::UserInfo> = online_users
+        .into_iter()
+        .map(|online_user| online_user.into())
+        .collect();
+
+    // 构造响应数据
+    let response = crate::app::model::OnlineUsersResponse {
+        users,
+        total_count: total_connections,
+        timestamp: chrono::Utc::now(),
+    };
+
+    println!(
+        "CONTROLLER: Retrieved {} users with {} total connections for user: {}",
+        response.users.len(),
+        response.total_count,
+        user.username
+    );
+
+    Ok((StatusCode::OK, Json(response)))
+}
+
 /// Handler: WebSocket 处理器 (GET /ws) - 带身份验证
 ///
 /// 【功能】: 处理客户端发起的 WebSocket 握手请求，包含 JWT 身份验证。
@@ -320,31 +396,276 @@ pub async fn ws_handler(
     }
 }
 
-/// 处理单个 WebSocket 连接（已认证）
-async fn handle_socket(mut socket: WebSocket, _state: AppState, claims: crate::app::utils::Claims) {
+/// 处理单个 WebSocket 连接（已认证）- 使用连接管理器
+async fn handle_socket(socket: WebSocket, state: AppState, claims: crate::app::utils::Claims) {
     println!("WS: 已认证用户 {} (ID: {}) 建立 WebSocket 连接", claims.username, claims.sub);
 
-    // 发送欢迎消息
-    let welcome_msg = format!("欢迎, {}! 您已成功连接到 WebSocket。", claims.username);
-    if let Err(_) = socket.send(Message::Text(welcome_msg.into())).await {
-        println!("WS: 发送欢迎消息失败");
+    // 生成唯一的连接ID
+    let connection_id = Uuid::new_v4();
+
+    // 分割 WebSocket 为发送器和接收器
+    let (mut ws_sender, mut ws_receiver) = socket.split();
+
+    // 创建消息通道用于向此连接发送消息
+    let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
+
+    // 解析用户ID为UUID
+    let user_uuid = match parse_user_id(&claims.sub) {
+        Ok(uuid) => uuid,
+        Err(e) => {
+            println!("WS: 解析用户ID失败: {:?}", e);
+            return;
+        }
+    };
+
+    // 将连接添加到连接管理器
+    if
+        let Err(e) = state.connection_manager.add_connection(
+            connection_id,
+            user_uuid,
+            claims.username.clone(),
+            tx,
+            None // IP地址暂时为空，可以从请求头中提取
+        ).await
+    {
+        println!("WS: 添加连接到管理器失败: {}", e);
         return;
     }
 
-    // 处理消息循环
-    while let Some(msg) = socket.recv().await {
-        if let Ok(msg) = msg {
-            if process_message(msg, &claims) == ControlFlow::Break(()) {
+    // 使用消息分发器发送欢迎消息（结构化消息）
+    let welcome_content = format!("欢迎, {}! 您已成功连接到聊天大厅。", claims.username);
+    let welcome_msg = crate::app::model::ServerMessage::new_system(welcome_content);
+    if
+        let Err(e) = state.message_distributor.send_direct_message(
+            welcome_msg,
+            user_uuid,
+            Some(crate::app::service::MessagePriority::High)
+        ).await
+    {
+        println!("WS: 发送欢迎消息失败: {}", e);
+    }
+
+    // 使用通知服务发送用户加入通知
+    let user_info = crate::app::model::UserInfo {
+        user_id: user_uuid,
+        username: claims.username.clone(),
+        connected_at: Some(chrono::Utc::now()),
+    };
+    let join_event =
+        crate::app::service::notification_service::NotificationEvent::new_user_joined(user_info);
+    if let Err(e) = state.notification_service.handle_notification_event(join_event).await {
+        println!("WS: 处理用户加入通知事件失败: {}", e);
+    }
+
+    // 【任务10实现】使用状态同步服务更新用户在线状态
+    if
+        let Err(e) = state.status_sync_service.update_user_status(
+            user_uuid,
+            claims.username.clone(),
+            crate::app::service::UserOnlineStatus::Online
+        ).await
+    {
+        println!("WS: 更新用户在线状态失败: {}", e);
+    }
+
+    // 启动发送任务：从通道接收消息并发送到 WebSocket
+    let send_task = tokio::spawn(async move {
+        while let Some(message) = rx.recv().await {
+            if ws_sender.send(message).await.is_err() {
                 break;
             }
-        } else {
-            println!("WS: 用户 {} 断开连接", claims.username);
-            break;
+        }
+    });
+
+    // 启动接收任务：从 WebSocket 接收消息并处理
+    let connection_manager = state.connection_manager.clone();
+    let user_claims = claims.clone();
+    let state_for_recv = state.clone();
+    let recv_task = tokio::spawn(async move {
+        while let Some(msg_result) = ws_receiver.next().await {
+            match msg_result {
+                Ok(msg) => {
+                    // 更新最后活跃时间
+                    if let Err(e) = connection_manager.update_last_activity(&connection_id).await {
+                        println!("WS: 更新活跃时间失败: {}", e);
+                    }
+
+                    // 处理消息
+                    if
+                        let ControlFlow::Break(()) = process_message_with_broadcast(
+                            msg,
+                            &user_claims,
+                            &state_for_recv,
+                            &connection_id
+                        ).await
+                    {
+                        break;
+                    }
+                }
+                Err(_) => {
+                    println!("WS: 用户 {} 连接出错", user_claims.username);
+                    break;
+                }
+            }
+        }
+    });
+
+    // 等待任一任务完成（连接断开）
+    tokio::select! {
+        _ = send_task => {},
+        _ = recv_task => {},
+    }
+
+    // 清理：从连接管理器中移除连接
+    if
+        let Some(removed_connection) = state.connection_manager.remove_connection(
+            &connection_id
+        ).await
+    {
+        println!("WS: 用户 {} 连接已清理", removed_connection.username);
+
+        // 使用通知服务发送用户离开通知
+        let user_info = crate::app::model::UserInfo {
+            user_id: removed_connection.user_id,
+            username: removed_connection.username.clone(),
+            connected_at: Some(removed_connection.connected_at),
+        };
+        let leave_event =
+            crate::app::service::notification_service::NotificationEvent::new_user_left(user_info);
+        if let Err(e) = state.notification_service.handle_notification_event(leave_event).await {
+            println!("WS: 处理用户离开通知事件失败: {}", e);
+        }
+
+        // 【任务10实现】检查用户是否还有其他连接，如果没有则更新为离线状态
+        let remaining_connections = state.connection_manager
+            .get_online_users().await
+            .iter()
+            .find(|u| u.user_id == removed_connection.user_id)
+            .map(|u| u.connection_count)
+            .unwrap_or(0);
+
+        if remaining_connections == 0 {
+            // 用户完全离线，更新状态
+            if
+                let Err(e) = state.status_sync_service.update_user_status(
+                    removed_connection.user_id,
+                    removed_connection.username.clone(),
+                    crate::app::service::UserOnlineStatus::Offline
+                ).await
+            {
+                println!("WS: 更新用户离线状态失败: {}", e);
+            }
+
+            // 清理用户状态信息
+            if
+                let Err(e) = state.status_sync_service.cleanup_user_status(
+                    &removed_connection.user_id
+                ).await
+            {
+                println!("WS: 清理用户状态失败: {}", e);
+            }
         }
     }
 }
 
-/// 辅助函数：处理单个 WebSocket 消息（已认证）
+/// 辅助函数：处理单个 WebSocket 消息（已认证）- 带消息分发器支持
+async fn process_message_with_broadcast(
+    msg: Message,
+    claims: &crate::app::utils::Claims,
+    state: &AppState,
+    connection_id: &Uuid
+) -> ControlFlow<(), ()> {
+    use crate::app::model::{ ChatMessage, ServerMessage, UserInfo, ErrorResponse };
+
+    match msg {
+        Message::Text(text) => {
+            println!("WS: 用户 {} 发送文本消息: {}", claims.username, text);
+
+            // 尝试解析为结构化的聊天消息
+            match serde_json::from_str::<ChatMessage>(&text) {
+                Ok(chat_msg) => {
+                    // 处理结构化消息
+                    if
+                        let Err(e) = handle_structured_message(
+                            chat_msg,
+                            claims,
+                            state,
+                            connection_id
+                        ).await
+                    {
+                        println!("WS: 处理结构化消息失败: {}", e);
+
+                        // 发送错误响应给客户端
+                        let error_response = ErrorResponse {
+                            error_code: "MESSAGE_PROCESSING_ERROR".to_string(),
+                            error_message: "消息处理失败".to_string(),
+                            details: Some(e.clone()),
+                            timestamp: chrono::Utc::now(),
+                        };
+
+                        let error_msg = ServerMessage::new_error(error_response);
+                        // 使用消息分发器发送错误消息
+                        let _ = state.message_distributor.send_direct_message(
+                            error_msg,
+                            parse_user_id(&claims.sub).unwrap_or_else(|_| Uuid::new_v4()),
+                            Some(crate::app::service::MessagePriority::High)
+                        ).await;
+                    }
+                }
+                Err(_) => {
+                    // 如果不是JSON格式，当作普通文本消息处理
+                    let user_info = UserInfo {
+                        user_id: parse_user_id(&claims.sub).unwrap_or_else(|_| Uuid::new_v4()),
+                        username: claims.username.clone(),
+                        connected_at: Some(chrono::Utc::now()),
+                    };
+
+                    let server_msg = ServerMessage::new_text(text.to_string(), user_info);
+
+                    // 使用消息分发器广播消息给所有其他用户（排除发送者）
+                    if
+                        let Err(e) = state.message_distributor.broadcast_to_all(
+                            server_msg,
+                            true, // 排除发送者
+                            Some(*connection_id),
+                            Some(crate::app::service::MessagePriority::Normal)
+                        ).await
+                    {
+                        println!("WS: 广播消息失败: {}", e);
+                    }
+                }
+            }
+        }
+        Message::Binary(b) => {
+            println!("WS: 用户 {} 发送二进制消息: {:?}", claims.username, b);
+            // 二进制消息暂不广播
+        }
+        Message::Ping(p) => {
+            println!("WS: 用户 {} 发送 ping: {:?}", claims.username, p);
+            // Ping 消息不需要广播
+        }
+        Message::Pong(p) => {
+            println!("WS: 用户 {} 发送 pong: {:?}", claims.username, p);
+            // Pong 消息不需要广播
+        }
+        Message::Close(c) => {
+            if let Some(cf) = c {
+                println!(
+                    "WS: 用户 {} 关闭连接，代码: {} 原因: '{}'",
+                    claims.username,
+                    cf.code,
+                    cf.reason
+                );
+            } else {
+                println!("WS: 用户 {} 关闭连接", claims.username);
+            }
+            return ControlFlow::Break(());
+        }
+    }
+    ControlFlow::Continue(())
+}
+
+/// 辅助函数：处理单个 WebSocket 消息（已认证）- 旧版本，保留用于兼容性
 #[allow(dead_code)]
 fn process_message(msg: Message, claims: &crate::app::utils::Claims) -> ControlFlow<(), ()> {
     match msg {
@@ -375,4 +696,357 @@ fn process_message(msg: Message, claims: &crate::app::utils::Claims) -> ControlF
         }
     }
     ControlFlow::Continue(())
+}
+
+/// 处理结构化聊天消息
+///
+/// 【功能】: 根据消息类型处理不同的聊天消息
+/// 【参数】:
+/// * `chat_msg` - 解析后的聊天消息
+/// * `claims` - 用户认证信息
+/// * `state` - 应用状态（包含连接管理器和消息分发器）
+/// * `connection_id` - 当前连接ID
+///
+/// 【返回值】: Result<(), String> - 成功返回 Ok(())，失败返回错误信息
+async fn handle_structured_message(
+    chat_msg: crate::app::model::ChatMessage,
+    claims: &crate::app::utils::Claims,
+    state: &AppState,
+    connection_id: &Uuid
+) -> std::result::Result<(), String> {
+    use crate::app::model::{ MessageType, ServerMessage, UserInfo, OnlineUsersResponse };
+
+    let user_info = UserInfo {
+        user_id: parse_user_id(&claims.sub).map_err(|e| format!("解析用户ID失败: {:?}", e))?,
+        username: claims.username.clone(),
+        connected_at: Some(chrono::Utc::now()),
+    };
+
+    match chat_msg.message_type {
+        MessageType::Text => {
+            // 处理文本消息
+            let server_msg = ServerMessage::new_text(chat_msg.content, user_info);
+
+            // 使用消息分发器广播消息给所有其他用户（排除发送者）
+            state.message_distributor
+                .broadcast_to_all(
+                    server_msg,
+                    true, // 排除发送者
+                    Some(*connection_id),
+                    Some(crate::app::service::MessagePriority::Normal)
+                ).await
+                .map_err(|e| format!("广播文本消息失败: {}", e))?;
+        }
+        MessageType::GetOnlineUsers => {
+            // 处理获取在线用户列表请求
+            let online_users = state.connection_manager.get_online_users().await;
+            let users_info: Vec<UserInfo> = online_users
+                .into_iter()
+                .map(|u| u.into())
+                .collect();
+
+            let response = OnlineUsersResponse {
+                users: users_info,
+                total_count: state.connection_manager.get_unique_user_count().await,
+                timestamp: chrono::Utc::now(),
+            };
+
+            let server_msg = ServerMessage::new_online_users_list(response);
+
+            // 使用消息分发器只发送给请求者
+            state.message_distributor
+                .send_direct_message(
+                    server_msg,
+                    user_info.user_id,
+                    Some(crate::app::service::MessagePriority::Normal)
+                ).await
+                .map_err(|e| format!("发送在线用户列表失败: {}", e))?;
+        }
+        MessageType::Ping => {
+            // 处理心跳消息
+            let pong_msg = ServerMessage::new_pong();
+
+            // 使用消息分发器只发送给发送者
+            state.message_distributor
+                .send_direct_message(
+                    pong_msg,
+                    user_info.user_id,
+                    Some(crate::app::service::MessagePriority::High) // 心跳响应优先级高
+                ).await
+                .map_err(|e| format!("发送心跳响应失败: {}", e))?;
+        }
+        MessageType::MessageRead => {
+            // 【任务10实现】处理消息已读通知
+            let message_id = Uuid::parse_str(&chat_msg.content).map_err(|e|
+                format!("解析消息ID失败: {}", e)
+            )?;
+
+            // 使用状态同步服务更新消息状态
+            if
+                let Err(e) = state.status_sync_service.update_message_status(
+                    message_id,
+                    user_info.user_id,
+                    crate::app::service::MessageReadStatus::Read
+                ).await
+            {
+                println!("WS: 更新消息已读状态失败: {}", e);
+                return Err(format!("更新消息已读状态失败: {}", e));
+            }
+
+            println!("WS: 用户 {} 标记消息 {} 为已读", user_info.username, message_id);
+        }
+        _ => {
+            // 其他消息类型暂不支持
+            return Err(format!("不支持的消息类型: {:?}", chat_msg.message_type));
+        }
+    }
+
+    Ok(())
+}
+
+/// 示例控制器：展示增强的错误跟踪功能
+///
+/// 【功能】：演示如何在控制器层使用 tracing-error 进行错误上下文跟踪
+/// 【路由】：GET /tasks/:id/enhanced - 获取任务（带增强错误跟踪）
+///
+/// # 参数
+/// * `State(state)` - 应用程序状态
+/// * `Extension(user)` - 认证用户信息
+/// * `Path(id_str)` - 任务ID字符串
+///
+/// # 返回值
+/// * `Result<impl IntoResponse>` - 包含详细错误跟踪信息的响应
+#[tracing::instrument(skip(state), fields(user_id = %user.user_id, task_id = %id_str))]
+pub async fn get_task_with_enhanced_tracking(
+    State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
+    Path(id_str): Path<String>
+) -> Result<impl IntoResponse> {
+    tracing::info!(
+        user_id = %user.user_id,
+        username = %user.username,
+        task_id = %id_str,
+        "开始处理增强错误跟踪的任务获取请求"
+    );
+
+    // 使用 InstrumentResult trait 自动捕获 span 上下文
+    let task_id = Uuid::parse_str(&id_str).in_current_span(StatusCode::BAD_REQUEST)?;
+    let user_uuid = Uuid::parse_str(&user.user_id).in_current_span(StatusCode::BAD_REQUEST)?;
+
+    // 调用增强的服务函数
+    let task = service::task_service::get_task_with_enhanced_error_tracking(
+        state.task_repo.clone(),
+        task_id,
+        user_uuid
+    ).await?;
+
+    tracing::info!(
+        user_id = %user.user_id,
+        task_id = %task_id,
+        task_title = %task.title,
+        "成功获取任务（增强错误跟踪）"
+    );
+
+    Ok((StatusCode::OK, Json(task)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::middleware::auth_middleware::AuthenticatedUser;
+    use crate::app::service::connection_manager::ConnectionManager;
+    use crate::app::service::message_distributor::MessageDistributor;
+    use crate::app::service::notification_service::NotificationService;
+    use crate::app::repository::task_repository::TaskRepository;
+    use crate::startup::AppState;
+    use axum::{ Extension, extract::State };
+    use chrono::Utc;
+    use std::sync::Arc;
+    use tokio::sync::mpsc;
+    use uuid::Uuid;
+
+    /// 创建测试用的AppState
+    /// 注意：这个函数创建一个简化的测试状态，用于单元测试
+    async fn create_test_app_state() -> AppState {
+        let connection_manager = Arc::new(ConnectionManager::new());
+        let message_distributor = Arc::new(
+            MessageDistributor::new(
+                connection_manager.clone(),
+                Some(10), // 小批量用于测试
+                Some(1) // 单线程用于测试
+            )
+        );
+        let notification_service = Arc::new(
+            NotificationService::new(connection_manager.clone(), message_distributor.clone())
+        );
+        let status_sync_service = Arc::new(
+            crate::app::service::StatusSyncService::new(
+                connection_manager.clone(),
+                message_distributor.clone()
+            )
+        );
+
+        // 创建一个内存数据库连接（用于测试）
+        let db_connection = sea_orm::Database
+            ::connect("sqlite::memory:").await
+            .expect("Failed to create test database");
+
+        // 创建性能监控配置
+        let performance_config = crate::app::middleware::PerformanceConfig {
+            enable_detailed_logging: false,
+            enable_system_monitoring: false,
+            system_monitoring_interval: 30,
+            enable_prometheus_metrics: false,
+            slow_request_threshold_ms: 1000,
+            log_request_headers: false,
+            max_concurrent_connections_warning: 1000,
+        };
+        let performance_metrics =
+            crate::app::middleware::create_performance_monitoring_layer(performance_config);
+
+        // 创建错误恢复状态
+        let error_recovery_manager = crate::app::utils::ErrorRecoveryManager::with_default_config();
+        let error_recovery_state =
+            crate::app::middleware::error_recovery_middleware::ErrorRecoveryState::new(
+                error_recovery_manager
+            );
+
+        AppState {
+            task_repo: Arc::new(TaskRepository::new(db_connection.clone())),
+            db: db_connection,
+            jwt_secret: "test_secret".to_string(),
+            connection_manager,
+            message_distributor,
+            notification_service,
+            status_sync_service,
+            performance_metrics,
+            error_recovery_state,
+        }
+    }
+
+    /// 创建测试用的认证用户
+    fn create_test_user() -> AuthenticatedUser {
+        AuthenticatedUser {
+            user_id: Uuid::new_v4().to_string(),
+            username: "test_user".to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_online_users_empty_list() {
+        // 测试空的在线用户列表
+        let app_state = create_test_app_state().await;
+        let user = create_test_user();
+
+        let result = get_online_users(State(app_state), Extension(user)).await;
+
+        assert!(result.is_ok());
+        // 注意：由于返回类型是 impl IntoResponse，我们无法直接访问字段
+        // 这里只验证函数调用成功
+    }
+
+    #[tokio::test]
+    async fn test_get_online_users_with_connections() {
+        // 测试有连接的在线用户列表
+        let app_state = create_test_app_state().await;
+        let user = create_test_user();
+
+        // 添加一些测试连接
+        let (sender1, _receiver1) = mpsc::unbounded_channel();
+        let (sender2, _receiver2) = mpsc::unbounded_channel();
+
+        let user_id1 = Uuid::new_v4();
+        let user_id2 = Uuid::new_v4();
+
+        app_state.connection_manager
+            .add_connection(
+                Uuid::new_v4(),
+                user_id1,
+                "user1".to_string(),
+                sender1,
+                Some("127.0.0.1".to_string())
+            ).await
+            .unwrap();
+
+        app_state.connection_manager
+            .add_connection(
+                Uuid::new_v4(),
+                user_id2,
+                "user2".to_string(),
+                sender2,
+                Some("127.0.0.2".to_string())
+            ).await
+            .unwrap();
+
+        let result = get_online_users(State(app_state.clone()), Extension(user)).await;
+
+        assert!(result.is_ok());
+
+        // 验证连接数
+        assert_eq!(app_state.connection_manager.get_connection_count().await, 2);
+        assert_eq!(app_state.connection_manager.get_unique_user_count().await, 2);
+    }
+
+    #[tokio::test]
+    async fn test_handle_structured_message_get_online_users() {
+        // 测试WebSocket结构化消息处理 - 获取在线用户列表
+        let app_state = create_test_app_state().await;
+        let now = Utc::now();
+        let claims = crate::app::utils::Claims {
+            sub: Uuid::new_v4().to_string(),
+            username: "test_user".to_string(),
+            exp: (now + chrono::Duration::hours(1)).timestamp(),
+            iat: now.timestamp(),
+        };
+        let connection_id = Uuid::new_v4();
+
+        // 创建获取在线用户的消息
+        let chat_msg = crate::app::model::ChatMessage::new_get_online_users();
+
+        let result = handle_structured_message(chat_msg, &claims, &app_state, &connection_id).await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_handle_structured_message_ping() {
+        // 测试WebSocket结构化消息处理 - 心跳消息
+        let app_state = create_test_app_state().await;
+        let now = Utc::now();
+        let claims = crate::app::utils::Claims {
+            sub: Uuid::new_v4().to_string(),
+            username: "test_user".to_string(),
+            exp: (now + chrono::Duration::hours(1)).timestamp(),
+            iat: now.timestamp(),
+        };
+        let connection_id = Uuid::new_v4();
+
+        // 创建心跳消息
+        let chat_msg = crate::app::model::ChatMessage::new_ping();
+
+        let result = handle_structured_message(chat_msg, &claims, &app_state, &connection_id).await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_handle_structured_message_text() {
+        // 测试WebSocket结构化消息处理 - 文本消息
+        let app_state = create_test_app_state().await;
+        let now = Utc::now();
+        let claims = crate::app::utils::Claims {
+            sub: Uuid::new_v4().to_string(),
+            username: "test_user".to_string(),
+            exp: (now + chrono::Duration::hours(1)).timestamp(),
+            iat: now.timestamp(),
+        };
+        let connection_id = Uuid::new_v4();
+
+        // 创建文本消息
+        let chat_msg = crate::app::model::ChatMessage::new_text("Hello, World!".to_string());
+
+        let result = handle_structured_message(chat_msg, &claims, &app_state, &connection_id).await;
+
+        assert!(result.is_ok());
+    }
 }

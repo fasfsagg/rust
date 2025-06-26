@@ -26,6 +26,11 @@ use axum::{
     response::Response,
 };
 use crate::app::utils::{ Claims, JwtUtils, AuthService };
+use crate::app::middleware::security_audit::{
+    log_authentication_success,
+    log_authentication_failure,
+    log_token_validation,
+};
 
 // Claims 结构体现在从 utils 模块导入，避免重复定义
 
@@ -95,12 +100,57 @@ async fn jwt_auth_impl(
 ) -> Result<Response, StatusCode> {
     println!("AUTH_MIDDLEWARE: 开始验证 JWT 令牌");
 
+    // 提取客户端信息用于安全审计
+    let headers = req.headers();
+    let client_ip = extract_client_ip_from_headers(headers);
+    let user_agent = headers.get("user-agent").and_then(|h| h.to_str().ok());
+
     // 使用统一的 AuthService 进行认证
     let auth_service = AuthService::new(jwt_secret);
     let claims = match auth_service.authenticate_http_request(req.headers()) {
-        Ok(claims) => claims,
+        Ok(claims) => {
+            // 记录令牌验证成功事件
+            log_token_validation(
+                true,
+                Some(&claims.sub),
+                Some(&claims.username),
+                None,
+                client_ip.as_deref(),
+                user_agent
+            );
+
+            // 记录认证成功事件
+            log_authentication_success(
+                &claims.sub,
+                &claims.username,
+                client_ip.as_deref(),
+                user_agent
+            );
+
+            claims
+        }
         Err(err) => {
             println!("AUTH_MIDDLEWARE: JWT 验证失败: {:?}", err);
+
+            // 记录令牌验证失败事件
+            let failure_reason = format!("{:?}", err);
+            log_token_validation(
+                false,
+                None,
+                None,
+                Some(&failure_reason),
+                client_ip.as_deref(),
+                user_agent
+            );
+
+            // 记录认证失败事件
+            log_authentication_failure(
+                None, // 无法从失败的令牌中获取用户名
+                &failure_reason,
+                client_ip.as_deref(),
+                user_agent
+            );
+
             return Err(StatusCode::UNAUTHORIZED);
         }
     };
@@ -117,6 +167,45 @@ async fn jwt_auth_impl(
 
     // 调用下一个中间件或处理器
     Ok(next.run(req).await)
+}
+
+/// 从HTTP头部提取客户端IP地址
+///
+/// 【功能】：尝试从多个可能的HTTP头部中提取真实的客户端IP地址
+/// 优先级：X-Forwarded-For > X-Real-IP > X-Client-IP
+///
+/// # 参数
+/// * `headers` - HTTP请求头部
+///
+/// # 返回值
+/// * `Option<String>` - 客户端IP地址（如果找到）
+fn extract_client_ip_from_headers(headers: &HeaderMap) -> Option<String> {
+    // 尝试从 X-Forwarded-For 头部获取（最常见的代理头部）
+    if let Some(forwarded_for) = headers.get("x-forwarded-for") {
+        if let Ok(forwarded_str) = forwarded_for.to_str() {
+            // X-Forwarded-For 可能包含多个IP，取第一个
+            if let Some(first_ip) = forwarded_str.split(',').next() {
+                return Some(first_ip.trim().to_string());
+            }
+        }
+    }
+
+    // 尝试从 X-Real-IP 头部获取
+    if let Some(real_ip) = headers.get("x-real-ip") {
+        if let Ok(ip_str) = real_ip.to_str() {
+            return Some(ip_str.to_string());
+        }
+    }
+
+    // 尝试从 X-Client-IP 头部获取
+    if let Some(client_ip) = headers.get("x-client-ip") {
+        if let Ok(ip_str) = client_ip.to_str() {
+            return Some(ip_str.to_string());
+        }
+    }
+
+    // 如果都没有找到，返回None
+    None
 }
 
 // --- WebSocket JWT 认证相关功能 ---

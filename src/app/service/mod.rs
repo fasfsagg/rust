@@ -49,6 +49,30 @@ pub mod task_service;
 // 【可见性】: `pub` 使得 `auth_service` 模块本身可以被外部访问。
 pub mod auth_service;
 
+// `pub mod connection_manager;`
+// 【作用】: 声明存在一个名为 `connection_manager` 的公共子模块。
+// 【查找规则】: Rust 编译器会查找 `src/app/service/connection_manager.rs` 文件。
+// 【可见性】: `pub` 使得 `connection_manager` 模块本身可以被外部访问。
+pub mod connection_manager;
+
+// `pub mod message_distributor;`
+// 【作用】: 声明存在一个名为 `message_distributor` 的公共子模块。
+// 【查找规则】: Rust 编译器会查找 `src/app/service/message_distributor.rs` 文件。
+// 【可见性】: `pub` 使得 `message_distributor` 模块本身可以被外部访问。
+pub mod message_distributor;
+
+// `pub mod notification_service;`
+// 【作用】: 声明存在一个名为 `notification_service` 的公共子模块。
+// 【查找规则】: Rust 编译器会查找 `src/app/service/notification_service.rs` 文件。
+// 【可见性】: `pub` 使得 `notification_service` 模块本身可以被外部访问。
+pub mod notification_service;
+
+// `pub mod status_sync_service;`
+// 【作用】: 声明存在一个名为 `status_sync_service` 的公共子模块。
+// 【查找规则】: Rust 编译器会查找 `src/app/service/status_sync_service.rs` 文件。
+// 【可见性】: `pub` 使得 `status_sync_service` 模块本身可以被外部访问。
+pub mod status_sync_service;
+
 // --- 重新导出公共项 ---
 // `pub use task_service::*;`
 // 【作用】: 将 `task_service` 模块中所有 `pub` 的项（主要是服务函数）引入到当前的 `service` 模块作用域，并使它们也成为 `pub`。
@@ -60,3 +84,23 @@ pub use task_service::*;
 // 【作用】: 将 `auth_service` 模块中所有 `pub` 的项（主要是服务函数）引入到当前的 `service` 模块作用域，并使它们也成为 `pub`。
 // 【效果】: 简化 Controller 层及其他调用者的导入和调用路径。
 pub use auth_service::*;
+
+// `pub use connection_manager::*;`
+// 【作用】: 将 `connection_manager` 模块中所有 `pub` 的项（主要是连接管理器结构体和方法）引入到当前的 `service` 模块作用域，并使它们也成为 `pub`。
+// 【效果】: 简化 Controller 层及其他调用者的导入和调用路径。
+pub use connection_manager::*;
+
+// `pub use message_distributor::*;`
+// 【作用】: 将 `message_distributor` 模块中所有 `pub` 的项（主要是消息分发器结构体和方法）引入到当前的 `service` 模块作用域，并使它们也成为 `pub`。
+// 【效果】: 简化 Controller 层及其他调用者的导入和调用路径。
+pub use message_distributor::*;
+
+// `pub use notification_service::*;`
+// 【作用】: 将 `notification_service` 模块中所有 `pub` 的项（主要是通知服务结构体和方法）引入到当前的 `service` 模块作用域，并使它们也成为 `pub`。
+// 【效果】: 简化 Controller 层及其他调用者的导入和调用路径。
+pub use notification_service::*;
+
+// `pub use status_sync_service::*;`
+// 【作用】: 将 `status_sync_service` 模块中所有 `pub` 的项（主要是状态同步服务结构体和方法）引入到当前的 `service` 模块作用域，并使它们也成为 `pub`。
+// 【效果】: 简化 Controller 层及其他调用者的导入和调用路径。
+pub use status_sync_service::*;

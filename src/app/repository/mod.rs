@@ -8,10 +8,15 @@
 //! - **封装数据源**: 隐藏底层数据存储（如 SeaORM、SQL、NoSQL）的实现细节。
 //! - **提供清晰的 API**: 为服务层提供面向领域的、与数据相关的接口。
 
+pub mod message_repository;
 pub mod task_repository;
 pub mod user_repository;
 
+#[cfg(test)]
+mod test_message_repository;
+
 // 重新导出 Repository 以便上层模块（主要是 service）可以更方便地使用。
-// 使用 `crate::app::repository::TaskRepository` 而不是 `...::task_repository::TaskRepository`
+// 使用 `crate::app::repository::MessageRepository` 而不是 `...::message_repository::MessageRepository`
+pub use message_repository::MessageRepository;
 pub use task_repository::TaskRepository;
 pub use user_repository::UserRepository;

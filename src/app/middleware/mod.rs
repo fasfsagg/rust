@@ -13,6 +13,22 @@ pub mod logger;
 // JWT 认证中间件模块
 pub mod auth_middleware;
 
+// 声明error_handling子模块
+// 全局错误处理中间件模块
+pub mod error_handling;
+
+// 声明error_recovery_middleware子模块
+// 错误恢复机制中间件模块
+pub mod error_recovery_middleware;
+
+// 声明performance_monitor子模块
+// 性能监控和指标收集中间件模块
+pub mod performance_monitor;
+
+// 声明security_audit子模块
+// 安全审计日志中间件模块
+pub mod security_audit;
+
 // 重新导出logger模块中的所有公共项
 // 这样，其他模块可以通过 `use crate::app::middleware::setup_logger` 直接访问函数，
 // 而不需要 `use crate::app::middleware::logger::setup_logger`。
@@ -20,3 +36,15 @@ pub use logger::*;
 
 // 重新导出auth_middleware模块中的所有公共项
 pub use auth_middleware::*;
+
+// 重新导出error_handling模块中的所有公共项
+pub use error_handling::*;
+
+// 重新导出error_recovery_middleware模块中的所有公共项
+pub use error_recovery_middleware::*;
+
+// 重新导出performance_monitor模块中的所有公共项
+pub use performance_monitor::*;
+
+// 重新导出security_audit模块中的所有公共项
+pub use security_audit::*;

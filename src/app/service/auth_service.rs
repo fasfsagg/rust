@@ -96,10 +96,13 @@ pub async fn register_user(
         .to_string();
 
     // 3. 创建新用户的 ActiveModel
+    let now = chrono::Utc::now();
     let new_user = ActiveModel {
         id: ActiveValue::Set(Uuid::new_v4()),
         username: ActiveValue::Set(payload.username.clone()),
         password_hash: ActiveValue::Set(password_hash),
+        created_at: ActiveValue::Set(now),
+        updated_at: ActiveValue::Set(now),
     };
 
     // 4. 保存到数据库
@@ -220,6 +223,8 @@ mod tests {
             id,
             username: username.to_string(),
             password_hash: password_hash.to_string(),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
         }
     }
 

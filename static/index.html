@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Axum 任务管理系统</title>
+    <!-- 添加favicon，使用简单的data URI避免404错误 -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='16'>🚀</text></svg>" type="image/svg+xml">
     <style>
         body {
             font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
@@ -279,6 +281,71 @@
         .hidden {
             display: none !important;
         }
+
+        /* 认证标签样式 */
+        .auth-tabs {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .auth-tab-btn {
+            padding: 8px 20px;
+            border: 1px solid #ddd;
+            background-color: #f8f9fa;
+            color: #333;
+            cursor: pointer;
+            border-radius: 4px 4px 0 0;
+            font-size: 0.9em;
+            transition: all 0.2s ease;
+        }
+
+        .auth-tab-btn:hover {
+            background-color: #e9ecef;
+        }
+
+        .auth-tab-btn.active {
+            background-color: #3498db;
+            color: white;
+            border-color: #3498db;
+        }
+
+        /* 聊天消息样式 */
+        .chat-message {
+            margin-bottom: 8px;
+            padding: 6px 10px;
+            border-radius: 6px;
+            line-height: 1.4;
+        }
+
+        .chat-message.own-message {
+            background-color: #e3f2fd;
+            border-left: 3px solid #2196f3;
+        }
+
+        .chat-message.other-message {
+            background-color: #f5f5f5;
+            border-left: 3px solid #4caf50;
+        }
+
+        .chat-message.system-message {
+            background-color: #fff3e0;
+            border-left: 3px solid #ff9800;
+            font-style: italic;
+        }
+
+        .chat-message .sender {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .chat-message .content {
+            color: #34495e;
+        }
+
+        .chat-message .system-text {
+            color: #e67e22;
+        }
     </style>
 </head>
 <body>
@@ -299,8 +366,14 @@
 
         <!-- 认证表单区域 -->
         <div class="auth-forms" id="authForms">
+            <!-- 标签切换按钮 -->
+            <div class="auth-tabs" style="margin-bottom: 15px;">
+                <button type="button" id="loginTab" class="auth-tab-btn active">登录</button>
+                <button type="button" id="registerTab" class="auth-tab-btn">注册</button>
+            </div>
+
             <!-- 登录表单 -->
-            <div class="auth-form">
+            <div class="auth-form" id="loginFormContainer">
                 <h4>用户登录</h4>
                 <form id="loginForm">
                     <input type="text" id="loginUsername" placeholder="用户名" required>
@@ -311,7 +384,7 @@
             </div>
 
             <!-- 注册表单 -->
-            <div class="auth-form">
+            <div class="auth-form hidden" id="registerFormContainer">
                 <h4>用户注册</h4>
                 <form id="registerForm">
                     <input type="text" id="registerUsername" placeholder="用户名" required>
@@ -478,6 +551,10 @@
             document.getElementById('createTaskForm').addEventListener('submit', handleCreateTask);
             document.getElementById('refreshTasksBtn').addEventListener('click', fetchTasks);
 
+            // 认证标签切换事件
+            document.getElementById('loginTab').addEventListener('click', () => switchAuthTab('login'));
+            document.getElementById('registerTab').addEventListener('click', () => switchAuthTab('register'));
+
             // WebSocket 事件
             document.getElementById('wsConnectBtn').addEventListener('click', connectWebSocket);
             document.getElementById('wsDisconnectBtn').addEventListener('click', disconnectWebSocket);
@@ -495,6 +572,10 @@
                 // 初始化UI为未登录状态
                 updateAuthUI();
             }
+
+            // 强制初始化WebSocket状态（页面刷新后socket变量会重置为null）
+            socket = null;
+            updateWebSocketStatus(false);
         });
 
         // ==== 简化的API调用函数 ====
@@ -649,6 +730,26 @@
             const element = document.getElementById(elementId);
             element.innerHTML = `<div class="auth-message ${type}">${message}</div>`;
             setTimeout(() => element.innerHTML = '', 3000);
+        }
+
+        // ==== 认证标签切换函数 ====
+        function switchAuthTab(tab) {
+            const loginTab = document.getElementById('loginTab');
+            const registerTab = document.getElementById('registerTab');
+            const loginContainer = document.getElementById('loginFormContainer');
+            const registerContainer = document.getElementById('registerFormContainer');
+
+            if (tab === 'login') {
+                loginTab.classList.add('active');
+                registerTab.classList.remove('active');
+                loginContainer.classList.remove('hidden');
+                registerContainer.classList.add('hidden');
+            } else if (tab === 'register') {
+                loginTab.classList.remove('active');
+                registerTab.classList.add('active');
+                loginContainer.classList.add('hidden');
+                registerContainer.classList.remove('hidden');
+            }
         }
 
         // ==== 任务管理函数 ====
@@ -998,17 +1099,47 @@
                 };
 
                 socket.onmessage = (event) => {
+                    // 记录原始消息到日志
                     logWebSocketMessage(`收到: ${event.data}`);
+
+                    // 尝试解析为JSON格式的聊天消息
+                    try {
+                        const message = JSON.parse(event.data);
+                        // 显示为格式化的聊天消息
+                        displayChatMessage(message);
+                    } catch (error) {
+                        // 如果不是JSON格式，当作普通文本消息显示
+                        const simpleMessage = {
+                            message_type: 'Text',
+                            content: event.data,
+                            sender: { username: '服务器' },
+                            timestamp: new Date().toISOString(),
+                            is_own_message: false
+                        };
+                        displayChatMessage(simpleMessage);
+                    }
                 };
 
                 socket.onclose = (event) => {
+                    console.log('WebSocket onclose事件触发，事件代码:', event.code);
+
+                    // 如果socket已经被设置为null，说明是用户主动断开，已经处理过了
+                    if (socket === null) {
+                        console.log('socket已为null，跳过onclose处理');
+                        return;
+                    }
+
                     updateWebSocketStatus(false);
+
                     if (event.code === 1006) {
+                        // 1006错误，可能是认证失败或网络问题
                         logWebSocketMessage('WebSocket连接被拒绝：可能是认证失败');
                     } else {
                         logWebSocketMessage('WebSocket连接已关闭');
                     }
+
                     socket = null;
+                    console.log('socket设置为null');
                 };
 
                 socket.onerror = (error) => {
@@ -1020,9 +1151,27 @@
             }
         }
 
+        // 添加标志来跟踪是否是用户主动断开连接
+        let isUserDisconnecting = false;
+
         function disconnectWebSocket() {
-            if (socket === null) return;
+            console.log('disconnectWebSocket 函数被调用');
+            console.log('当前socket状态:', socket);
+            if (socket === null) {
+                console.log('socket为null，直接返回');
+                return;
+            }
+            console.log('调用socket.close()');
+            isUserDisconnecting = true; // 设置标志表示用户主动断开
             socket.close();
+            console.log('socket.close()调用完成');
+
+            // 立即更新UI状态，不等待onclose事件
+            updateWebSocketStatus(false);
+            logWebSocketMessage('WebSocket连接已断开');
+            socket = null;
+            isUserDisconnecting = false; // 重置标志
+            console.log('socket设置为null，UI状态已更新');
         }
 
         function sendWebSocketMessage(event) {
@@ -1038,8 +1187,28 @@
 
             if (!message) return;
 
+            // 发送消息到服务器
             socket.send(message);
+
+            // 在本地显示发送的消息（模拟聊天室体验）
             logWebSocketMessage(`发送: ${message}`);
+
+            // 同时显示为聊天消息格式（带发送者标识）
+            const timestamp = new Date().toISOString();
+            const chatMessage = {
+                message_type: 'Text',
+                content: message,
+                sender: {
+                    username: currentUser ? currentUser.username : '我',
+                    user_id: currentUser ? currentUser.id : 'self'
+                },
+                timestamp: timestamp,
+                is_own_message: true // 标记为自己发送的消息
+            };
+
+            // 显示为聊天消息
+            displayChatMessage(chatMessage);
+
             messageInput.value = '';
         }
 
@@ -1058,7 +1227,8 @@
             } else {
                 statusElem.textContent = '未连接';
                 statusElem.className = 'disconnected';
-                connectBtn.disabled = false;
+                // 只有在用户已登录时才启用连接按钮
+                connectBtn.disabled = !authToken;
                 disconnectBtn.disabled = true;
                 sendBtn.disabled = true;
             }
@@ -1069,6 +1239,42 @@
             const timestamp = new Date().toLocaleTimeString();
             const messageElem = document.createElement('div');
             messageElem.innerHTML = `<span class="timestamp">[${timestamp}]</span> ${message}`;
+            messagesElem.appendChild(messageElem);
+            messagesElem.scrollTop = messagesElem.scrollHeight;
+        }
+
+        /**
+         * 显示聊天消息（格式化显示）
+         * @param {Object} message - 聊天消息对象
+         */
+        function displayChatMessage(message) {
+            const messagesElem = document.getElementById('webSocketMessages');
+            const messageElem = document.createElement('div');
+            messageElem.className = 'chat-message';
+
+            // 根据消息类型设置样式
+            if (message.is_own_message) {
+                messageElem.classList.add('own-message');
+            } else if (message.message_type === 'System') {
+                messageElem.classList.add('system-message');
+            } else {
+                messageElem.classList.add('other-message');
+            }
+
+            // 格式化时间戳
+            const timestamp = new Date(message.timestamp).toLocaleTimeString();
+
+            // 构建消息内容
+            let messageContent = '';
+            if (message.message_type === 'System') {
+                messageContent = `<span class="timestamp">[${timestamp}]</span> <span class="system-text">${message.content}</span>`;
+            } else {
+                const senderName = message.sender ? message.sender.username : '未知用户';
+                const ownLabel = message.is_own_message ? ' (我)' : '';
+                messageContent = `<span class="timestamp">[${timestamp}]</span> <span class="sender">${senderName}${ownLabel}:</span> <span class="content">${message.content}</span>`;
+            }
+
+            messageElem.innerHTML = messageContent;
             messagesElem.appendChild(messageElem);
             messagesElem.scrollTop = messagesElem.scrollHeight;
         }

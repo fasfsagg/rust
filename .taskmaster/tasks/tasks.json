@@ -1,0 +1,277 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Setup Project Repository",
+        "description": "Initialize the project repository for the Axum chat system upgrade.",
+        "details": "Create a new Git repository for the project. Set up the initial directory structure, including folders for src, tests, and docs. Initialize a README.md file with project overview and setup instructions.",
+        "testStrategy": "Verify repository creation and structure by cloning it and checking the directory layout.",
+        "priority": "medium",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 2,
+        "title": "Create Database Models and Migrations",
+        "description": "Define the data models and database migrations for the chat application.",
+        "details": "Use SeaORM to define the data models for messages, users, and sessions. Create migration scripts to set up the SQLite/PostgreSQL database schema.",
+        "testStrategy": "Run migrations and verify the database schema matches the defined models.",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 3,
+        "title": "Implement Connection Manager",
+        "description": "Develop a connection manager to handle user connections and disconnections.",
+        "details": "Create a ConnectionManager struct that manages user connections using Arc<RwLock<T>> for thread safety. Implement methods for adding, removing, and notifying users of connection status changes.",
+        "testStrategy": "Simulate user connections and disconnections, and verify the connection manager updates the user list correctly.",
+        "priority": "high",
+        "dependencies": [
+          2
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 4,
+        "title": "Extend WebSocket Handler",
+        "description": "Enhance the existing WebSocket handler to support chat functionalities.",
+        "details": "Modify the existing task_controller.rs to add chat-related message handling. Implement methods for upgrading WebSocket connections and managing chat sessions.",
+        "testStrategy": "Test WebSocket connections to ensure they can send and receive messages correctly.",
+        "priority": "high",
+        "dependencies": [
+          3
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 5,
+        "title": "Implement Message Distributor",
+        "description": "Create a service to handle message broadcasting and distribution.",
+        "details": "Develop a MessageDistributor service that uses tokio::sync::broadcast to send messages to all connected users. Ensure it can handle message queuing and backpressure.",
+        "testStrategy": "Send test messages and verify that all connected clients receive them in real-time.",
+        "priority": "high",
+        "dependencies": [
+          4
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 6,
+        "title": "Develop User Notification Mechanism",
+        "description": "Implement a system to notify users when others join or leave the chat.",
+        "details": "Add functionality to the ConnectionManager to broadcast notifications to all users when someone joins or leaves the chat. Use the MessageDistributor for this purpose.",
+        "testStrategy": "Test user join/leave scenarios and ensure notifications are sent to all users.",
+        "priority": "medium",
+        "dependencies": [
+          5
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 7,
+        "title": "Implement Online User List Management",
+        "description": "Create a system to maintain and display the list of online users.",
+        "details": "Extend the ConnectionManager to maintain a list of online users. Implement a method to retrieve this list for display in the chat interface.",
+        "testStrategy": "Verify that the online user list updates correctly as users connect and disconnect.",
+        "priority": "medium",
+        "dependencies": [
+          6
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 8,
+        "title": "Integrate Message History Storage",
+        "description": "Set up a system to store and query chat message history.",
+        "details": "Use SeaORM to implement a MessageRepository for storing chat messages. Ensure it supports efficient retrieval and pagination of message history.",
+        "testStrategy": "Test storing and retrieving messages to ensure they are correctly saved and can be queried.",
+        "priority": "high",
+        "dependencies": [
+          7
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 9,
+        "title": "Implement Message Search and Filtering",
+        "description": "Add functionality to search and filter chat messages based on criteria.",
+        "details": "Enhance the MessageRepository to support searching messages by keywords and filtering by date range. Implement pagination for results.",
+        "testStrategy": "Test search and filtering functionality to ensure it returns the correct results.",
+        "priority": "medium",
+        "dependencies": [
+          8
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 10,
+        "title": "Develop Real-time Status Synchronization",
+        "description": "Implement a system to synchronize user and message statuses in real-time.",
+        "details": "Create a status synchronization mechanism that updates user online status and message read/unread status using WebSocket messages.",
+        "testStrategy": "Simulate multiple users reading messages and verify that their statuses update in real-time for all clients.",
+        "priority": "medium",
+        "dependencies": [
+          9
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 11,
+        "title": "Implement Error Handling and Logging",
+        "description": "Add comprehensive error handling and logging throughout the application.",
+        "details": "Implement a centralized error handling strategy and logging mechanism using a logging library. Ensure all errors are logged appropriately.",
+        "testStrategy": "Trigger various errors during testing and verify that they are logged correctly.",
+        "priority": "medium",
+        "dependencies": [
+          10
+        ],
+        "status": "in-progress",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "增强错误处理中间件",
+            "description": "基于Axum 0.8.4 HandleErrorLayer实现全局错误处理中间件，包括超时处理、请求验证错误和自定义错误映射",
+            "details": "实现HandleErrorLayer中间件来捕获和处理各种错误类型，确保所有错误都能正确转换为HTTP响应",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          },
+          {
+            "id": 2,
+            "title": "实现结构化日志记录",
+            "description": "使用tracing-subscriber配置结构化日志，支持JSON格式输出、字段过滤和多层级日志记录",
+            "details": "配置tracing-subscriber支持JSON格式、时间戳、请求ID跟踪和环境变量控制的日志级别",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          },
+          {
+            "id": 3,
+            "title": "添加错误跟踪和上下文",
+            "description": "集成tracing-error库实现SpanTrace错误上下文跟踪，提供详细的错误调用链信息",
+            "details": "使用tracing-error的SpanTrace和ErrorSubscriber来捕获错误发生时的span上下文",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          },
+          {
+            "id": 4,
+            "title": "实现日志文件轮转和管理",
+            "description": "使用tracing-appender实现日志文件的自动轮转、归档和清理机制",
+            "details": "配置按时间或大小轮转的日志文件，支持压缩归档和自动清理旧日志",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          },
+          {
+            "id": 5,
+            "title": "添加性能监控和指标日志",
+            "description": "实现请求延迟、吞吐量、内存使用等性能指标的监控和日志记录",
+            "details": "使用tracing的instrument宏和自定义指标收集器来监控关键性能指标",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          },
+          {
+            "id": 6,
+            "title": "实现安全审计日志",
+            "description": "添加安全相关事件的审计日志，包括认证失败、权限检查、敏感操作等",
+            "details": "创建专门的安全审计日志记录器，记录所有安全相关的事件和操作",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          },
+          {
+            "id": 7,
+            "title": "实现错误恢复机制",
+            "description": "添加自动错误恢复、重试逻辑和降级处理机制",
+            "details": "实现指数退避重试、断路器模式和优雅降级来处理临时性错误",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          },
+          {
+            "id": 8,
+            "title": "添加全面的测试覆盖",
+            "description": "为错误处理和日志记录功能编写单元测试和集成测试",
+            "details": "使用tracing-test和mockall创建测试，验证错误处理、日志记录和恢复机制的正确性",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "Set Up Monitoring and Health Checks",
+        "description": "Implement monitoring and health check endpoints for the chat system.",
+        "details": "Create health check endpoints that return the status of the chat system. Integrate monitoring tools to track performance metrics.",
+        "testStrategy": "Access health check endpoints and verify they return the correct status information.",
+        "priority": "medium",
+        "dependencies": [
+          11
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 13,
+        "title": "Conduct Performance Optimization",
+        "description": "Optimize the application for performance and memory management.",
+        "details": "Analyze performance bottlenecks and implement optimizations such as connection pooling, message batching, and zero-copy techniques.",
+        "testStrategy": "Run performance tests to measure improvements in response times and resource usage.",
+        "priority": "high",
+        "dependencies": [
+          12
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 14,
+        "title": "Implement Comprehensive Testing Framework",
+        "description": "Set up a testing framework to ensure code quality and coverage.",
+        "details": "Implement unit tests, integration tests, and end-to-end tests to cover all core functionalities. Aim for at least 95% test coverage.",
+        "testStrategy": "Run the test suite and ensure all tests pass with the desired coverage percentage.",
+        "priority": "high",
+        "dependencies": [
+          13
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 15,
+        "title": "Prepare Documentation and Deployment Plan",
+        "description": "Create documentation for the API and deployment instructions for the chat system.",
+        "details": "Document the API endpoints, usage instructions, and deployment steps. Ensure the documentation is clear and accessible.",
+        "testStrategy": "Review documentation for completeness and clarity, and conduct a dry run of the deployment process.",
+        "priority": "medium",
+        "dependencies": [
+          14
+        ],
+        "status": "pending",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "created": "2025-06-24T04:59:11.792Z",
+      "updated": "2025-06-26T12:25:49.221Z",
+      "description": "Tasks for master context"
+    }
+  }
+}

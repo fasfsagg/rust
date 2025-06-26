@@ -80,7 +80,7 @@
 // 导入模型层定义的结构体：任务 DTO `Task`，以及用于创建和更新的载荷。
 use crate::app::model::task::{ CreateTaskPayload, Task, UpdateTaskPayload };
 // 导入自定义的 `Result` 类型别名，用于统一函数返回值。
-use crate::error::{ AppError, Result };
+use crate::error::{ AppError, Result, InstrumentResult };
 // 导入仓库层 Trait 和具体实现
 use crate::app::repository::task_repository::TaskRepositoryContract;
 // 导入 SeaORM 相关模块和数据库实体
@@ -235,6 +235,75 @@ pub async fn delete_task<T>(repo: Arc<T>, id: Uuid, user_id: Uuid) -> Result<()>
     }
 }
 
+/// 示例函数：展示如何使用 SpanTrace 进行错误跟踪
+///
+/// 【功能】：演示在复杂业务逻辑中如何使用 tracing-error 进行错误上下文跟踪
+///
+/// # 参数
+/// * `repo` - 任务仓库实例
+/// * `task_id` - 任务ID
+/// * `user_id` - 用户ID
+///
+/// # 返回值
+/// * `Result<Task>` - 包含详细错误跟踪信息的结果
+#[tracing::instrument(skip(repo), fields(task_id = %task_id, user_id = %user_id))]
+pub async fn get_task_with_enhanced_error_tracking<R>(
+    repo: Arc<R>,
+    task_id: Uuid,
+    user_id: Uuid
+) -> Result<Task>
+    where R: TaskRepositoryContract + Send + Sync
+{
+    // 使用 InstrumentResult trait 自动捕获 span 上下文
+    let task = repo
+        .find_by_id(task_id).await
+        .in_current_span(axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    match task {
+        Some(task_entity) => {
+            // 验证用户权限（示例业务逻辑）
+            if task_entity.user_id != Some(user_id) {
+                // 使用 AppError::with_span_trace 创建带有上下文的错误
+                return Err(
+                    AppError::with_span_trace(
+                        format!("用户 {} 无权访问任务 {}", user_id, task_id),
+                        axum::http::StatusCode::FORBIDDEN
+                    )
+                );
+            }
+
+            tracing::info!(
+                task_id = %task_id,
+                user_id = %user_id,
+                task_title = %task_entity.title,
+                "Successfully retrieved task with enhanced error tracking"
+            );
+
+            // 将 task_entity::Model 转换为 Task
+            let task = Task {
+                id: task_entity.id,
+                title: task_entity.title,
+                description: task_entity.description,
+                completed: task_entity.completed,
+                user_id: task_entity.user_id,
+                created_at: task_entity.created_at,
+                updated_at: task_entity.updated_at,
+            };
+
+            Ok(task)
+        }
+        None => {
+            // 使用 AppError::with_span_trace 创建带有上下文的错误
+            Err(
+                AppError::with_span_trace(
+                    format!("未找到ID为 {} 的任务", task_id),
+                    axum::http::StatusCode::NOT_FOUND
+                )
+            )
+        }
+    }
+}
+
 // --- 单元测试 ---
 #[cfg(test)]
 mod tests {
@@ -255,6 +324,12 @@ mod tests {
         find_by_id_result: Mutex<Option<std::result::Result<Option<task_entity::Model>, DbErr>>>,
         update_result: Mutex<Option<std::result::Result<task_entity::Model, DbErr>>>,
         delete_result: Mutex<Option<std::result::Result<DeleteResult, DbErr>>>,
+    }
+
+    impl MockTaskRepository {
+        fn new() -> Self {
+            Self::default()
+        }
     }
 
     // 2. 为模拟仓库实现 `TaskRepositoryContract` Trait
@@ -437,6 +512,96 @@ mod tests {
         match result.err().unwrap() {
             AppError::TaskNotFound(id) => assert_eq!(id, task_id),
             _ => panic!("Expected TaskNotFound error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_enhanced_error_tracking_success() {
+        // --- 准备 (Arrange) ---
+        let task_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+
+        let task_entity = task_entity::Model {
+            id: task_id,
+            title: "测试任务".to_string(),
+            description: Some("测试描述".to_string()),
+            completed: false,
+            user_id: Some(user_id),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+
+        let mut mock_repo = MockTaskRepository::new();
+        mock_repo.find_by_id_result = Mutex::new(Some(Ok(Some(task_entity))));
+        let repo = Arc::new(mock_repo);
+
+        // --- 执行 (Act) ---
+        let result = get_task_with_enhanced_error_tracking(repo, task_id, user_id).await;
+
+        // --- 断言 (Assert) ---
+        assert!(result.is_ok());
+        let task = result.unwrap();
+        assert_eq!(task.id, task_id);
+        assert_eq!(task.title, "测试任务");
+        assert_eq!(task.user_id, Some(user_id));
+    }
+
+    #[tokio::test]
+    async fn test_enhanced_error_tracking_permission_denied() {
+        // --- 准备 (Arrange) ---
+        let task_id = Uuid::new_v4();
+        let task_owner_id = Uuid::new_v4();
+        let requesting_user_id = Uuid::new_v4(); // 不同的用户ID
+
+        let task_entity = task_entity::Model {
+            id: task_id,
+            title: "测试任务".to_string(),
+            description: Some("测试描述".to_string()),
+            completed: false,
+            user_id: Some(task_owner_id), // 任务属于另一个用户
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+
+        let mut mock_repo = MockTaskRepository::new();
+        mock_repo.find_by_id_result = Mutex::new(Some(Ok(Some(task_entity))));
+        let repo = Arc::new(mock_repo);
+
+        // --- 执行 (Act) ---
+        let result = get_task_with_enhanced_error_tracking(repo, task_id, requesting_user_id).await;
+
+        // --- 断言 (Assert) ---
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            AppError::TracedError { message, status_code, .. } => {
+                assert!(message.contains("无权访问任务"));
+                assert_eq!(status_code, axum::http::StatusCode::FORBIDDEN);
+            }
+            _ => panic!("Expected TracedError with FORBIDDEN status"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_enhanced_error_tracking_task_not_found() {
+        // --- 准备 (Arrange) ---
+        let task_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+
+        let mut mock_repo = MockTaskRepository::new();
+        mock_repo.find_by_id_result = Mutex::new(Some(Ok(None))); // 任务不存在
+        let repo = Arc::new(mock_repo);
+
+        // --- 执行 (Act) ---
+        let result = get_task_with_enhanced_error_tracking(repo, task_id, user_id).await;
+
+        // --- 断言 (Assert) ---
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            AppError::TracedError { message, status_code, .. } => {
+                assert!(message.contains("未找到ID为"));
+                assert_eq!(status_code, axum::http::StatusCode::NOT_FOUND);
+            }
+            _ => panic!("Expected TracedError with NOT_FOUND status"),
         }
     }
 }

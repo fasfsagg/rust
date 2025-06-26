@@ -2,29 +2,34 @@
 //!
 //! 提供统一的 UUID 解析和验证功能，避免在控制器中重复相同的逻辑。
 
-use crate::error::{AppError, Result};
+use crate::error::{ AppError, Result };
 use sea_orm::prelude::Uuid;
 
 /// 解析字符串为 UUID
 ///
 /// 这个函数提供了统一的 UUID 解析逻辑，包含详细的错误处理。
-/// 
+///
 /// # 参数
 /// * `uuid_str` - 要解析的 UUID 字符串
-/// 
+///
 /// # 返回值
 /// * `Ok(Uuid)` - 解析成功时返回 UUID
 /// * `Err(AppError)` - 解析失败时返回应用错误
-/// 
+///
 /// # 示例
 /// ```rust
-/// use crate::app::utils::parse_uuid_string;
-/// 
+/// use axum_tutorial::app::utils::uuid_utils::parse_uuid_string;
+/// use axum_tutorial::error::AppError;
+///
+/// # fn main() -> Result<(), AppError> {
 /// let uuid = parse_uuid_string("550e8400-e29b-41d4-a716-446655440000")?;
+/// assert!(uuid.to_string().len() > 0);
+/// # Ok(())
+/// # }
 /// ```
 pub fn parse_uuid_string(uuid_str: &str) -> Result<Uuid> {
     tracing::debug!(uuid_str = %uuid_str, "开始解析 UUID 字符串");
-    
+
     Uuid::parse_str(uuid_str).map_err(|_| {
         tracing::warn!(uuid_str = %uuid_str, "UUID 解析失败，格式无效");
         AppError::BadRequest(format!("无效的 UUID 格式: {}", uuid_str))
@@ -34,16 +39,16 @@ pub fn parse_uuid_string(uuid_str: &str) -> Result<Uuid> {
 /// 解析用户ID字符串为 UUID
 ///
 /// 专门用于解析用户ID的函数，提供更具体的错误信息。
-/// 
+///
 /// # 参数
 /// * `user_id_str` - 用户ID字符串
-/// 
+///
 /// # 返回值
 /// * `Ok(Uuid)` - 解析成功时返回用户 UUID
 /// * `Err(AppError)` - 解析失败时返回应用错误
 pub fn parse_user_id(user_id_str: &str) -> Result<Uuid> {
     tracing::debug!(user_id = %user_id_str, "开始解析用户ID");
-    
+
     Uuid::parse_str(user_id_str).map_err(|_| {
         tracing::warn!(user_id = %user_id_str, "用户ID解析失败，格式无效");
         AppError::BadRequest(format!("无效的用户ID格式: {}", user_id_str))
@@ -53,10 +58,10 @@ pub fn parse_user_id(user_id_str: &str) -> Result<Uuid> {
 /// 验证 UUID 是否有效
 ///
 /// 检查给定的字符串是否为有效的 UUID 格式，但不进行解析。
-/// 
+///
 /// # 参数
 /// * `uuid_str` - 要验证的 UUID 字符串
-/// 
+///
 /// # 返回值
 /// * `true` - UUID 格式有效
 /// * `false` - UUID 格式无效

@@ -47,6 +47,12 @@ pub mod task_controller;
 // 声明认证控制器模块
 pub mod auth_controller;
 
+// 声明消息控制器模块
+pub mod message_controller;
+
+// 声明性能监控控制器模块
+pub mod performance_controller;
+
 // --- 重新导出公共项 ---
 // `pub use task_controller::*;`
 // 【作用】: 将 `task_controller` 模块中所有 `pub` 的项（主要是 Handler 函数）引入到当前的 `controller` 模块作用域，并使它们也成为 `pub`。
@@ -56,3 +62,9 @@ pub use task_controller::*;
 
 // 重新导出认证控制器的公共项
 pub use auth_controller::*;
+
+// 重新导出消息控制器的公共项
+pub use message_controller::*;
+
+// 重新导出性能监控控制器的公共项
+pub use performance_controller::*;

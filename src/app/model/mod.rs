@@ -65,6 +65,7 @@
 pub mod task;
 pub mod user_entity;
 pub mod auth;
+pub mod chat;
 
 // --- 重新导出公共项 ---
 // `pub use task::*;`
@@ -74,3 +75,4 @@ pub mod auth;
 // 【`*` 通配符】: 表示导出 `task` 模块内的所有公共项。有时为了更清晰，也会选择性地重新导出，例如 `pub use task::{Task, CreateTaskPayload};`。[[关键语法要素: pub, use, * (glob)]]
 pub use task::*;
 pub use auth::*;
+pub use chat::*;

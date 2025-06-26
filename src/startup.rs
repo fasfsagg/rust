@@ -43,7 +43,16 @@ use std::sync::Arc;
 
 // --- 导入项目内部模块 ---
 use crate::app::middleware; // 中间件模块 (日志等)
+use crate::app::middleware::security_audit::security_audit_middleware; // 安全审计中间件
+use crate::app::middleware::error_recovery_middleware::ErrorRecoveryState; // 错误恢复中间件状态
 use crate::app::repository::task_repository::TaskRepository; // 导入仓库
+use crate::app::service::{
+    ConnectionManager,
+    MessageDistributor,
+    NotificationService,
+    StatusSyncService,
+}; // 导入连接管理器、消息分发器、通知服务和状态同步服务
+use crate::app::utils::ErrorRecoveryManager; // 错误恢复管理器
 use crate::config::AppConfig; // 应用配置结构体
 use crate::routes; // 路由定义模块
 
@@ -59,6 +68,12 @@ pub struct AppState {
     pub task_repo: Arc<TaskRepository>, // 任务仓库的具体实现
     pub db: DatabaseConnection, // 数据库连接，用于创建其他仓库实例
     pub jwt_secret: String, // JWT 签名密钥
+    pub connection_manager: Arc<ConnectionManager>, // WebSocket 连接管理器
+    pub message_distributor: Arc<MessageDistributor>, // 消息分发器
+    pub notification_service: Arc<NotificationService>, // 用户通知服务
+    pub status_sync_service: Arc<StatusSyncService>, // 状态同步服务
+    pub performance_metrics: Arc<middleware::PerformanceMetrics>, // 性能指标收集器
+    pub error_recovery_state: ErrorRecoveryState, // 错误恢复状态
 }
 
 // --- 初始化函数 ---
@@ -99,19 +114,81 @@ pub async fn init_app(config: AppConfig) -> Result<(Router, DatabaseConnection)>
     // --- 步骤 3: 创建仓库和应用状态 ---
     // 创建仓库实例
     let task_repo = Arc::new(TaskRepository::new(db_connection.clone()));
-    // 创建应用状态，包含任务仓库、数据库连接和 JWT 密钥
+    // 创建连接管理器实例
+    let connection_manager = Arc::new(ConnectionManager::new());
+    // 创建消息分发器实例
+    let message_distributor = Arc::new(
+        MessageDistributor::new(
+            connection_manager.clone(),
+            Some(100), // 批量处理大小
+            Some(4) // 工作线程数量
+        )
+    );
+    // 创建通知服务实例
+    let notification_service = Arc::new(
+        NotificationService::new(connection_manager.clone(), message_distributor.clone())
+    );
+    // 创建状态同步服务实例
+    let status_sync_service = Arc::new(
+        StatusSyncService::new(connection_manager.clone(), message_distributor.clone())
+    );
+    // 创建性能监控中间件
+    let performance_config = middleware::PerformanceConfig {
+        enable_detailed_logging: true,
+        enable_system_monitoring: true,
+        system_monitoring_interval: 30,
+        enable_prometheus_metrics: false, // 暂时禁用Prometheus以简化初始实现
+        slow_request_threshold_ms: 1000,
+        log_request_headers: false,
+        max_concurrent_connections_warning: 1000,
+    };
+    let performance_metrics = middleware::create_performance_monitoring_layer(performance_config);
+
+    // 创建错误恢复管理器
+    let error_recovery_manager = ErrorRecoveryManager::with_default_config();
+    let error_recovery_state = ErrorRecoveryState::new(error_recovery_manager);
+
+    // 创建应用状态，包含任务仓库、数据库连接、JWT 密钥、连接管理器、消息分发器、通知服务、状态同步服务、性能指标和错误恢复状态
     let app_state = AppState {
         task_repo,
         db: db_connection.clone(), // 添加数据库连接到应用状态
         jwt_secret: config.jwt_secret.clone(), // 添加 JWT 密钥到应用状态
+        connection_manager, // 添加连接管理器到应用状态
+        message_distributor, // 添加消息分发器到应用状态
+        notification_service, // 添加通知服务到应用状态
+        status_sync_service, // 添加状态同步服务到应用状态
+        performance_metrics: performance_metrics.clone(), // 克隆性能指标收集器到应用状态
+        error_recovery_state: error_recovery_state.clone(), // 克隆错误恢复状态到应用状态
     };
     println!("STARTUP: 应用共享状态 (AppState) 创建完成。");
+
+    // --- 步骤 3.5: 启动消息分发器工作线程 ---
+    let _worker_handles = app_state.message_distributor.start_workers();
+    println!("STARTUP: 消息分发器工作线程已启动。");
 
     // --- 步骤 4: 构建中间件栈 ---
     let middleware_stack = ServiceBuilder::new()
         .layer(middleware::trace_layer())
-        .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any));
-    println!("STARTUP: 中间件栈构建完成 (Trace, CORS)。");
+        .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
+        // 添加安全审计中间件 - 记录所有HTTP请求的安全相关信息
+        .layer(axum::middleware::from_fn(security_audit_middleware))
+        // 添加性能监控中间件 - 使用 from_fn_with_state
+        .layer(
+            axum::middleware::from_fn_with_state(
+                performance_metrics.clone(),
+                middleware::performance_monitoring_middleware
+            )
+        )
+        // 添加错误恢复中间件 - 提供自动重试、断路器和降级处理
+        .layer(
+            axum::middleware::from_fn_with_state(
+                app_state.clone(),
+                middleware::error_recovery_middleware::error_recovery_middleware
+            )
+        );
+    println!(
+        "STARTUP: 中间件栈构建完成 (Trace, CORS, Security Audit, Performance, Error Recovery)。"
+    );
 
     // --- 步骤 5: 创建应用路由并应用中间件 ---
     let app = routes::create_routes(app_state.clone()).layer(middleware_stack);
