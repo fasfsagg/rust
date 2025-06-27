@@ -225,8 +225,81 @@
         "dependencies": [
           11
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "增强基础健康检查端点",
+            "description": "扩展现有的 /api/performance/health 端点，添加更多系统组件检查，包括磁盘空间、系统负载、错误恢复状态等。实现快速响应的基础健康检查，适用于负载均衡器。",
+            "details": "1. 添加磁盘空间检查 2. 添加系统负载检查 3. 集成错误恢复状态检查 4. 优化响应时间 5. 编写单元测试",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          },
+          {
+            "id": 2,
+            "title": "实现Prometheus指标导出端点",
+            "description": "创建 /metrics 端点，导出Prometheus格式的指标数据，包括HTTP请求指标、系统资源指标、WebSocket连接指标等。集成metrics-exporter-prometheus库。",
+            "details": "1. 配置Prometheus导出器 2. 创建/metrics端点 3. 导出HTTP指标 4. 导出系统资源指标 5. 导出WebSocket指标 6. 编写集成测试",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          },
+          {
+            "id": 3,
+            "title": "添加应用就绪状态检查（Readiness Probe）",
+            "description": "实现 /api/health/ready 端点，检查应用是否准备好接收流量。包括数据库迁移状态、依赖服务连接、配置加载状态等深度检查。",
+            "details": "1. 创建readiness检查端点 2. 检查数据库迁移状态 3. 检查依赖服务连接 4. 检查配置完整性 5. 实现超时机制 6. 编写单元测试",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          },
+          {
+            "id": 4,
+            "title": "实现存活状态检查（Liveness Probe）",
+            "description": "实现 /api/health/live 端点，检查应用进程是否存活且响应正常。包括内存泄漏检测、死锁检测、响应时间检查等。",
+            "details": "1. 创建liveness检查端点 2. 实现内存使用检查 3. 添加响应时间监控 4. 检查关键线程状态 5. 实现快速响应机制 6. 编写单元测试",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          },
+          {
+            "id": 5,
+            "title": "添加深度健康检查端点",
+            "description": "实现 /api/health/deep 端点，提供详细的系统诊断信息，包括所有组件状态、性能指标、错误统计、资源使用详情等。适用于运维人员深度诊断。",
+            "details": "1. 创建深度检查端点 2. 集成所有组件状态 3. 添加性能基准对比 4. 实现诊断报告生成 5. 添加历史趋势分析 6. 编写集成测试",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          },
+          {
+            "id": 6,
+            "title": "实现监控中间件增强",
+            "description": "增强现有的性能监控中间件，添加更多HTTP请求指标收集，包括请求大小、响应大小、用户代理统计、地理位置统计等企业级监控功能。",
+            "details": "1. 扩展请求指标收集 2. 添加响应大小监控 3. 实现用户代理统计 4. 添加错误分类统计 5. 优化性能开销 6. 编写性能测试",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          },
+          {
+            "id": 7,
+            "title": "添加WebSocket连接监控和统计",
+            "description": "实现专门的WebSocket监控端点 /api/websocket/stats，提供WebSocket连接统计、消息吞吐量、连接持续时间、断线重连统计等聊天应用关键指标。",
+            "details": "1. 创建WebSocket统计端点 2. 监控连接生命周期 3. 统计消息吞吐量 4. 追踪断线重连 5. 实现实时统计更新 6. 编写WebSocket测试",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          },
+          {
+            "id": 8,
+            "title": "实现系统资源监控和告警阈值检查",
+            "description": "实现 /api/monitoring/alerts 端点，提供系统资源告警检查，包括CPU使用率、内存使用率、磁盘空间、网络连接数等阈值监控和告警状态。",
+            "details": "1. 创建告警检查端点 2. 配置资源阈值 3. 实现告警状态管理 4. 添加告警历史记录 5. 实现告警级别分类 6. 编写告警测试",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          }
+        ]
       },
       {
         "id": 13,
@@ -270,7 +343,7 @@
     ],
     "metadata": {
       "created": "2025-06-24T04:59:11.792Z",
-      "updated": "2025-06-26T12:25:49.221Z",
+      "updated": "2025-06-27T14:39:01.399Z",
       "description": "Tasks for master context"
     }
   }

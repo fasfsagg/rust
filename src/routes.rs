@@ -66,8 +66,18 @@ use crate::app::controller::{
     get_performance_stats, // 处理 GET /api/performance/stats
     health_check, // 处理 GET /api/performance/health
     get_detailed_metrics, // 处理 GET /api/performance/metrics
+    get_prometheus_metrics, // 处理 GET /api/performance/prometheus
+    readiness_check, // 处理 GET /api/performance/ready
+    liveness_check, // 处理 GET /api/performance/live
+    deep_health_check, // 处理 GET /api/health/deep
     // Favicon处理函数
     favicon_handler, // 处理 GET /favicon.ico
+    // 【任务12.7实现】WebSocket监控相关处理函数
+    get_websocket_stats, // 处理 GET /api/websocket/stats
+    get_websocket_connections, // 处理 GET /api/websocket/connections
+    get_websocket_metrics, // 处理 GET /api/websocket/metrics
+    // 【任务12.8实现】系统资源监控和告警阈值检查处理函数
+    get_system_alerts, // 处理 GET /api/monitoring/alerts
 };
 // 导入在 `src/startup.rs` 中定义的唯一的共享应用状态 `AppState`。
 use crate::startup::AppState;
@@ -177,7 +187,27 @@ pub fn create_routes(app_state: AppState) -> Router {
         // 定义 GET /performance/metrics 路由，映射到 get_detailed_metrics 控制器函数。
         // 获取详细的性能指标，包括系统信息和应用信息。
         .route("/performance/metrics", get(get_detailed_metrics))
+        // 定义 GET /performance/prometheus 路由，映射到 get_prometheus_metrics 控制器函数。
+        // 导出Prometheus格式的指标，用于监控系统集成。
+        .route("/performance/prometheus", get(get_prometheus_metrics))
+        // 定义 GET /performance/ready 路由，映射到 readiness_check 控制器函数。
+        // 应用就绪状态检查，用于Kubernetes等容器编排系统的就绪探针。
+        .route("/performance/ready", get(readiness_check))
+        // 定义 GET /performance/live 路由，映射到 liveness_check 控制器函数。
+        // 应用存活状态检查，用于Kubernetes等容器编排系统的存活探针。
+        .route("/performance/live", get(liveness_check))
         // 注入应用状态，使处理函数可以访问性能指标收集器等资源
+        .with_state(app_state.clone());
+
+    // --- 创建健康检查路由（公开访问，无需认证）---
+    // 创建专门的健康检查路由，提供不同级别的健康检查服务
+    let health_routes = Router::new()
+        // 【任务12.5实现】深度健康检查路由
+        // 定义 GET /health/deep 路由，映射到 deep_health_check 控制器函数。
+        // 提供最详细的系统诊断信息，包括性能基准对比、历史趋势分析、错误统计等。
+        // 适用于运维人员深度诊断系统问题。
+        .route("/health/deep", get(deep_health_check))
+        // 注入应用状态，使处理函数可以访问所有系统资源
         .with_state(app_state.clone());
 
     // --- 创建错误恢复监控路由（公开访问，无需认证）---
@@ -191,6 +221,41 @@ pub fn create_routes(app_state: AppState) -> Router {
             get(crate::app::middleware::error_recovery_middleware::error_recovery_status_handler)
         )
         // 注入应用状态，使处理函数可以访问错误恢复管理器等资源
+        .with_state(app_state.clone());
+
+    // --- 创建WebSocket监控路由（公开访问，无需认证）---
+    // 创建WebSocket监控相关的路由，用于监控WebSocket连接状态和性能
+    let websocket_monitoring_routes = Router::new()
+        // 【任务12.7实现】WebSocket连接监控和统计路由
+        // 定义 GET /websocket/stats 路由，映射到 get_websocket_stats 控制器函数。
+        // 提供WebSocket连接的详细统计信息，包括连接数、消息吞吐量、连接质量等。
+        .route("/websocket/stats", get(get_websocket_stats))
+        // 定义 GET /websocket/connections 路由，映射到 get_websocket_connections 控制器函数。
+        // 提供当前活跃WebSocket连接的详细信息，包括在线用户列表。
+        .route("/websocket/connections", get(get_websocket_connections))
+        // 定义 GET /websocket/metrics 路由，映射到 get_websocket_metrics 控制器函数。
+        // 提供WebSocket性能相关的详细指标，适用于监控系统集成。
+        .route("/websocket/metrics", get(get_websocket_metrics))
+        // 注入应用状态，使处理函数可以访问连接管理器等资源
+        .with_state(app_state.clone());
+
+    // --- 创建系统监控路由（公开访问，无需认证）---
+    // 创建系统资源监控相关的路由，用于监控系统资源和告警状态
+    let system_monitoring_routes = Router::new()
+        // 【任务12.8实现】系统资源监控和告警阈值检查路由
+        // 定义 GET /monitoring/alerts 路由，映射到 get_system_alerts 控制器函数。
+        // 提供系统资源告警检查，包括CPU使用率、内存使用率、磁盘空间、网络连接数等阈值监控和告警状态。
+        .route("/monitoring/alerts", get(get_system_alerts))
+        // 注入应用状态，使处理函数可以访问系统资源监控等资源
+        .with_state(app_state.clone());
+
+    // --- 创建标准Prometheus指标路由（公开访问，无需认证）---
+    // 【任务12.2实现】创建标准的 /metrics 端点，符合Prometheus监控系统的标准
+    let metrics_routes = Router::new()
+        // 定义 GET /metrics 路由，映射到 get_prometheus_metrics 控制器函数。
+        // 这是Prometheus监控系统的标准端点，用于抓取应用指标。
+        .route("/metrics", get(get_prometheus_metrics))
+        // 注入应用状态，使处理函数可以访问性能指标收集器等资源
         .with_state(app_state.clone());
 
     // --- 组合所有路由 ---
@@ -209,12 +274,24 @@ pub fn create_routes(app_state: AppState) -> Router {
         // `.nest("/api", performance_routes)`: 将性能监控路由挂载到 `/api` 路径前缀下。
         // 例如，`/performance/stats` 会变成 `/api/performance/stats`。
         .nest("/api", performance_routes)
+        // `.nest("/api", health_routes)`: 将健康检查路由挂载到 `/api` 路径前缀下。
+        // 例如，`/health/deep` 会变成 `/api/health/deep`。
+        .nest("/api", health_routes)
         // `.nest("/api", error_recovery_routes)`: 将错误恢复监控路由挂载到 `/api` 路径前缀下。
         // 例如，`/error-recovery/status` 会变成 `/api/error-recovery/status`。
         .nest("/api", error_recovery_routes)
+        // `.nest("/api", websocket_monitoring_routes)`: 将WebSocket监控路由挂载到 `/api` 路径前缀下。
+        // 例如，`/websocket/stats` 会变成 `/api/websocket/stats`。
+        .nest("/api", websocket_monitoring_routes)
+        // `.nest("/api", system_monitoring_routes)`: 将系统监控路由挂载到 `/api` 路径前缀下。
+        // 例如，`/monitoring/alerts` 会变成 `/api/monitoring/alerts`。
+        .nest("/api", system_monitoring_routes)
         // `.merge(ws_routes)`: 将 `ws_routes` 定义的路由合并到当前路由层级。
         // 这里 `/ws` 路由仍然是根路径下的 `/ws`。
         .merge(ws_routes)
+        // `.merge(metrics_routes)`: 将 `metrics_routes` 定义的路由合并到当前路由层级。
+        // 这里 `/metrics` 路由是根路径下的 `/metrics`，符合Prometheus标准。
+        .merge(metrics_routes)
         // `.fallback_service(ServeDir::new("static"))`: 配置静态文件服务。
         //   - Axum 0.8.4 变更：根路径的 nest_service 不再支持，改用 fallback_service
         //   - `ServeDir::new("static")`: 创建一个服务，它会查找并返回 `static` 目录下对应的文件。

@@ -76,6 +76,67 @@ pub struct AppState {
     pub error_recovery_state: ErrorRecoveryState, // 错误恢复状态
 }
 
+impl AppState {
+    /// 创建测试用的AppState
+    /// 注意：这个函数创建一个简化的测试状态，用于单元测试
+    pub async fn new_for_testing(connection_manager: ConnectionManager) -> Self {
+        let connection_manager = Arc::new(connection_manager);
+        let message_distributor = Arc::new(
+            MessageDistributor::new(
+                connection_manager.clone(),
+                Some(10), // 小批量用于测试
+                Some(1) // 单线程用于测试
+            )
+        );
+        let notification_service = Arc::new(
+            NotificationService::new(connection_manager.clone(), message_distributor.clone())
+        );
+        let status_sync_service = Arc::new(
+            StatusSyncService::new(connection_manager.clone(), message_distributor.clone())
+        );
+
+        // 创建一个内存数据库连接（用于测试）
+        let db_connection = sea_orm::Database
+            ::connect("sqlite::memory:").await
+            .expect("Failed to create test database");
+
+        // 创建性能指标收集器
+        let performance_config = middleware::PerformanceConfig {
+            enable_detailed_logging: true,
+            enable_system_monitoring: false, // 测试时关闭系统监控
+            system_monitoring_interval: 30,
+            enable_prometheus_metrics: true,
+            slow_request_threshold_ms: 1000,
+            log_request_headers: false,
+            max_concurrent_connections_warning: 1000,
+            enable_size_monitoring: true,
+            enable_user_agent_stats: false, // 测试时关闭
+            enable_geo_stats: false,
+            enable_error_classification: true,
+            max_user_agent_cache_size: 100,
+            max_geo_cache_size: 50,
+        };
+        let performance_metrics =
+            middleware::create_performance_monitoring_layer(performance_config);
+
+        // 创建错误恢复管理器
+        let error_recovery_manager = ErrorRecoveryManager::with_default_config();
+        let error_recovery_state = ErrorRecoveryState::new(error_recovery_manager);
+
+        Self {
+            task_repo: Arc::new(TaskRepository::new(db_connection.clone())),
+            db: db_connection,
+            jwt_secret: "test_secret".to_string(),
+            connection_manager,
+            message_distributor,
+            notification_service,
+            status_sync_service,
+            performance_metrics,
+            error_recovery_state,
+        }
+    }
+}
+
 // --- 初始化函数 ---
 
 /// 初始化并组装整个 Axum 应用程序 (Function to Initialize the Application)
@@ -134,13 +195,8 @@ pub async fn init_app(config: AppConfig) -> Result<(Router, DatabaseConnection)>
     );
     // 创建性能监控中间件
     let performance_config = middleware::PerformanceConfig {
-        enable_detailed_logging: true,
-        enable_system_monitoring: true,
-        system_monitoring_interval: 30,
         enable_prometheus_metrics: false, // 暂时禁用Prometheus以简化初始实现
-        slow_request_threshold_ms: 1000,
-        log_request_headers: false,
-        max_concurrent_connections_warning: 1000,
+        ..Default::default()
     };
     let performance_metrics = middleware::create_performance_monitoring_layer(performance_config);
 

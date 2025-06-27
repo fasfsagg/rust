@@ -895,11 +895,8 @@ mod tests {
         let performance_config = crate::app::middleware::PerformanceConfig {
             enable_detailed_logging: false,
             enable_system_monitoring: false,
-            system_monitoring_interval: 30,
             enable_prometheus_metrics: false,
-            slow_request_threshold_ms: 1000,
-            log_request_headers: false,
-            max_concurrent_connections_warning: 1000,
+            ..Default::default()
         };
         let performance_metrics =
             crate::app::middleware::create_performance_monitoring_layer(performance_config);
