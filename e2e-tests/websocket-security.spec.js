@@ -52,11 +52,11 @@ test.describe('WebSocket 安全测试', () => {
     });
 
     // 检查是否显示错误消息
-    const wsMessages = page.locator('#webSocketMessages');
+    const wsMessages = page.locator('#rawMessages');
     await expect(wsMessages).toContainText('错误: 请先登录后再连接WebSocket');
     
     // 确认 WebSocket 状态仍然是未连接
-    const wsStatus = page.locator('#wsStatus');
+    const wsStatus = page.locator('#connectionStatus');
     await expect(wsStatus).toHaveText('未连接');
     await expect(wsStatus).toHaveClass(/disconnected/);
   });
@@ -83,17 +83,17 @@ test.describe('WebSocket 安全测试', () => {
     await page.waitForTimeout(1000);
     
     // 7. 验证连接状态
-    const wsStatus = page.locator('#wsStatus');
+    const wsStatus = page.locator('#connectionStatus');
     await expect(wsStatus).toHaveText('已连接');
     await expect(wsStatus).toHaveClass(/connected/);
     
     // 8. 验证连接成功消息
-    const wsMessages = page.locator('#webSocketMessages');
+    const wsMessages = page.locator('#rawMessages');
     await expect(wsMessages).toContainText('已连接到WebSocket服务器（已认证）');
     
     // 9. 测试发送消息
-    const messageInput = page.locator('#wsMessage');
-    const sendBtn = page.locator('#wsSendForm button[type="submit"]');
+    const messageInput = page.locator('#messageInput');
+    const sendBtn = page.locator('#sendBtn');
     
     await expect(sendBtn).toBeEnabled();
     await messageInput.fill('Hello WebSocket!');
@@ -135,7 +135,7 @@ test.describe('WebSocket 安全测试', () => {
     await page.waitForTimeout(1000);
     
     // 3. 验证连接已建立
-    const wsStatus = page.locator('#wsStatus');
+    const wsStatus = page.locator('#connectionStatus');
     await expect(wsStatus).toHaveText('已连接');
     
     // 4. 登出用户
@@ -154,7 +154,7 @@ test.describe('WebSocket 安全测试', () => {
     await expect(wsStatus).toHaveClass(/disconnected/);
 
     // 7. 验证断开消息
-    const wsMessages = page.locator('#webSocketMessages');
+    const wsMessages = page.locator('#rawMessages');
     await expect(wsMessages).toContainText('用户登出，WebSocket连接已断开');
 
     // 8. 等待更长时间确保所有状态更新完成
@@ -193,7 +193,7 @@ test.describe('WebSocket 安全测试', () => {
     await expect(wsConnectBtn).toBeEnabled();
     
     // 5. 验证 WebSocket 状态正确
-    const wsStatus = page.locator('#wsStatus');
+    const wsStatus = page.locator('#connectionStatus');
     await expect(wsStatus).toHaveText('未连接');
     await expect(wsStatus).toHaveClass(/disconnected/);
   });

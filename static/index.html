@@ -145,21 +145,7 @@
             border-radius: 4px;
         }
         
-        #wsStatus {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-weight: bold;
-        }
-        
-        #wsStatus.connected {
-            background-color: #2ecc71;
-            color: white;
-        }
-        
-        #wsStatus.disconnected {
-            background-color: #e74c3c;
-            color: white;
-        }
+
         
         .timestamp {
             color: #95a5a6;
@@ -715,27 +701,7 @@
                 </div>
             </div>
 
-            <!-- WebSocket 测试区域 - 用于E2E测试 -->
-            <div class="websocket-test-area" style="margin-top: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 4px; background-color: #f9f9f9;">
-                <h3>WebSocket 连接测试</h3>
 
-                <!-- WebSocket 连接状态显示 -->
-                <div style="margin-bottom: 10px;">
-                    <span>连接状态: </span>
-                    <span id="wsStatus" class="disconnected">未连接</span>
-                </div>
-
-                <!-- WebSocket 消息发送表单 -->
-                <form id="wsSendForm" style="margin-bottom: 10px;">
-                    <input type="text" id="wsMessage" placeholder="输入WebSocket消息..." style="width: 70%; padding: 5px;" disabled>
-                    <button type="submit" style="padding: 5px 10px;" disabled>发送</button>
-                </form>
-
-                <!-- WebSocket 消息记录区域 -->
-                <div id="webSocketMessages" style="height: 150px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background-color: white; font-family: monospace; font-size: 0.9em;">
-                    等待WebSocket消息...
-                </div>
-            </div>
         </div>
     </div>
     
@@ -833,7 +799,7 @@
             // WebSocket 事件
             document.getElementById('wsConnectBtn').addEventListener('click', connectWebSocket);
             document.getElementById('wsDisconnectBtn').addEventListener('click', disconnectWebSocket);
-            document.getElementById('wsSendForm').addEventListener('submit', sendWebSocketMessage);
+            // WebSocket消息发送现在通过聊天大厅的sendBtn处理
 
             // 初始化聊天大厅事件监听器
             initializeChatHallEventListeners();
@@ -1516,8 +1482,8 @@
                 return;
             }
 
-            // 尝试获取WebSocket测试区域的输入框
-            const messageInput = document.getElementById('wsMessage');
+            // 获取聊天大厅的消息输入框
+            const messageInput = document.getElementById('messageInput');
             if (!messageInput) {
                 logWebSocketMessage('错误: 找不到消息输入框');
                 return;
@@ -1552,22 +1518,20 @@
         }
 
         function updateWebSocketStatus(connected) {
-            const statusElem = document.getElementById('wsStatus');
+            // 使用聊天大厅的状态元素
+            const statusElem = document.getElementById('connectionStatus');
             const connectBtn = document.getElementById('wsConnectBtn');
             const disconnectBtn = document.getElementById('wsDisconnectBtn');
-            const wsSendForm = document.getElementById('wsSendForm');
-            const wsMessageInput = document.getElementById('wsMessage');
-
-            // 安全地获取发送按钮
-            const sendBtn = wsSendForm ? wsSendForm.querySelector('button') : null;
+            const messageInput = document.getElementById('messageInput');
+            const sendBtn = document.getElementById('sendBtn');
 
             if (statusElem) {
                 if (connected) {
                     statusElem.textContent = '已连接';
-                    statusElem.className = 'connected';
+                    statusElem.className = 'connection-status connected';
                 } else {
                     statusElem.textContent = '未连接';
-                    statusElem.className = 'disconnected';
+                    statusElem.className = 'connection-status disconnected';
                 }
             }
 
@@ -1588,18 +1552,21 @@
                 sendBtn.disabled = !connected;
             }
 
-            if (wsMessageInput) {
-                wsMessageInput.disabled = !connected;
+            if (messageInput) {
+                messageInput.disabled = !connected;
             }
         }
 
         function logWebSocketMessage(message) {
-            const messagesElem = document.getElementById('webSocketMessages');
-            const timestamp = new Date().toLocaleTimeString();
-            const messageElem = document.createElement('div');
-            messageElem.innerHTML = `<span class="timestamp">[${timestamp}]</span> ${message}`;
-            messagesElem.appendChild(messageElem);
-            messagesElem.scrollTop = messagesElem.scrollHeight;
+            // 使用聊天大厅的原始消息日志区域
+            const messagesElem = document.getElementById('rawMessages');
+            if (messagesElem) {
+                const timestamp = new Date().toLocaleTimeString();
+                const messageElem = document.createElement('div');
+                messageElem.innerHTML = `<span class="timestamp">[${timestamp}]</span> ${message}`;
+                messagesElem.appendChild(messageElem);
+                messagesElem.scrollTop = messagesElem.scrollHeight;
+            }
         }
 
         /**
@@ -1804,24 +1771,12 @@
         }
 
         /**
-         * 发送聊天消息
+         * 发送聊天消息 - 统一使用sendWebSocketMessage函数
          */
         function sendChatMessage() {
-            if (!chatElements.messageInput) return;
-
-            const messageText = chatElements.messageInput.value.trim();
-            if (!messageText || !isConnected) {
-                return;
-            }
-
-            const chatMessage = {
-                message_type: 'Text',
-                content: messageText,
-                timestamp: new Date().toISOString()
-            };
-
-            sendChatWebSocketMessage(JSON.stringify(chatMessage));
-            chatElements.messageInput.value = '';
+            // 创建一个模拟的event对象，因为sendWebSocketMessage期望一个event参数
+            const mockEvent = { preventDefault: () => {} };
+            sendWebSocketMessage(mockEvent);
         }
 
         /**

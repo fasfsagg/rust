@@ -165,7 +165,7 @@ async function connectWebSocket(page, user) {
   await expect(wsStatus).toHaveClass(/connected/);
   
   // 验证连接成功消息
-  const wsMessages = page.locator('#webSocketMessages');
+  const wsMessages = page.locator('#rawMessages');
   await expect(wsMessages).toContainText('已连接到WebSocket服务器（已认证）');
   
   console.log(`✅ WebSocket连接成功: ${user.username}`);
@@ -175,14 +175,14 @@ async function connectWebSocket(page, user) {
 async function sendWebSocketMessage(page, message, user) {
   console.log(`💬 发送消息: ${message} (${user.username})`);
   
-  const messageInput = page.locator('#wsMessage');
-  const sendBtn = page.locator('#wsSendForm button[type="submit"]');
+  const messageInput = page.locator('#messageInput');
+  const sendBtn = page.locator('#sendBtn');
   
   await messageInput.fill(message);
   await sendBtn.click();
   
   // 验证消息发送
-  const wsMessages = page.locator('#webSocketMessages');
+  const wsMessages = page.locator('#rawMessages');
   await expect(wsMessages).toContainText(`发送: ${message}`, { timeout: 5000 });
   
   console.log(`✅ 消息发送成功: ${message}`);
@@ -435,7 +435,7 @@ test.describe('完整用户场景端到端测试', () => {
 
     // 5. 验证所有消息都已发送
     console.log('✅ 验证消息发送完成...');
-    const wsMessages = page.locator('#webSocketMessages');
+    const wsMessages = page.locator('#rawMessages');
     await expect(wsMessages).toContainText('Performance test message 10', { timeout: 10000 });
 
     // 6. 测试页面刷新后的状态恢复

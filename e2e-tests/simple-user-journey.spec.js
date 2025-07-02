@@ -150,21 +150,21 @@ test.describe('简化版用户场景端到端测试', () => {
     await page.waitForTimeout(3000);
     
     // 验证连接状态
-    const wsStatus = page.locator('#wsStatus');
+    const wsStatus = page.locator('#connectionStatus');
     await expect(wsStatus).toHaveText('已连接', { timeout: 15000 });
     
     console.log(`✅ WebSocket连接成功: ${testUser.username}`);
     
     // 发送测试消息
     console.log('💬 发送测试消息...');
-    const messageInput = page.locator('#wsMessage');
-    const sendBtn = page.locator('#wsSendForm button[type="submit"]');
+    const messageInput = page.locator('#messageInput');
+    const sendBtn = page.locator('#sendBtn');
     
     await messageInput.fill('Hello from simple test!');
     await sendBtn.click();
     
     // 验证消息发送
-    const wsMessages = page.locator('#webSocketMessages');
+    const wsMessages = page.locator('#rawMessages');
     await expect(wsMessages).toContainText('发送: Hello from simple test!', { timeout: 10000 });
     
     console.log('✅ 消息发送成功');
@@ -275,24 +275,24 @@ test.describe('简化版用户场景端到端测试', () => {
       await page2.waitForTimeout(3000);
       
       // 验证连接状态
-      await expect(page1.locator('#wsStatus')).toHaveText('已连接', { timeout: 15000 });
-      await expect(page2.locator('#wsStatus')).toHaveText('已连接', { timeout: 15000 });
+      await expect(page1.locator('#connectionStatus')).toHaveText('已连接', { timeout: 15000 });
+      await expect(page2.locator('#connectionStatus')).toHaveText('已连接', { timeout: 15000 });
       
       // 用户1发送消息
       console.log('💬 用户1发送消息...');
-      await page1.fill('#wsMessage', `Hello from ${user1.username}!`);
-      await page1.click('#wsSendForm button[type="submit"]');
+      await page1.fill('#messageInput', `Hello from ${user1.username}!`);
+      await page1.click('#sendBtn');
       await page1.waitForTimeout(1000);
-      
+
       // 用户2发送消息
       console.log('💬 用户2发送消息...');
-      await page2.fill('#wsMessage', `Hello from ${user2.username}!`);
-      await page2.click('#wsSendForm button[type="submit"]');
+      await page2.fill('#messageInput', `Hello from ${user2.username}!`);
+      await page2.click('#sendBtn');
       await page2.waitForTimeout(1000);
-      
+
       // 验证消息发送
-      await expect(page1.locator('#webSocketMessages')).toContainText(`Hello from ${user1.username}!`, { timeout: 10000 });
-      await expect(page2.locator('#webSocketMessages')).toContainText(`Hello from ${user2.username}!`, { timeout: 10000 });
+      await expect(page1.locator('#rawMessages')).toContainText(`Hello from ${user1.username}!`, { timeout: 10000 });
+      await expect(page2.locator('#rawMessages')).toContainText(`Hello from ${user2.username}!`, { timeout: 10000 });
       
       console.log('✅ 双用户WebSocket聊天测试完成');
       
