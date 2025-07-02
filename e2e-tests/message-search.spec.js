@@ -18,12 +18,21 @@ const { test, expect } = require('@playwright/test');
 const BASE_URL = 'http://127.0.0.1:3000';
 const API_BASE = `${BASE_URL}/api`;
 
-// 测试用户数据 - 使用随机用户名避免冲突
-const testUser = {
-  username: `searchtestuser_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-  password: 'TestPassword123!',
-  confirmPassword: 'TestPassword123!'
+// 测试用户数据 - 使用高精度时间戳和更强随机性确保唯一性
+const createTestUser = () => {
+  const timestamp = Date.now();
+  const microseconds = performance.now().toString().replace('.', '');
+  const randomStr = Math.random().toString(36).substr(2, 12);
+  const extraRandom = Math.floor(Math.random() * 10000);
+
+  return {
+    username: `searchtestuser_${timestamp}_${microseconds}_${randomStr}_${extraRandom}`,
+    password: 'TestPassword123!',
+    confirmPassword: 'TestPassword123!'
+  };
 };
+
+const testUser = createTestUser();
 
 // 测试聊天室数据
 const testChatRoom = {

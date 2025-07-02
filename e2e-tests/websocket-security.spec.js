@@ -11,11 +11,20 @@ const { test, expect } = require('@playwright/test');
  * 4. 过期或无效的 token 无法建立连接
  */
 
-// 测试用户凭据 - 使用时间戳确保唯一性
-const TEST_USER = {
-  username: `testuser_ws_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-  password: 'testpass123'
+// 测试用户凭据 - 使用高精度时间戳和更强随机性确保唯一性
+const createTestUser = () => {
+  const timestamp = Date.now();
+  const microseconds = performance.now().toString().replace('.', '');
+  const randomStr = Math.random().toString(36).substr(2, 12);
+  const extraRandom = Math.floor(Math.random() * 10000);
+
+  return {
+    username: `testuser_ws_${timestamp}_${microseconds}_${randomStr}_${extraRandom}`,
+    password: 'testpass123'
+  };
 };
+
+const TEST_USER = createTestUser();
 
 test.describe('WebSocket 安全测试', () => {
   

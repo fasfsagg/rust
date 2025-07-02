@@ -28,7 +28,10 @@ async fn main() -> Result<()> {
 
     // --- 步骤 1: 加载应用程序配置 ---
     // 从环境变量或 .env 文件中加载配置。
-    let config = AppConfig::from_env();
+    let config = AppConfig::from_env().map_err(|e| {
+        eprintln!("配置加载失败: {}", e);
+        anyhow::anyhow!("配置加载失败: {}", e)
+    })?;
 
     // --- 步骤 2: 运行应用程序 ---
     // 调用库中定义的 `run` 函数，并将配置传递给它。

@@ -39,6 +39,86 @@
 // --- 导入依赖 ---
 use std::net::SocketAddr; // 用于表示 IP 地址和端口号
 use std::time::Duration; // 用于表示时间间隔
+use std::fmt; // 用于实现Display trait
+
+// --- 配置错误类型定义 ---
+
+/// 配置错误类型
+///
+/// 【目的】: 提供详细的配置加载和验证错误信息
+/// 【设计】: 使用枚举类型覆盖各种配置错误场景
+#[derive(Debug, Clone)]
+pub enum ConfigError {
+    /// 环境变量解析错误
+    EnvVarParseError {
+        var_name: String,
+        value: String,
+        expected_type: String,
+        suggestion: String,
+    },
+    /// 配置验证错误
+    ValidationError {
+        field: String,
+        value: String,
+        reason: String,
+        suggestion: String,
+    },
+    /// 配置依赖关系错误
+    DependencyError {
+        field: String,
+        dependent_field: String,
+        reason: String,
+    },
+    /// 环境变量缺失错误
+    MissingEnvVar {
+        var_name: String,
+        suggestion: String,
+    },
+}
+
+impl fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ConfigError::EnvVarParseError { var_name, value, expected_type, suggestion } => {
+                write!(
+                    f,
+                    "环境变量 '{}' 的值 '{}' 无法解析为 {}。建议: {}",
+                    var_name,
+                    value,
+                    expected_type,
+                    suggestion
+                )
+            }
+            ConfigError::ValidationError { field, value, reason, suggestion } => {
+                write!(
+                    f,
+                    "配置字段 '{}' 的值 '{}' 验证失败: {}。建议: {}",
+                    field,
+                    value,
+                    reason,
+                    suggestion
+                )
+            }
+            ConfigError::DependencyError { field, dependent_field, reason } => {
+                write!(
+                    f,
+                    "配置字段 '{}' 与 '{}' 存在依赖关系错误: {}",
+                    field,
+                    dependent_field,
+                    reason
+                )
+            }
+            ConfigError::MissingEnvVar { var_name, suggestion } => {
+                write!(f, "缺少必需的环境变量 '{}'。建议: {}", var_name, suggestion)
+            }
+        }
+    }
+}
+
+impl std::error::Error for ConfigError {}
+
+/// 配置结果类型别名
+pub type ConfigResult<T> = Result<T, ConfigError>;
 
 // --- 配置结构体定义 ---
 
@@ -160,6 +240,64 @@ impl DatabasePoolConfig {
             tcp_keepalive: true, // 启用TCP保活检测
         }
     }
+
+    /// 验证数据库连接池配置的有效性
+    ///
+    /// 【功能】: 检查配置参数的合理性和一致性
+    /// 【返回】: 验证成功返回Ok(())，失败返回ConfigError
+    pub fn validate(&self) -> ConfigResult<()> {
+        // 验证连接数配置
+        if self.max_connections == 0 {
+            return Err(ConfigError::ValidationError {
+                field: "max_connections".to_string(),
+                value: self.max_connections.to_string(),
+                reason: "最大连接数不能为0".to_string(),
+                suggestion: "设置为至少1个连接，推荐生产环境100个，开发环境20个".to_string(),
+            });
+        }
+
+        if self.min_connections > self.max_connections {
+            return Err(ConfigError::ValidationError {
+                field: "min_connections".to_string(),
+                value: format!("min: {}, max: {}", self.min_connections, self.max_connections),
+                reason: "最小连接数不能大于最大连接数".to_string(),
+                suggestion: "确保min_connections <= max_connections".to_string(),
+            });
+        }
+
+        // 验证超时配置
+        if self.connect_timeout.as_secs() == 0 {
+            return Err(ConfigError::ValidationError {
+                field: "connect_timeout".to_string(),
+                value: format!("{}秒", self.connect_timeout.as_secs()),
+                reason: "连接超时时间不能为0".to_string(),
+                suggestion: "设置合理的超时时间，推荐10-30秒".to_string(),
+            });
+        }
+
+        if self.acquire_timeout.as_secs() == 0 {
+            return Err(ConfigError::ValidationError {
+                field: "acquire_timeout".to_string(),
+                value: format!("{}秒", self.acquire_timeout.as_secs()),
+                reason: "获取连接超时时间不能为0".to_string(),
+                suggestion: "设置合理的超时时间，推荐5-10秒".to_string(),
+            });
+        }
+
+        // 验证生命周期配置
+        if let Some(max_lifetime) = self.max_lifetime {
+            if max_lifetime.as_secs() < 60 {
+                return Err(ConfigError::ValidationError {
+                    field: "max_lifetime".to_string(),
+                    value: format!("{}秒", max_lifetime.as_secs()),
+                    reason: "连接最大生命周期过短，可能导致频繁重连".to_string(),
+                    suggestion: "设置至少60秒，推荐30分钟到1小时".to_string(),
+                });
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl WebSocketPoolConfig {
@@ -195,6 +333,72 @@ impl WebSocketPoolConfig {
             enable_failover: false, // 开发环境关闭故障转移
         }
     }
+
+    /// 验证WebSocket连接池配置的有效性
+    ///
+    /// 【功能】: 检查WebSocket配置参数的合理性
+    /// 【返回】: 验证成功返回Ok(())，失败返回ConfigError
+    pub fn validate(&self) -> ConfigResult<()> {
+        // 验证连接数配置
+        if self.max_connections == 0 {
+            return Err(ConfigError::ValidationError {
+                field: "max_connections".to_string(),
+                value: self.max_connections.to_string(),
+                reason: "最大WebSocket连接数不能为0".to_string(),
+                suggestion: "设置为至少1个连接，推荐开发环境1000个，生产环境1,000,000个".to_string(),
+            });
+        }
+
+        if self.pool_size == 0 {
+            return Err(ConfigError::ValidationError {
+                field: "pool_size".to_string(),
+                value: self.pool_size.to_string(),
+                reason: "连接池大小不能为0".to_string(),
+                suggestion: "设置合理的连接池大小，推荐开发环境50个，生产环境1000个".to_string(),
+            });
+        }
+
+        // 验证心跳间隔
+        if self.heartbeat_interval.as_secs() == 0 {
+            return Err(ConfigError::ValidationError {
+                field: "heartbeat_interval".to_string(),
+                value: format!("{}秒", self.heartbeat_interval.as_secs()),
+                reason: "心跳间隔不能为0".to_string(),
+                suggestion: "设置合理的心跳间隔，推荐30-60秒".to_string(),
+            });
+        }
+
+        // 验证连接超时
+        if self.connection_timeout.as_secs() == 0 {
+            return Err(ConfigError::ValidationError {
+                field: "connection_timeout".to_string(),
+                value: format!("{}秒", self.connection_timeout.as_secs()),
+                reason: "连接超时时间不能为0".to_string(),
+                suggestion: "设置合理的超时时间，推荐5-10秒".to_string(),
+            });
+        }
+
+        // 验证重连配置
+        if self.max_reconnect_attempts == 0 {
+            return Err(ConfigError::ValidationError {
+                field: "max_reconnect_attempts".to_string(),
+                value: self.max_reconnect_attempts.to_string(),
+                reason: "最大重连次数不能为0".to_string(),
+                suggestion: "设置合理的重连次数，推荐3-5次".to_string(),
+            });
+        }
+
+        if self.reconnect_interval.as_secs() == 0 {
+            return Err(ConfigError::ValidationError {
+                field: "reconnect_interval".to_string(),
+                value: format!("{}秒", self.reconnect_interval.as_secs()),
+                reason: "重连间隔不能为0".to_string(),
+                suggestion: "设置合理的重连间隔，推荐1-2秒".to_string(),
+            });
+        }
+
+        Ok(())
+    }
 }
 
 impl AppConfig {
@@ -203,12 +407,11 @@ impl AppConfig {
     /// 【功能】: 这是创建 `AppConfig` 实例的主要方式。
     ///          它尝试从预定义的环境变量中读取配置值。
     ///          如果某个环境变量未设置，则使用硬编码的默认值。
-    /// 【健壮性】: 当前实现使用了 `.expect()`，这在解析失败时会导致程序崩溃 (panic)。
-    ///            在生产环境中，应该返回 `Result<AppConfig, ConfigError>` 并进行更优雅的错误处理。
+    /// 【健壮性】: 使用Result类型进行优雅的错误处理，避免panic。
     ///
     /// # 【返回值】
-    /// * `-> Self`: 返回一个初始化好的 `AppConfig` 实例。`Self` 是 `AppConfig` 的类型别名。
-    pub fn from_env() -> Self {
+    /// * `-> ConfigResult<Self>`: 返回配置加载结果，成功时包含AppConfig实例，失败时包含详细错误信息。
+    pub fn from_env() -> ConfigResult<Self> {
         println!("CONFIG: 正在从环境变量加载配置...");
 
         // --- 加载 HTTP 服务器地址 ---
@@ -219,10 +422,15 @@ impl AppConfig {
         // 3. `.parse::<SocketAddr>()`: 将获取到的字符串（来自环境变量或默认值）解析为 `SocketAddr` 类型。
         //    返回 `Result<SocketAddr, AddrParseError>`。
         // 4. `.expect("...")`: 如果 `parse` 返回 `Err` (解析失败)，则程序 panic 并显示消息。
-        let http_addr = std::env::var("HTTP_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".to_string()); // 默认 HTTP/1.1 端口
-        let http_addr = http_addr
-            .parse()
-            .expect("环境变量 HTTP_ADDR 必须是有效的 SocketAddr (例如 '127.0.0.1:3000')");
+        let http_addr_str = std::env
+            ::var("HTTP_ADDR")
+            .unwrap_or_else(|_| "127.0.0.1:3000".to_string()); // 默认 HTTP/1.1 端口
+        let http_addr = http_addr_str.parse().map_err(|_| ConfigError::EnvVarParseError {
+            var_name: "HTTP_ADDR".to_string(),
+            value: http_addr_str.clone(),
+            expected_type: "SocketAddr (例如: 127.0.0.1:3000)".to_string(),
+            suggestion: "请确保格式为 'IP地址:端口号'，例如 '127.0.0.1:3000' 或 '0.0.0.0:8080'".to_string(),
+        })?;
         println!("  - HTTP 地址: {}", http_addr);
 
         // --- 加载数据库连接 URL ---
@@ -230,6 +438,17 @@ impl AppConfig {
         let database_url = std::env
             ::var("DATABASE_URL")
             .unwrap_or_else(|_| "sqlite:task_manager.db?mode=rwc".to_string());
+
+        // 验证数据库URL格式
+        if database_url.is_empty() {
+            return Err(ConfigError::ValidationError {
+                field: "database_url".to_string(),
+                value: database_url,
+                reason: "数据库URL不能为空".to_string(),
+                suggestion: "设置有效的数据库URL，例如 'sqlite:app.db' 或 'postgresql://user:pass@localhost/db'".to_string(),
+            });
+        }
+
         println!("  - 数据库 URL: {}", database_url);
 
         // --- 加载 JWT 密钥 ---
@@ -264,14 +483,75 @@ impl AppConfig {
             WebSocketPoolConfig::development()
         };
 
+        // 验证配置
+        database_pool.validate()?;
+        websocket_pool.validate()?;
+
+        // 生产环境安全检查
+        if is_production {
+            Self::validate_production_security(&jwt_secret, &database_url)?;
+        }
+
         println!("CONFIG: 配置加载完成。");
         // --- 构建并返回 AppConfig 实例 ---
-        Self {
+        Ok(Self {
             http_addr,
             database_url,
             jwt_secret,
             database_pool,
             websocket_pool,
+        })
+    }
+
+    /// 验证生产环境的安全配置
+    ///
+    /// 【功能】: 检查生产环境必须的安全配置项
+    /// 【参数】: jwt_secret - JWT密钥, database_url - 数据库URL
+    /// 【返回】: 验证成功返回Ok(())，失败返回ConfigError
+    fn validate_production_security(jwt_secret: &str, database_url: &str) -> ConfigResult<()> {
+        // 检查JWT密钥强度
+        if jwt_secret == "your-secret-key-change-in-production" {
+            return Err(ConfigError::ValidationError {
+                field: "jwt_secret".to_string(),
+                value: "[默认值]".to_string(),
+                reason: "生产环境不能使用默认JWT密钥".to_string(),
+                suggestion: "设置强随机JWT密钥，至少32个字符，包含字母、数字和特殊字符".to_string(),
+            });
         }
+
+        if jwt_secret.len() < 32 {
+            return Err(ConfigError::ValidationError {
+                field: "jwt_secret".to_string(),
+                value: format!("长度: {}", jwt_secret.len()),
+                reason: "生产环境JWT密钥长度不足".to_string(),
+                suggestion: "JWT密钥至少需要32个字符以确保安全性".to_string(),
+            });
+        }
+
+        // 检查数据库URL安全性
+        if database_url.starts_with("sqlite:") && !database_url.contains("memory") {
+            return Err(ConfigError::ValidationError {
+                field: "database_url".to_string(),
+                value: "SQLite文件数据库".to_string(),
+                reason: "生产环境建议使用PostgreSQL等企业级数据库".to_string(),
+                suggestion: "考虑使用PostgreSQL: postgresql://user:pass@localhost/dbname".to_string(),
+            });
+        }
+
+        Ok(())
+    }
+
+    /// 创建带有默认配置的AppConfig实例（用于测试）
+    ///
+    /// 【功能】: 提供一个安全的默认配置，主要用于测试环境
+    /// 【返回】: 返回配置好的AppConfig实例
+    pub fn default_for_tests() -> ConfigResult<Self> {
+        Ok(Self {
+            http_addr: "127.0.0.1:0".parse().unwrap(), // 使用随机端口
+            database_url: "sqlite::memory:".to_string(),
+            jwt_secret: "test-secret-key-32-characters-long".to_string(),
+            database_pool: DatabasePoolConfig::development(),
+            websocket_pool: WebSocketPoolConfig::development(),
+        })
     }
 }

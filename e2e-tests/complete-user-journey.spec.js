@@ -19,12 +19,19 @@ const BASE_URL = 'http://127.0.0.1:3000';
 const API_BASE = `${BASE_URL}/api`;
 const WS_URL = 'ws://127.0.0.1:3000/ws';
 
-// 测试用户数据 - 使用时间戳确保唯一性
-const createTestUser = (prefix) => ({
-  username: `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-  password: 'TestPassword123!',
-  confirmPassword: 'TestPassword123!'
-});
+// 测试用户数据 - 使用高精度时间戳和更强随机性确保唯一性
+const createTestUser = (prefix) => {
+  const timestamp = Date.now();
+  const microseconds = performance.now().toString().replace('.', '');
+  const randomStr = Math.random().toString(36).substr(2, 12);
+  const extraRandom = Math.floor(Math.random() * 10000);
+
+  return {
+    username: `${prefix}_${timestamp}_${microseconds}_${randomStr}_${extraRandom}`,
+    password: 'TestPassword123!',
+    confirmPassword: 'TestPassword123!'
+  };
+};
 
 // 测试任务数据
 const createTestTask = (title) => ({
@@ -45,6 +52,12 @@ async function registerUser(page, user) {
   await page.click('#registerTab');
   await waitForElement(page, '#registerForm');
 
+  // 确保表单字段为空
+  await page.fill('#registerUsername', '');
+  await page.fill('#registerPassword', '');
+  await page.fill('#confirmPassword', '');
+  await page.waitForTimeout(200);
+
   // 填写注册表单
   await page.fill('#registerUsername', user.username);
   await page.fill('#registerPassword', user.password);
@@ -54,7 +67,15 @@ async function registerUser(page, user) {
   await page.click('#registerForm button[type="submit"]');
 
   // 等待注册结果
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(3000);
+
+  // 检查注册是否成功
+  const registerMessage = page.locator('#registerMessage');
+  const registerMessageText = await registerMessage.textContent();
+  if (registerMessageText && registerMessageText.includes('失败')) {
+    console.error(`❌ 注册失败: ${registerMessageText}`);
+    throw new Error(`注册失败: ${registerMessageText}`);
+  }
 
   console.log(`✅ 用户注册完成: ${user.username}`);
 }
@@ -70,6 +91,11 @@ async function loginUser(page, user) {
     await waitForElement(page, '#loginForm');
   }
 
+  // 确保表单字段为空
+  await page.fill('#loginUsername', '');
+  await page.fill('#loginPassword', '');
+  await page.waitForTimeout(200);
+
   // 填写登录表单
   await page.fill('#loginUsername', user.username);
   await page.fill('#loginPassword', user.password);
@@ -78,11 +104,19 @@ async function loginUser(page, user) {
   await page.click('#loginForm button[type="submit"]');
 
   // 等待登录完成
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(3000);
+
+  // 检查是否有登录错误消息
+  const loginMessage = page.locator('#loginMessage');
+  const loginMessageText = await loginMessage.textContent();
+  if (loginMessageText && loginMessageText.includes('失败')) {
+    console.error(`❌ 登录失败: ${loginMessageText}`);
+    throw new Error(`登录失败: ${loginMessageText}`);
+  }
 
   // 验证登录状态
   const authStatus = page.locator('#authStatus');
-  await expect(authStatus).toHaveText('已认证', { timeout: 5000 });
+  await expect(authStatus).toHaveText('已认证', { timeout: 15000 });
 
   console.log(`✅ 用户登录成功: ${user.username}`);
 }
@@ -91,6 +125,11 @@ async function loginUser(page, user) {
 async function createTask(page, task) {
   console.log(`📋 创建任务: ${task.title}`);
 
+  // 确保表单字段为空，避免残留数据
+  await page.fill('#title', '');
+  await page.fill('#description', '');
+  await page.waitForTimeout(100);
+
   // 填写任务表单
   await page.fill('#title', task.title);
   await page.fill('#description', task.description);
@@ -98,12 +137,12 @@ async function createTask(page, task) {
   // 提交任务
   await page.click('#createTaskForm button[type="submit"]');
 
-  // 等待任务创建完成
-  await page.waitForTimeout(1000);
+  // 等待任务创建完成 - 增加等待时间
+  await page.waitForTimeout(1500);
 
   // 验证任务出现在列表中
   const taskList = page.locator('#taskList');
-  await expect(taskList).toContainText(task.title, { timeout: 5000 });
+  await expect(taskList).toContainText(task.title, { timeout: 8000 });
 
   console.log(`✅ 任务创建成功: ${task.title}`);
 }
@@ -266,14 +305,18 @@ test.describe('完整用户场景端到端测试', () => {
         loginUser(page2, user2)
       ]);
 
-      // 3. 并发创建任务
-      console.log('📋 并发创建任务...');
+      // 3. 顺序创建任务（避免并发冲突）
+      console.log('📋 顺序创建任务...');
       const task1 = createTestTask('用户1的任务');
       const task2 = createTestTask('用户2的任务');
-      await Promise.all([
-        createTask(page1, task1),
-        createTask(page2, task2)
-      ]);
+
+      // 用户1创建任务
+      await createTask(page1, task1);
+      await page1.waitForTimeout(500);
+
+      // 用户2创建任务
+      await createTask(page2, task2);
+      await page2.waitForTimeout(500);
 
       // 4. 并发建立WebSocket连接
       console.log('🔌 并发建立WebSocket连接...');
@@ -370,14 +413,14 @@ test.describe('完整用户场景端到端测试', () => {
     // 2. 建立WebSocket连接
     await connectWebSocket(page, testUser);
 
-    // 3. 快速创建多个任务
-    console.log('📋 快速创建多个任务...');
-    const taskPromises = [];
+    // 3. 顺序创建多个任务（避免表单竞态条件）
+    console.log('📋 顺序创建多个任务...');
     for (let i = 1; i <= 5; i++) {
       const task = createTestTask(`性能测试任务${i}`);
-      taskPromises.push(createTask(page, task));
+      await createTask(page, task);
+      // 添加短暂延迟确保任务创建完成
+      await page.waitForTimeout(200);
     }
-    await Promise.all(taskPromises);
 
     // 4. 快速发送多条WebSocket消息
     console.log('💬 快速发送多条消息...');

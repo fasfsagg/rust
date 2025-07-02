@@ -7,6 +7,8 @@
 //! - WebSocket测试工具
 //! - 数据库测试工具
 
+#![cfg(any(test, feature = "testing"))]
+
 use std::net::SocketAddr;
 use axum::Router;
 use tokio::net::TcpListener;
@@ -162,7 +164,7 @@ pub mod http {
 /// WebSocket测试工具
 pub mod websocket {
     use tokio_tungstenite::{ connect_async, tungstenite::Message };
-    use futures_util::{ SinkExt, StreamExt };
+    use futures_util::StreamExt;
     use url::Url;
 
     /// WebSocket测试客户端
@@ -219,7 +221,6 @@ pub mod websocket {
 
 /// 数据库测试工具
 pub mod database {
-    use super::*;
     use sea_orm::DatabaseConnection;
 
     /// 清理测试数据

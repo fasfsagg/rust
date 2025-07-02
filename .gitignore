@@ -41,6 +41,8 @@ node_modules/
 *.sw?
 # OS specific
 
+.env
+
 # Task files
 # tasks.json
 # tasks/ 

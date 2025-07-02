@@ -7,9 +7,11 @@
 //! - 测试工具配置
 //! - 测试数据工厂
 
+#![cfg(any(test, feature = "testing"))]
+
 use std::sync::Once;
 use sea_orm::{ Database, DatabaseConnection };
-use tempfile::TempDir;
+
 use tracing_subscriber::{ EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt };
 use crate::config::AppConfig;
 use migration::{ Migrator, MigratorTrait };

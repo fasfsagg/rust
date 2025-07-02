@@ -1,0 +1,86 @@
+# Page snapshot
+
+```yaml
+- heading "Axum 任务管理系统 - 前端测试页面" [level=1]
+- text: 已认证 欢迎，performance_user_1751461495803_54720263_hwaatey12d_6835
+- button "登出"
+- heading "任务管理" [level=2]
+- heading "创建新任务" [level=3]
+- textbox "任务标题"
+- textbox "任务描述（可选）"
+- checkbox "已完成"
+- text: 已完成
+- button "创建任务"
+- button "刷新任务列表"
+- button "所有"
+- button "未完成"
+- button "已完成"
+- heading "任务列表" [level=3]
+- list:
+  - listitem:
+    - heading "性能测试任务1 - 1751461505231" [level=4]
+    - paragraph: 测试任务描述 - 2025-07-02T13:05:05.231Z
+    - paragraph:
+      - text: "状态:"
+      - strong: 未完成
+    - paragraph: "创建于: 7/2/2025, 9:05:05 PM | 更新于: 7/2/2025, 9:05:05 PM"
+    - button "查看"
+    - button "编辑"
+    - button "标记为已完成"
+    - button "删除"
+  - listitem:
+    - heading "性能测试任务2 - 1751461507243" [level=4]
+    - paragraph: 测试任务描述 - 2025-07-02T13:05:07.243Z
+    - paragraph:
+      - text: "状态:"
+      - strong: 未完成
+    - paragraph: "创建于: 7/2/2025, 9:05:07 PM | 更新于: 7/2/2025, 9:05:07 PM"
+    - button "查看"
+    - button "编辑"
+    - button "标记为已完成"
+    - button "删除"
+  - listitem:
+    - heading "性能测试任务3 - 1751461509322" [level=4]
+    - paragraph: 测试任务描述 - 2025-07-02T13:05:09.322Z
+    - paragraph:
+      - text: "状态:"
+      - strong: 未完成
+    - paragraph: "创建于: 7/2/2025, 9:05:09 PM | 更新于: 7/2/2025, 9:05:09 PM"
+    - button "查看"
+    - button "编辑"
+    - button "标记为已完成"
+    - button "删除"
+  - listitem:
+    - heading "性能测试任务4 - 1751461511311" [level=4]
+    - paragraph: 测试任务描述 - 2025-07-02T13:05:11.311Z
+    - paragraph:
+      - text: "状态:"
+      - strong: 未完成
+    - paragraph: "创建于: 7/2/2025, 9:05:11 PM | 更新于: 7/2/2025, 9:05:11 PM"
+    - button "查看"
+    - button "编辑"
+    - button "标记为已完成"
+    - button "删除"
+  - listitem:
+    - heading "性能测试任务5 - 1751461513409" [level=4]
+    - paragraph: 测试任务描述 - 2025-07-02T13:05:13.409Z
+    - paragraph:
+      - text: "状态:"
+      - strong: 未完成
+    - paragraph: "创建于: 7/2/2025, 9:05:13 PM | 更新于: 7/2/2025, 9:05:13 PM"
+    - button "查看"
+    - button "编辑"
+    - button "标记为已完成"
+    - button "删除"
+- heading "API响应" [level=3]
+- text: "[9:05:17 PM] GET /api/tasks - 200 OK [ { \"id\": \"c687f045-68e4-42b8-8290-8d785c728550\", \"title\": \"性能测试任务1 - 1751461505231\", \"description\": \"测试任务描述 - 2025-07-02T13:05:05.231Z\", \"completed\": false, \"user_id\": \"53833159-352b-4065-bed8-7a2f62f2430f\", \"created_at\": \"2025-07-02T13:05:05Z\", \"updated_at\": \"2025-07-02T13:05:05Z\" }, { \"id\": \"ff4623d3-8d8c-413b-a7db-1b04ffe2c37c\", \"title\": \"性能测试任务2 - 1751461507243\", \"description\": \"测试任务描述 - 2025-07-02T13:05:07.243Z\", \"completed\": false, \"user_id\": \"53833159-352b-4065-bed8-7a2f62f2430f\", \"created_at\": \"2025-07-02T13:05:07Z\", \"updated_at\": \"2025-07-02T13:05:07Z\" }, { \"id\": \"a8f7ebfd-591a-4ef0-b8b0-543e393aa0aa\", \"title\": \"性能测试任务3 - 1751461509322\", \"description\": \"测试任务描述 - 2025-07-02T13:05:09.322Z\", \"completed\": false, \"user_id\": \"53833159-352b-4065-bed8-7a2f62f2430f\", \"created_at\": \"2025-07-02T13:05:09Z\", \"updated_at\": \"2025-07-02T13:05:09Z\" }, { \"id\": \"5aab8454-9b30-4097-a2bc-69145ba62e05\", \"title\": \"性能测试任务4 - 1751461511311\", \"description\": \"测试任务描述 - 2025-07-02T13:05:11.311Z\", \"completed\": false, \"user_id\": \"53833159-352b-4065-bed8-7a2f62f2430f\", \"created_at\": \"2025-07-02T13:05:11Z\", \"updated_at\": \"2025-07-02T13:05:11Z\" }, { \"id\": \"b2eb2b69-4241-41fe-a6cb-95a5289ca6b4\", \"title\": \"性能测试任务5 - 1751461513409\", \"description\": \"测试任务描述 - 2025-07-02T13:05:13.409Z\", \"completed\": false, \"user_id\": \"53833159-352b-4065-bed8-7a2f62f2430f\", \"created_at\": \"2025-07-02T13:05:13Z\", \"updated_at\": \"2025-07-02T13:05:13Z\" } ]"
+- heading "WebSocket测试" [level=2]
+- paragraph:
+  - text: "状态: 未连接"
+  - button "连接"
+  - button "断开" [disabled]
+- textbox "输入消息"
+- button "发送" [disabled]
+- heading "消息记录" [level=3]
+- text: "[9:05:17 PM] 已连接到WebSocket服务器（已认证） [9:05:19 PM] 发送: Message after page refresh [9:05:19 PM] performance_user_1751461495803_54720263_hwaatey12d_6835 (我): Message after page refresh [9:05:19 PM] WebSocket连接已断开"
+```

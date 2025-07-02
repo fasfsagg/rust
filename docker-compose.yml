@@ -1,0 +1,36 @@
+
+version: '3.8'
+
+services:
+  # "postgres" 左边有 2 个空格
+  postgres:
+    # 下面这些键，都属于 postgres, 所以它们前面都有 4 个空格
+    image: docker.io/library/postgres:13-alpine
+    restart: always
+    environment:
+      # 下面这些键，都属于 environment, 所以它们前面都有 6 个空格
+      POSTGRES_DB: axum_tutorial
+      POSTGRES_USER: axum_user
+      # POSTGRES_PASSWORD: axum_password
+      POSTGRES_HOST_AUTH_METHOD: trust
+
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # "dragonflydb" 和 "postgres" 是同一层级, 左边都有 2 个空格
+  dragonflydb:
+    # 下面这些键，都属于 dragonflydb, 所以它们前面都有 4 个空格
+    image: docker.dragonflydb.io/dragonflydb/dragonfly
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - dragonflydb_data:/data
+
+# "volumes" 和 "services" 是同一层级, 左边没有空格
+volumes:
+  # 下面这两个卷名, 左边都有 2 个空格
+  postgres_data:
+  dragonflydb_data:
