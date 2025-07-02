@@ -4,11 +4,11 @@
 //! 支持多种消息类型，为企业级聊天应用提供丰富的消息功能。
 
 use sea_orm::entity::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 
 /// 消息类型枚举
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
-#[sea_orm(rs_type = "String", db_type = "String(Some(20))")]
+#[sea_orm(rs_type = "String", db_type = "String(StringLen::N(20))")]
 pub enum MessageType {
     /// 普通文本消息
     #[sea_orm(string_value = "text")]
@@ -32,7 +32,7 @@ pub enum MessageType {
 
 /// 消息状态枚举
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
-#[sea_orm(rs_type = "String", db_type = "String(Some(20))")]
+#[sea_orm(rs_type = "String", db_type = "String(StringLen::N(20))")]
 pub enum MessageStatus {
     /// 已发送
     #[sea_orm(string_value = "sent")]
@@ -52,7 +52,7 @@ pub enum MessageStatus {
 }
 
 /// 消息实体模型
-/// 
+///
 /// 设计考虑：
 /// - 高并发支持：使用UUID主键，支持分布式环境
 /// - 消息完整性：记录发送者、接收聊天室、消息类型等完整信息
@@ -130,11 +130,7 @@ pub enum Relation {
     ChatRoom,
 
     /// 消息回复关系（自引用）
-    #[sea_orm(
-        belongs_to = "Entity",
-        from = "Column::ReplyToId",
-        to = "Column::Id"
-    )]
+    #[sea_orm(belongs_to = "Entity", from = "Column::ReplyToId", to = "Column::Id")]
     ReplyTo,
 }
 

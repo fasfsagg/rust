@@ -33,6 +33,7 @@ use migration::user_entity::ActiveModel;
 use sea_orm::{ prelude::Uuid, ActiveValue };
 use serde::{ Deserialize, Serialize };
 use std::sync::Arc;
+use validator::Validate;
 
 /// JWT 声明结构体
 /// 包含用户身份信息和令牌有效期
@@ -81,7 +82,10 @@ pub async fn register_user(
 ) -> Result<UserResponse> {
     tracing::info!(username = %payload.username, "开始处理用户注册请求");
 
-    // 1. 检查用户名是否已存在
+    // 1. 验证输入数据
+    payload.validate().map_err(|e| AppError::ValidationError(e.to_string()))?;
+
+    // 2. 检查用户名是否已存在
     if let Some(_existing_user) = repo.find_by_username(&payload.username).await? {
         tracing::warn!(username = %payload.username, "用户注册失败，用户名已存在");
         return Err(AppError::UserAlreadyExists(payload.username));

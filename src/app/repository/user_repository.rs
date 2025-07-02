@@ -25,18 +25,31 @@ use sea_orm::{
     EntityTrait,
     QueryFilter,
 };
+use std::sync::Arc;
 
 /// 用户仓库结构体。
 ///
-/// 它持有一个数据库连接池的克隆 (`DatabaseConnection`)，所有数据库操作都通过它进行。
+/// 使用Arc<DatabaseConnection>来共享数据库连接，因为在SeaORM 1.1.12中
+/// DatabaseConnection不再实现Clone trait。Arc提供了线程安全的引用计数共享。
 #[derive(Debug, Clone)]
 pub struct UserRepository {
-    db: DatabaseConnection,
+    db: Arc<DatabaseConnection>,
 }
 
 impl UserRepository {
     /// 创建一个新的 UserRepository 实例。
+    ///
+    /// # 参数
+    /// - `db`: 数据库连接，将被包装在Arc中以支持共享
     pub fn new(db: DatabaseConnection) -> Self {
+        Self { db: Arc::new(db) }
+    }
+
+    /// 从Arc<DatabaseConnection>创建UserRepository实例
+    ///
+    /// # 参数
+    /// - `db`: 已经包装在Arc中的数据库连接
+    pub fn from_arc(db: Arc<DatabaseConnection>) -> Self {
         Self { db }
     }
 }
@@ -72,7 +85,7 @@ impl UserRepositoryContract for UserRepository {
     async fn find_by_username(&self, username: &str) -> Result<Option<Model>, DbErr> {
         Entity::find()
             .filter(migration::user_entity::Column::Username.eq(username))
-            .one(&self.db).await
+            .one(self.db.as_ref()).await
     }
 
     /// 创建一个新用户。
@@ -87,6 +100,8 @@ impl UserRepositoryContract for UserRepository {
         if data.id.is_not_set() {
             data.id = sea_orm::Set(Uuid::new_v4());
         }
-        data.insert(&self.db).await
+        data.insert(self.db.as_ref()).await
     }
 }
+
+// 单元测试将在修复SeaORM兼容性问题后重新实现

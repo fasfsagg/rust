@@ -25,6 +25,13 @@ use tower::timeout::TimeoutLayer;
 use tracing::{ error, warn, info, instrument };
 use tracing_error::SpanTrace;
 
+// 定义类型别名以简化复杂类型
+type ErrorHandlerFuture = std::pin::Pin<
+    Box<dyn std::future::Future<Output = Result<Response, std::convert::Infallible>> + Send>
+>;
+type ErrorHandlerFn = fn(BoxError) -> ErrorHandlerFuture;
+type EnhancedErrorLayer = axum::error_handling::HandleErrorLayer<ErrorHandlerFn, Request>;
+
 /// 增强的错误处理中间件构建器
 ///
 /// 【功能】：提供一个统一的错误处理中间件栈，包含：
@@ -32,14 +39,7 @@ use tracing_error::SpanTrace;
 /// - 全局错误捕获
 /// - 结构化错误响应
 /// - 错误上下文跟踪
-pub fn enhanced_error_handling_layer() -> axum::error_handling::HandleErrorLayer<
-    fn(
-        BoxError
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<Response, std::convert::Infallible>> + Send>
-    >,
-    Request
-> {
+pub fn enhanced_error_handling_layer() -> EnhancedErrorLayer {
     axum::error_handling::HandleErrorLayer::new(handle_error)
 }
 

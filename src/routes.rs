@@ -64,6 +64,7 @@ use crate::app::controller::{
     get_chat_room_messages, // 处理 GET /api/messages/chat-room/:id
     // 性能监控相关处理函数
     get_performance_stats, // 处理 GET /api/performance/stats
+    get_async_performance_stats, // 【任务13.2新增】处理 GET /api/performance/async-stats
     health_check, // 处理 GET /api/performance/health
     get_detailed_metrics, // 处理 GET /api/performance/metrics
     get_prometheus_metrics, // 处理 GET /api/performance/prometheus
@@ -181,6 +182,9 @@ pub fn create_routes(app_state: AppState) -> Router {
         // 定义 GET /performance/stats 路由，映射到 get_performance_stats 控制器函数。
         // 获取当前的性能统计信息，包括请求数、连接数、成功率等。
         .route("/performance/stats", get(get_performance_stats))
+        // 【任务13.2新增】定义 GET /performance/async-stats 路由，映射到 get_async_performance_stats 控制器函数。
+        // 获取异步性能优化器的详细统计信息，包括任务调度、I/O批处理、背压控制等。
+        .route("/performance/async-stats", get(get_async_performance_stats))
         // 定义 GET /performance/health 路由，映射到 health_check 控制器函数。
         // 系统健康检查，包括数据库连接、内存使用等状态检查。
         .route("/performance/health", get(health_check))

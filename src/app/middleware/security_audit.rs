@@ -448,7 +448,7 @@ static GLOBAL_SECURITY_AUDITOR: std::sync::OnceLock<SecurityAuditor> = std::sync
 /// # 返回值
 /// * `&'static SecurityAuditor` - 全局安全审计器的引用
 pub fn get_security_auditor() -> &'static SecurityAuditor {
-    GLOBAL_SECURITY_AUDITOR.get_or_init(|| SecurityAuditor::new())
+    GLOBAL_SECURITY_AUDITOR.get_or_init(SecurityAuditor::new)
 }
 
 /// 初始化全局安全审计器

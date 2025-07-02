@@ -28,18 +28,31 @@ use sea_orm::{
     EntityTrait,
     QueryFilter,
 };
+use std::sync::Arc;
 
 /// 任务仓库结构体。
 ///
-/// 它持有一个数据库连接池的克隆 (`DatabaseConnection`)，所有数据库操作都通过它进行。
+/// 使用Arc<DatabaseConnection>来共享数据库连接，因为在SeaORM 1.1.12中
+/// DatabaseConnection不再实现Clone trait。Arc提供了线程安全的引用计数共享。
 #[derive(Debug, Clone)]
 pub struct TaskRepository {
-    db: DatabaseConnection,
+    db: Arc<DatabaseConnection>,
 }
 
 impl TaskRepository {
     /// 创建一个新的 TaskRepository 实例。
+    ///
+    /// # 参数
+    /// - `db`: 数据库连接，将被包装在Arc中以支持共享
     pub fn new(db: DatabaseConnection) -> Self {
+        Self { db: Arc::new(db) }
+    }
+
+    /// 从Arc<DatabaseConnection>创建TaskRepository实例
+    ///
+    /// # 参数
+    /// - `db`: 已经包装在Arc中的数据库连接
+    pub fn from_arc(db: Arc<DatabaseConnection>) -> Self {
         Self { db }
     }
 }
@@ -86,7 +99,7 @@ impl TaskRepositoryContract for TaskRepository {
     /// # 返回
     /// 成功时返回包含所有任务模型的 `Vec<Model>`，失败时返回 `DbErr`。
     async fn find_all(&self) -> Result<Vec<Model>, DbErr> {
-        Entity::find().all(&self.db).await
+        Entity::find().all(self.db.as_ref()).await
     }
 
     /// 根据用户ID查询所有任务。
@@ -99,7 +112,7 @@ impl TaskRepositoryContract for TaskRepository {
     async fn find_all_by_user(&self, user_id: Uuid) -> Result<Vec<Model>, DbErr> {
         Entity::find()
             .filter(migration::task_entity::Column::UserId.eq(user_id))
-            .all(&self.db).await
+            .all(self.db.as_ref()).await
     }
 
     /// 根据 ID 查询单个任务。
@@ -111,7 +124,7 @@ impl TaskRepositoryContract for TaskRepository {
     /// 成功时返回 `Option<Model>`，如果找到则为 `Some(task)`，否则为 `None`。
     /// 失败时返回 `DbErr`。
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Model>, DbErr> {
-        Entity::find_by_id(id).one(&self.db).await
+        Entity::find_by_id(id).one(self.db.as_ref()).await
     }
 
     /// 根据 ID 和用户ID查询单个任务（用于授权检查）。
@@ -126,7 +139,7 @@ impl TaskRepositoryContract for TaskRepository {
     async fn find_by_id_and_user(&self, id: Uuid, user_id: Uuid) -> Result<Option<Model>, DbErr> {
         Entity::find_by_id(id)
             .filter(migration::task_entity::Column::UserId.eq(user_id))
-            .one(&self.db).await
+            .one(self.db.as_ref()).await
     }
 
     /// 创建一个新任务。
@@ -141,7 +154,7 @@ impl TaskRepositoryContract for TaskRepository {
         if data.id.is_not_set() {
             data.id = sea_orm::Set(Uuid::new_v4());
         }
-        data.insert(&self.db).await
+        data.insert(self.db.as_ref()).await
     }
 
     /// 更新一个现有任务。
@@ -155,7 +168,7 @@ impl TaskRepositoryContract for TaskRepository {
     /// # 返回
     /// 成功时返回更新后的任务模型 `Model`，失败时返回 `DbErr`。
     async fn update(&self, data: ActiveModel) -> Result<Model, DbErr> {
-        data.update(&self.db).await
+        data.update(self.db.as_ref()).await
     }
 
     /// 根据 ID 删除一个任务。
@@ -169,7 +182,7 @@ impl TaskRepositoryContract for TaskRepository {
     /// 成功时返回 `DeleteResult`，其中包含了受影响的行数。服务层可以检查 `rows_affected`
     /// 是否为 1 来确认删除是否成功。失败时返回 `DbErr`。
     async fn delete(&self, id: Uuid) -> Result<DeleteResult, DbErr> {
-        Entity::delete_by_id(id).exec(&self.db).await
+        Entity::delete_by_id(id).exec(self.db.as_ref()).await
     }
 
     /// 根据 ID 和用户ID删除一个任务（用于授权检查）。
@@ -185,6 +198,6 @@ impl TaskRepositoryContract for TaskRepository {
         Entity::delete_many()
             .filter(migration::task_entity::Column::Id.eq(id))
             .filter(migration::task_entity::Column::UserId.eq(user_id))
-            .exec(&self.db).await
+            .exec(self.db.as_ref()).await
     }
 }

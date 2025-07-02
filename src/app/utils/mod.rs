@@ -8,6 +8,12 @@ pub mod validation_utils;
 pub mod jwt_utils;
 pub mod auth_service;
 pub mod error_recovery;
+pub mod memory_manager;
+pub mod memory_manager_benchmark;
+pub mod optimized_state;
+pub mod database_pool_manager; // 【任务13.4新增】数据库连接池管理器
+pub mod websocket_pool_manager; // 【任务13.4新增】WebSocket连接池管理器
+pub mod test_connection_pool_managers; // 【任务13.4新增】连接池管理器测试
 
 // 重新导出常用的工具函数
 pub use uuid_utils::*;
@@ -23,6 +29,15 @@ pub use error_recovery::{
     RecoveryStatus,
     RetryStats,
 };
+pub use database_pool_manager::{ DatabasePoolManager, PoolMetrics }; // 【任务13.4新增】
+pub use websocket_pool_manager::{
+    WebSocketPoolManager,
+    WebSocketPoolMetrics,
+    WebSocketConnectionInfo,
+    LoadBalancer,
+    LoadBalancingStrategy,
+    FailoverManager,
+}; // 【任务13.4新增】
 
 // 测试模块 - 包含在 error_recovery.rs 文件中
 // 不需要单独的 mod 声明，因为测试在同一个文件中

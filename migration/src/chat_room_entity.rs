@@ -4,11 +4,12 @@
 //! 支持公共聊天室和私人聊天室，为企业级聊天应用提供基础架构。
 
 use sea_orm::entity::prelude::*;
-use serde::{Deserialize, Serialize};
+use sea_orm::sea_query::StringLen;
+use serde::{ Deserialize, Serialize };
 
 /// 聊天室类型枚举
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
-#[sea_orm(rs_type = "String", db_type = "String(Some(20))")]
+#[sea_orm(rs_type = "String", db_type = "String(StringLen::N(20))")]
 pub enum ChatRoomType {
     /// 公共聊天室 - 所有用户都可以加入
     #[sea_orm(string_value = "public")]
@@ -23,7 +24,7 @@ pub enum ChatRoomType {
 
 /// 聊天室状态枚举
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
-#[sea_orm(rs_type = "String", db_type = "String(Some(20))")]
+#[sea_orm(rs_type = "String", db_type = "String(StringLen::N(20))")]
 pub enum ChatRoomStatus {
     /// 活跃状态 - 正常使用
     #[sea_orm(string_value = "active")]
@@ -37,7 +38,7 @@ pub enum ChatRoomStatus {
 }
 
 /// 聊天室实体模型
-/// 
+///
 /// 设计考虑：
 /// - 支持百万并发：使用UUID主键，便于分布式扩展
 /// - 企业级功能：支持不同类型的聊天室和状态管理
@@ -50,7 +51,7 @@ pub struct Model {
     pub id: Uuid,
 
     /// 聊天室名称
-    #[sea_orm(column_type = "String(Some(100))", unique)]
+    #[sea_orm(column_type = "String(StringLen::N(100))", unique)]
     pub name: String,
 
     /// 聊天室描述（可选）

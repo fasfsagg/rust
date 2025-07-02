@@ -31,6 +31,7 @@ use sea_orm::{
     QueryOrder,
     Set,
 };
+use std::sync::Arc;
 
 /// 分页查询参数结构体
 #[derive(Debug, Clone)]
@@ -92,14 +93,28 @@ pub struct MessageFilter {
 }
 
 /// 消息仓库结构体
+///
+/// 使用Arc<DatabaseConnection>来共享数据库连接，因为在SeaORM 1.1.12中
+/// DatabaseConnection不再实现Clone trait。Arc提供了线程安全的引用计数共享。
 #[derive(Debug, Clone)]
 pub struct MessageRepository {
-    db: DatabaseConnection,
+    db: Arc<DatabaseConnection>,
 }
 
 impl MessageRepository {
     /// 创建新的MessageRepository实例
+    ///
+    /// # 参数
+    /// - `db`: 数据库连接，将被包装在Arc中以支持共享
     pub fn new(db: DatabaseConnection) -> Self {
+        Self { db: Arc::new(db) }
+    }
+
+    /// 从Arc<DatabaseConnection>创建MessageRepository实例
+    ///
+    /// # 参数
+    /// - `db`: 已经包装在Arc中的数据库连接
+    pub fn from_arc(db: Arc<DatabaseConnection>) -> Self {
         Self { db }
     }
 
@@ -223,11 +238,11 @@ impl MessageRepositoryContract for MessageRepository {
             data.updated_at = Set(now);
         }
 
-        data.insert(&self.db).await
+        data.insert(self.db.as_ref()).await
     }
 
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Model>, DbErr> {
-        Entity::find_by_id(id).one(&self.db).await
+        Entity::find_by_id(id).one(self.db.as_ref()).await
     }
 
     async fn find_by_chat_room(
@@ -273,7 +288,7 @@ impl MessageRepositoryContract for MessageRepository {
         };
 
         // 执行分页查询
-        let paginator = query.paginate(&self.db, params.page_size);
+        let paginator = query.paginate(self.db.as_ref(), params.page_size);
         let total_pages = paginator.num_pages().await?;
         let total_count = paginator.num_items().await?;
 
@@ -292,14 +307,14 @@ impl MessageRepositoryContract for MessageRepository {
 
     async fn update_status(&self, id: Uuid, status: MessageStatus) -> Result<Model, DbErr> {
         let message = Entity::find_by_id(id)
-            .one(&self.db).await?
+            .one(self.db.as_ref()).await?
             .ok_or_else(|| DbErr::RecordNotFound("Message not found".to_string()))?;
 
         let mut active_model: ActiveModel = message.into();
         active_model.status = Set(status);
         active_model.updated_at = Set(chrono::Utc::now());
 
-        active_model.update(&self.db).await
+        active_model.update(self.db.as_ref()).await
     }
 
     async fn count_by_chat_room(
@@ -335,7 +350,7 @@ impl MessageRepositoryContract for MessageRepository {
             }
         }
 
-        query.count(&self.db).await
+        query.count(self.db.as_ref()).await
     }
 
     async fn soft_delete(&self, id: Uuid) -> Result<Model, DbErr> {
@@ -388,7 +403,7 @@ impl MessageRepositoryContract for MessageRepository {
         };
 
         // 执行分页查询
-        let paginator = query.paginate(&self.db, params.page_size);
+        let paginator = query.paginate(self.db.as_ref(), params.page_size);
         let total_pages = paginator.num_pages().await?;
         let total_count = paginator.num_items().await?;
 

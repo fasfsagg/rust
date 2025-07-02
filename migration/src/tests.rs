@@ -4,10 +4,10 @@
 //! 1. 实体模型的正确性
 //! 2. 枚举值的序列化/反序列化
 //! 3. 关系定义的正确性
+//! 4. 迁移脚本的正确性
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json;
     use uuid::Uuid;
     use chrono::Utc;
@@ -271,5 +271,194 @@ mod tests {
         assert_eq!(deserialized.status, SessionStatus::Online);
         assert_eq!(deserialized.device_type, DeviceType::Web);
         assert_eq!(deserialized.ip_address, "192.168.1.100");
+    }
+
+    /// 测试任务表迁移的结构定义
+    #[test]
+    fn test_task_migration_structure() {
+        use crate::m20250610_035426_create_task_table::Migration;
+
+        // 验证Migration结构体存在且实现了正确的trait
+        let _migration = Migration;
+
+        // 这个测试验证Migration结构体可以被实例化
+        // 在实际的数据库环境中，up和down方法会被调用
+        assert_eq!(std::mem::size_of::<Migration>(), 0); // 零大小类型
+    }
+
+    /// 测试用户表迁移的结构定义
+    #[test]
+    fn test_user_migration_structure() {
+        use crate::m20250615_075512_create_users_table::Migration;
+
+        let _migration = Migration;
+        assert_eq!(std::mem::size_of::<Migration>(), 0);
+    }
+
+    /// 测试用户ID添加到任务表迁移的结构定义
+    #[test]
+    fn test_add_user_id_migration_structure() {
+        use crate::m20250615_081240_add_user_id_to_tasks::Migration;
+
+        let _migration = Migration;
+        assert_eq!(std::mem::size_of::<Migration>(), 0);
+    }
+
+    /// 测试聊天室表迁移的结构定义
+    #[test]
+    fn test_chat_rooms_migration_structure() {
+        use crate::m20250624_120000_create_chat_rooms_table::Migration;
+
+        let _migration = Migration;
+        assert_eq!(std::mem::size_of::<Migration>(), 0);
+    }
+
+    /// 测试消息表迁移的结构定义
+    #[test]
+    fn test_messages_migration_structure() {
+        use crate::m20250624_120001_create_messages_table::Migration;
+
+        let _migration = Migration;
+        assert_eq!(std::mem::size_of::<Migration>(), 0);
+    }
+
+    /// 测试用户会话表迁移的结构定义
+    #[test]
+    fn test_user_sessions_migration_structure() {
+        use crate::m20250624_120002_create_user_sessions_table::Migration;
+
+        let _migration = Migration;
+        assert_eq!(std::mem::size_of::<Migration>(), 0);
+    }
+
+    /// 测试实体模型的默认值和约束
+    #[test]
+    fn test_entity_defaults() {
+        use crate::task_entity::Entity as TaskEntity;
+        use crate::user_entity::Entity as UserEntity;
+        use crate::chat_room_entity::Entity as ChatRoomEntity;
+        use crate::message_entity::Entity as MessageEntity;
+        use crate::user_session_entity::Entity as UserSessionEntity;
+
+        // 验证实体类型存在且可以被引用
+        // 这些测试确保实体定义是正确的
+        let _task_entity = TaskEntity;
+        let _user_entity = UserEntity;
+        let _chat_room_entity = ChatRoomEntity;
+        let _message_entity = MessageEntity;
+        let _user_session_entity = UserSessionEntity;
+    }
+
+    /// 测试枚举的默认值
+    #[test]
+    fn test_enum_defaults() {
+        use crate::chat_room_entity::{ ChatRoomType, ChatRoomStatus };
+        use crate::message_entity::{ MessageType, MessageStatus };
+        use crate::user_session_entity::{ SessionStatus, DeviceType };
+
+        // 测试枚举的默认实现
+        let default_room_type = ChatRoomType::Public;
+        let default_room_status = ChatRoomStatus::Active;
+        let default_message_type = MessageType::Text;
+        let default_message_status = MessageStatus::Sent;
+        let default_session_status = SessionStatus::Online;
+        let default_device_type = DeviceType::Web;
+
+        // 验证这些值可以被创建和比较
+        assert_eq!(default_room_type, ChatRoomType::Public);
+        assert_eq!(default_room_status, ChatRoomStatus::Active);
+        assert_eq!(default_message_type, MessageType::Text);
+        assert_eq!(default_message_status, MessageStatus::Sent);
+        assert_eq!(default_session_status, SessionStatus::Online);
+        assert_eq!(default_device_type, DeviceType::Web);
+    }
+
+    /// 测试模型字段的边界值
+    #[test]
+    fn test_model_field_boundaries() {
+        use crate::message_entity::{ Model as Message, MessageType, MessageStatus };
+
+        // 测试消息优先级的边界值
+        let high_priority_message = Message {
+            id: Uuid::new_v4(),
+            content: "高优先级消息".to_string(),
+            message_type: MessageType::System,
+            status: MessageStatus::Sent,
+            sender_id: Uuid::new_v4(),
+            chat_room_id: Uuid::new_v4(),
+            reply_to_id: None,
+            metadata: None,
+            priority: 10, // 最高优先级
+            is_pinned: true,
+            expires_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let low_priority_message = Message {
+            id: Uuid::new_v4(),
+            content: "低优先级消息".to_string(),
+            message_type: MessageType::Text,
+            status: MessageStatus::Sent,
+            sender_id: Uuid::new_v4(),
+            chat_room_id: Uuid::new_v4(),
+            reply_to_id: None,
+            metadata: None,
+            priority: 1, // 最低优先级
+            is_pinned: false,
+            expires_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        assert_eq!(high_priority_message.priority, 10);
+        assert_eq!(low_priority_message.priority, 1);
+        assert!(high_priority_message.is_pinned);
+        assert!(!low_priority_message.is_pinned);
+    }
+
+    /// 测试聊天室成员数量的边界值
+    #[test]
+    fn test_chat_room_member_limits() {
+        use crate::chat_room_entity::{ Model as ChatRoom, ChatRoomType, ChatRoomStatus };
+
+        // 测试大型聊天室
+        let large_room = ChatRoom {
+            id: Uuid::new_v4(),
+            name: "大型聊天室".to_string(),
+            description: Some("支持大量用户的聊天室".to_string()),
+            room_type: ChatRoomType::Public,
+            status: ChatRoomStatus::Active,
+            created_by: Uuid::new_v4(),
+            max_members: 10000, // 大型聊天室
+            current_members: 5000,
+            settings: Some(
+                "{\"allow_file_upload\": true, \"max_file_size\": \"100MB\"}".to_string()
+            ),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        // 测试小型聊天室
+        let small_room = ChatRoom {
+            id: Uuid::new_v4(),
+            name: "小型聊天室".to_string(),
+            description: Some("私人聊天室".to_string()),
+            room_type: ChatRoomType::Private,
+            status: ChatRoomStatus::Active,
+            created_by: Uuid::new_v4(),
+            max_members: 2, // 私人聊天
+            current_members: 2,
+            settings: Some("{\"allow_file_upload\": false}".to_string()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        assert_eq!(large_room.max_members, 10000);
+        assert_eq!(large_room.current_members, 5000);
+        assert_eq!(small_room.max_members, 2);
+        assert_eq!(small_room.current_members, 2);
+        assert_eq!(large_room.room_type, ChatRoomType::Public);
+        assert_eq!(small_room.room_type, ChatRoomType::Private);
     }
 }

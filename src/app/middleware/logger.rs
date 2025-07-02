@@ -228,7 +228,7 @@ pub fn setup_file_rotation_logger(
             let file_appender = RollingFileAppender::new(
                 config.rotation.clone().into(),
                 &config.log_directory,
-                &format!("{}.log", config.file_name_prefix)
+                format!("{}.log", config.file_name_prefix)
             );
 
             if config.non_blocking {

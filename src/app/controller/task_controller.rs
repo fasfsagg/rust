@@ -908,9 +908,59 @@ mod tests {
                 error_recovery_manager
             );
 
+        // 【任务13.2新增】创建异步性能优化器（测试配置）
+        let async_perf_config = crate::app::service::AsyncPerformanceConfig {
+            worker_threads: Some(1), // 测试时使用单线程
+            performance_monitoring_interval: 1, // 测试时使用短间隔
+            max_concurrent_tasks: 10, // 测试时使用小限制
+            ..Default::default()
+        };
+        let async_performance_optimizer = Arc::new(
+            crate::app::service::AsyncPerformanceOptimizer::new(async_perf_config)
+        );
+
+        // 【任务13.3新增】创建测试用内存管理器
+        let memory_config = crate::app::utils::memory_manager::MemoryManagerConfig {
+            l1_cache_max_entries: 50, // 测试时使用小缓存
+            l1_cache_ttl_seconds: 30, // 30秒TTL
+            object_pool_initial_size: 5, // 小对象池
+            object_pool_max_size: 20,
+            memory_pool_block_size: 512, // 512字节块
+            memory_pool_max_blocks: 10,
+            cache_eviction_interval_seconds: 15,
+            memory_monitoring_interval_seconds: 5, // 测试时使用短间隔
+            memory_pressure_threshold_bytes: 512 * 1024, // 512KB阈值
+            enable_leak_detection: false, // 测试时关闭泄漏检测
+        };
+        let memory_manager = Arc::new(
+            crate::app::utils::memory_manager::MemoryManager::new(memory_config)
+        );
+
+        // 【任务13.4新增】创建测试环境的连接池管理器
+        let test_config = crate::config::AppConfig {
+            http_addr: "127.0.0.1:3000".parse().unwrap(),
+            database_url: "sqlite::memory:".to_string(),
+            jwt_secret: "test_secret".to_string(),
+            database_pool: crate::config::DatabasePoolConfig::development(),
+            websocket_pool: crate::config::WebSocketPoolConfig::development(),
+        };
+
+        // 创建数据库连接池管理器（测试环境）
+        let database_pool_manager = Arc::new(
+            crate::app::utils::DatabasePoolManager
+                ::new(&test_config).await
+                .expect("Failed to create test database pool manager")
+        );
+
+        // 创建WebSocket连接池管理器（测试环境）
+        let websocket_pool_manager = Arc::new(
+            crate::app::utils::WebSocketPoolManager::new(test_config.websocket_pool)
+        );
+
+        let db_arc = Arc::new(db_connection);
         AppState {
-            task_repo: Arc::new(TaskRepository::new(db_connection.clone())),
-            db: db_connection,
+            task_repo: Arc::new(TaskRepository::from_arc(db_arc.clone())),
+            db: db_arc,
             jwt_secret: "test_secret".to_string(),
             connection_manager,
             message_distributor,
@@ -918,6 +968,10 @@ mod tests {
             status_sync_service,
             performance_metrics,
             error_recovery_state,
+            async_performance_optimizer,
+            memory_manager,
+            database_pool_manager, // 【任务13.4新增】
+            websocket_pool_manager, // 【任务13.4新增】
         }
     }
 

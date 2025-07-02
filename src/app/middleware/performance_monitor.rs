@@ -66,6 +66,19 @@ pub struct PerformanceConfig {
     pub max_geo_cache_size: usize,
 }
 
+/// 请求结束时的性能指标参数
+///
+/// 用于简化 `record_request_end` 函数的参数传递，避免参数过多的问题
+pub struct RequestEndMetrics<'a> {
+    pub duration: Duration,
+    pub status_code: StatusCode,
+    pub method: &'a str,
+    pub path: &'a str,
+    pub headers: Option<&'a HeaderMap>,
+    pub request_size: Option<u64>,
+    pub response_size: Option<u64>,
+}
+
 impl Default for PerformanceConfig {
     fn default() -> Self {
         Self {
@@ -260,29 +273,16 @@ impl PerformanceMetrics {
     /// 【功能】：在请求完成时更新相关指标和日志
     ///
     /// # 参数
-    /// * `duration` - 请求处理时间
-    /// * `status_code` - HTTP状态码
-    /// * `method` - HTTP方法
-    /// * `path` - 请求路径
-    /// * `headers` - 请求头（可选）
-    /// * `request_size` - 请求大小（字节）
-    /// * `response_size` - 响应大小（字节）
-    #[instrument(skip(self, headers))]
-    pub fn record_request_end(
-        &self,
-        duration: Duration,
-        status_code: StatusCode,
-        method: &str,
-        path: &str,
-        headers: Option<&HeaderMap>,
-        request_size: Option<u64>,
-        response_size: Option<u64>
-    ) {
+    /// * `metrics` - 包含所有请求指标的结构体
+    #[instrument(skip(self, metrics))]
+    pub fn record_request_end(&self, metrics: RequestEndMetrics<'_>) {
         self.active_connections.fetch_sub(1, Ordering::Relaxed);
 
-        let duration_ms = duration.as_millis() as u64;
+        let duration_ms = metrics.duration.as_millis() as u64;
         // 修正成功判断逻辑：2xx状态码 + 101 WebSocket升级都视为成功
-        let is_success = status_code.is_success() || status_code == StatusCode::SWITCHING_PROTOCOLS;
+        let is_success =
+            metrics.status_code.is_success() ||
+            metrics.status_code == StatusCode::SWITCHING_PROTOCOLS;
 
         if is_success {
             self.successful_requests.fetch_add(1, Ordering::Relaxed);
@@ -291,28 +291,28 @@ impl PerformanceMetrics {
         }
 
         // 更新请求/响应大小统计
-        if let Some(req_size) = request_size {
+        if let Some(req_size) = metrics.request_size {
             self.total_request_size.fetch_add(req_size, Ordering::Relaxed);
         }
-        if let Some(resp_size) = response_size {
+        if let Some(resp_size) = metrics.response_size {
             self.total_response_size.fetch_add(resp_size, Ordering::Relaxed);
         }
 
         // 更新错误分类统计
         if self.config.enable_error_classification {
-            self.update_error_classification(status_code);
+            self.update_error_classification(metrics.status_code);
         }
 
         // 更新用户代理统计
         if self.config.enable_user_agent_stats {
-            if let Some(headers) = headers {
+            if let Some(headers) = metrics.headers {
                 self.update_user_agent_stats(headers);
             }
         }
 
         // 更新地理位置统计（如果启用）
         if self.config.enable_geo_stats {
-            if let Some(headers) = headers {
+            if let Some(headers) = metrics.headers {
                 self.update_geo_stats(headers);
             }
         }
@@ -325,17 +325,17 @@ impl PerformanceMetrics {
                 counter!("http_requests_error_total").increment(1);
             }
 
-            histogram!("http_request_duration_seconds").record(duration.as_secs_f64());
+            histogram!("http_request_duration_seconds").record(metrics.duration.as_secs_f64());
             gauge!("http_active_connections").set(
                 self.active_connections.load(Ordering::Relaxed) as f64
             );
 
             // 新增：请求/响应大小指标
             if self.config.enable_size_monitoring {
-                if let Some(req_size) = request_size {
+                if let Some(req_size) = metrics.request_size {
                     histogram!("http_request_size_bytes").record(req_size as f64);
                 }
-                if let Some(resp_size) = response_size {
+                if let Some(resp_size) = metrics.response_size {
                     histogram!("http_response_size_bytes").record(resp_size as f64);
                 }
                 gauge!("http_total_request_size_bytes").set(
@@ -367,13 +367,13 @@ impl PerformanceMetrics {
             // INFO: 2xx成功状态码 + 101 WebSocket升级
             // WARN: 4xx客户端错误 + 慢请求
             // ERROR: 5xx服务器错误
-            let status_u16 = status_code.as_u16();
+            let status_u16 = metrics.status_code.as_u16();
             let is_slow_request = duration_ms > self.config.slow_request_threshold_ms;
 
-            let log_level = if status_code.is_server_error() {
+            let log_level = if metrics.status_code.is_server_error() {
                 // 5xx服务器错误 - ERROR级别
                 tracing::Level::ERROR
-            } else if status_code.is_client_error() || is_slow_request {
+            } else if metrics.status_code.is_client_error() || is_slow_request {
                 // 4xx客户端错误（包括409冲突）或慢请求 - WARN级别
                 tracing::Level::WARN
             } else {
@@ -385,8 +385,8 @@ impl PerformanceMetrics {
             match log_level {
                 tracing::Level::ERROR => {
                     error!(
-                        method = %method,
-                        path = %path,
+                        method = %metrics.method,
+                        path = %metrics.path,
                         status_code = %status_u16,
                         duration_ms = duration_ms,
                         active_connections = self.active_connections.load(Ordering::Relaxed),
@@ -396,7 +396,7 @@ impl PerformanceMetrics {
                     );
                 }
                 tracing::Level::WARN => {
-                    let warn_reason = if is_slow_request && status_code.is_client_error() {
+                    let warn_reason = if is_slow_request && metrics.status_code.is_client_error() {
                         "slow_request_and_client_error"
                     } else if is_slow_request {
                         "slow_request"
@@ -405,8 +405,8 @@ impl PerformanceMetrics {
                     };
 
                     warn!(
-                        method = %method,
-                        path = %path,
+                        method = %metrics.method,
+                        path = %metrics.path,
                         status_code = %status_u16,
                         duration_ms = duration_ms,
                         active_connections = self.active_connections.load(Ordering::Relaxed),
@@ -424,8 +424,8 @@ impl PerformanceMetrics {
                     };
 
                     info!(
-                        method = %method,
-                        path = %path,
+                        method = %metrics.method,
+                        path = %metrics.path,
                         status_code = %status_u16,
                         duration_ms = duration_ms,
                         active_connections = self.active_connections.load(Ordering::Relaxed),
@@ -437,8 +437,8 @@ impl PerformanceMetrics {
             }
 
             // 记录请求头信息（如果启用）
-            if self.config.log_request_headers && headers.is_some() {
-                let headers = headers.unwrap();
+            if self.config.log_request_headers && metrics.headers.is_some() {
+                let headers = metrics.headers.unwrap();
                 if let Some(user_agent) = headers.get("user-agent") {
                     if let Ok(user_agent_str) = user_agent.to_str() {
                         tracing::info!(user_agent = %user_agent_str, "Request user agent");
@@ -455,8 +455,8 @@ impl PerformanceMetrics {
         // 慢请求告警
         if duration_ms > self.config.slow_request_threshold_ms {
             warn!(
-                method = %method,
-                path = %path,
+                method = %metrics.method,
+                path = %metrics.path,
                 duration_ms = duration_ms,
                 threshold_ms = self.config.slow_request_threshold_ms,
                 "Slow request detected"
@@ -900,15 +900,15 @@ pub async fn performance_monitoring_middleware(
             // 如果请求没有正常完成，记录为服务器错误
             if !self.completed.load(std::sync::atomic::Ordering::Relaxed) {
                 let duration = self.start_time.elapsed();
-                self.metrics.record_request_end(
+                self.metrics.record_request_end(RequestEndMetrics {
                     duration,
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    &self.method,
-                    &self.path,
-                    self.headers.as_ref(),
-                    None, // request_size
-                    None // response_size
-                );
+                    status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                    method: &self.method,
+                    path: &self.path,
+                    headers: self.headers.as_ref(),
+                    request_size: None,
+                    response_size: None,
+                });
             }
         }
     }
@@ -932,15 +932,15 @@ pub async fn performance_monitoring_middleware(
     // 记录请求完成
     // TODO: 在实际应用中，应该从request和response中提取真实的大小
     // 这里暂时使用None作为占位符
-    metrics.record_request_end(
+    metrics.record_request_end(RequestEndMetrics {
         duration,
         status_code,
-        &method,
-        &path,
-        headers.as_ref(),
-        None, // request_size - 可以从request body获取
-        None // response_size - 可以从response body获取
-    );
+        method: &method,
+        path: &path,
+        headers: headers.as_ref(),
+        request_size: None, // 可以从request body获取
+        response_size: None, // 可以从response body获取
+    });
 
     // 标记为已完成，避免 Drop 时重复记录
     deferred.completed.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -1010,15 +1010,15 @@ mod tests {
         assert_eq!(stats_after_start.total_requests, 1);
 
         // 模拟请求完成
-        metrics.record_request_end(
-            Duration::from_millis(100),
-            StatusCode::OK,
-            "GET",
-            "/test",
-            None,
-            Some(1024), // request_size
-            Some(2048) // response_size
-        );
+        metrics.record_request_end(RequestEndMetrics {
+            duration: Duration::from_millis(100),
+            status_code: StatusCode::OK,
+            method: "GET",
+            path: "/test",
+            headers: None,
+            request_size: Some(1024),
+            response_size: Some(2048),
+        });
 
         let stats_after_end = metrics.get_stats();
         assert_eq!(stats_after_end.active_connections, 0);
@@ -1037,15 +1037,15 @@ mod tests {
         let metrics = PerformanceMetrics::new(config);
 
         metrics.record_request_start();
-        metrics.record_request_end(
-            Duration::from_millis(50),
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "POST",
-            "/error",
-            None,
-            None,
-            None
-        );
+        metrics.record_request_end(RequestEndMetrics {
+            duration: Duration::from_millis(50),
+            status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            method: "POST",
+            path: "/error",
+            headers: None,
+            request_size: None,
+            response_size: None,
+        });
 
         let stats = metrics.get_stats();
         assert_eq!(stats.total_requests, 1);
@@ -1065,28 +1065,28 @@ mod tests {
         // 3个成功请求
         for _ in 0..3 {
             metrics.record_request_start();
-            metrics.record_request_end(
-                Duration::from_millis(100),
-                StatusCode::OK,
-                "GET",
-                "/success",
-                None,
-                None,
-                None
-            );
+            metrics.record_request_end(RequestEndMetrics {
+                duration: Duration::from_millis(100),
+                status_code: StatusCode::OK,
+                method: "GET",
+                path: "/success",
+                headers: None,
+                request_size: None,
+                response_size: None,
+            });
         }
 
         // 1个失败请求
         metrics.record_request_start();
-        metrics.record_request_end(
-            Duration::from_millis(200),
-            StatusCode::BAD_REQUEST,
-            "POST",
-            "/error",
-            None,
-            None,
-            None
-        );
+        metrics.record_request_end(RequestEndMetrics {
+            duration: Duration::from_millis(200),
+            status_code: StatusCode::BAD_REQUEST,
+            method: "POST",
+            path: "/error",
+            headers: None,
+            request_size: None,
+            response_size: None,
+        });
 
         let stats = metrics.get_stats();
         assert_eq!(stats.total_requests, 4);
@@ -1146,15 +1146,15 @@ mod tests {
         let metrics = PerformanceMetrics::new(config);
 
         metrics.record_request_start();
-        metrics.record_request_end(
-            Duration::from_millis(50),
-            StatusCode::SWITCHING_PROTOCOLS, // 101状态码
-            "GET",
-            "/ws",
-            None,
-            None,
-            None
-        );
+        metrics.record_request_end(RequestEndMetrics {
+            duration: Duration::from_millis(50),
+            status_code: StatusCode::SWITCHING_PROTOCOLS, // 101状态码
+            method: "GET",
+            path: "/ws",
+            headers: None,
+            request_size: None,
+            response_size: None,
+        });
 
         let stats = metrics.get_stats();
         assert_eq!(stats.total_requests, 1);
@@ -1174,15 +1174,15 @@ mod tests {
 
         // 测试409冲突状态码
         metrics.record_request_start();
-        metrics.record_request_end(
-            Duration::from_millis(100),
-            StatusCode::CONFLICT, // 409状态码
-            "POST",
-            "/api/auth/register",
-            None,
-            None,
-            None
-        );
+        metrics.record_request_end(RequestEndMetrics {
+            duration: Duration::from_millis(100),
+            status_code: StatusCode::CONFLICT, // 409状态码
+            method: "POST",
+            path: "/api/auth/register",
+            headers: None,
+            request_size: None,
+            response_size: None,
+        });
 
         let stats = metrics.get_stats();
         assert_eq!(stats.total_requests, 1);
@@ -1201,15 +1201,15 @@ mod tests {
         let metrics = PerformanceMetrics::new(config);
 
         metrics.record_request_start();
-        metrics.record_request_end(
-            Duration::from_millis(200),
-            StatusCode::INTERNAL_SERVER_ERROR, // 500状态码
-            "GET",
-            "/api/tasks",
-            None,
-            None,
-            None
-        );
+        metrics.record_request_end(RequestEndMetrics {
+            duration: Duration::from_millis(200),
+            status_code: StatusCode::INTERNAL_SERVER_ERROR, // 500状态码
+            method: "GET",
+            path: "/api/tasks",
+            headers: None,
+            request_size: None,
+            response_size: None,
+        });
 
         let stats = metrics.get_stats();
         assert_eq!(stats.total_requests, 1);
@@ -1229,15 +1229,15 @@ mod tests {
         let metrics = PerformanceMetrics::new(config);
 
         metrics.record_request_start();
-        metrics.record_request_end(
-            Duration::from_millis(1000), // 超过阈值的请求
-            StatusCode::OK, // 成功状态码
-            "GET",
-            "/api/tasks",
-            None,
-            None,
-            None
-        );
+        metrics.record_request_end(RequestEndMetrics {
+            duration: Duration::from_millis(1000), // 超过阈值的请求
+            status_code: StatusCode::OK, // 成功状态码
+            method: "GET",
+            path: "/api/tasks",
+            headers: None,
+            request_size: None,
+            response_size: None,
+        });
 
         let stats = metrics.get_stats();
         assert_eq!(stats.total_requests, 1);
@@ -1269,15 +1269,15 @@ mod tests {
 
         // 模拟请求
         metrics.record_request_start();
-        metrics.record_request_end(
-            Duration::from_millis(150),
-            StatusCode::OK,
-            "GET",
-            "/api/test",
-            Some(&headers),
-            Some(512), // request_size
-            Some(1024) // response_size
-        );
+        metrics.record_request_end(RequestEndMetrics {
+            duration: Duration::from_millis(150),
+            status_code: StatusCode::OK,
+            method: "GET",
+            path: "/api/test",
+            headers: Some(&headers),
+            request_size: Some(512),
+            response_size: Some(1024),
+        });
 
         let stats = metrics.get_stats();
         assert_eq!(stats.total_requests, 1);
@@ -1308,15 +1308,15 @@ mod tests {
 
         for (status_code, _error_type) in error_cases {
             metrics.record_request_start();
-            metrics.record_request_end(
-                Duration::from_millis(100),
+            metrics.record_request_end(RequestEndMetrics {
+                duration: Duration::from_millis(100),
                 status_code,
-                "POST",
-                "/api/test",
-                None,
-                None,
-                None
-            );
+                method: "POST",
+                path: "/api/test",
+                headers: None,
+                request_size: None,
+                response_size: None,
+            });
         }
 
         let stats = metrics.get_stats();
@@ -1356,15 +1356,15 @@ mod tests {
             headers.insert("user-agent", ua.parse().unwrap());
 
             metrics.record_request_start();
-            metrics.record_request_end(
-                Duration::from_millis(100),
-                StatusCode::OK,
-                "GET",
-                "/api/test",
-                Some(&headers),
-                None,
-                None
-            );
+            metrics.record_request_end(RequestEndMetrics {
+                duration: Duration::from_millis(100),
+                status_code: StatusCode::OK,
+                method: "GET",
+                path: "/api/test",
+                headers: Some(&headers),
+                request_size: None,
+                response_size: None,
+            });
         }
 
         let stats = metrics.get_stats();

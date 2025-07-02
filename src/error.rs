@@ -103,6 +103,9 @@ pub enum AppError {
     /// 401 Unauthorized - JWT 令牌无效或过期
     InvalidToken(String),
 
+    /// 400 Bad Request - 输入验证错误
+    ValidationError(String),
+
     /// 带有 SpanTrace 上下文的错误包装器
     /// 用于捕获错误发生时的 tracing span 上下文信息
     TracedError {
@@ -131,6 +134,7 @@ impl std::fmt::Display for AppError {
             AppError::PasswordHashError(msg) => write!(f, "密码哈希错误: {}", msg),
             AppError::TokenGenerationError(msg) => write!(f, "令牌生成错误: {}", msg),
             AppError::InvalidToken(msg) => write!(f, "无效的令牌: {}", msg),
+            AppError::ValidationError(msg) => write!(f, "输入验证错误: {}", msg),
             AppError::TracedError { message, .. } => write!(f, "{}", message),
         }
     }
@@ -179,6 +183,8 @@ impl IntoResponse for AppError {
             }
             AppError::InvalidToken(msg) =>
                 (StatusCode::UNAUTHORIZED, format!("无效的令牌: {}", msg)),
+            AppError::ValidationError(msg) =>
+                (StatusCode::BAD_REQUEST, format!("输入验证错误: {}", msg)),
 
             // 处理带有 SpanTrace 的错误
             AppError::TracedError { message, span_trace, status_code } => {

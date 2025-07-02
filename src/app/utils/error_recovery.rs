@@ -391,6 +391,7 @@ impl ErrorRecoveryManager {
             AppError::DbErr(_) => Some(500),
             AppError::PasswordHashError(_) => Some(500),
             AppError::TokenGenerationError(_) => Some(500),
+            AppError::ValidationError(_) => Some(400),
         }
     }
 

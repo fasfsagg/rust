@@ -17,10 +17,14 @@ use std::sync::Arc;
 
 /// 创建测试用的应用配置
 fn create_test_config() -> AppConfig {
+    use axum_tutorial::config::{ DatabasePoolConfig, WebSocketPoolConfig };
+
     AppConfig {
         database_url: "sqlite::memory:".to_string(),
         jwt_secret: "test_secret_key_for_connection_manager_integration".to_string(),
         http_addr: "127.0.0.1:0".parse().unwrap(),
+        database_pool: DatabasePoolConfig::development(),
+        websocket_pool: WebSocketPoolConfig::development(),
     }
 }
 

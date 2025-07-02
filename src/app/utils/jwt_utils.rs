@@ -18,7 +18,7 @@ use jsonwebtoken::{ encode, decode, EncodingKey, DecodingKey, Header, Validation
 use serde::{ Deserialize, Serialize };
 
 /// JWT 声明结构体
-/// 
+///
 /// 这是项目中统一使用的 JWT Claims 结构体，
 /// 确保所有模块使用相同的字段定义
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -47,7 +47,7 @@ pub enum JwtError {
 }
 
 /// JWT 工具结构体
-/// 
+///
 /// 封装 JWT 相关操作，提供统一的接口
 pub struct JwtUtils {
     secret: String,
@@ -60,19 +60,19 @@ impl JwtUtils {
     }
 
     /// 创建 JWT token
-    /// 
+    ///
     /// # 参数
     /// - `user_id`: 用户 ID
     /// - `username`: 用户名
     /// - `expires_in_hours`: 过期时间（小时）
-    /// 
+    ///
     /// # 返回
     /// 成功时返回 JWT token 字符串，失败时返回错误
     pub fn create_token(
         &self,
         user_id: &str,
         username: &str,
-        expires_in_hours: i64,
+        expires_in_hours: i64
     ) -> Result<String, JwtError> {
         let now = Utc::now();
         let claims = Claims {
@@ -85,16 +85,15 @@ impl JwtUtils {
         encode(
             &Header::default(),
             &claims,
-            &EncodingKey::from_secret(self.secret.as_ref()),
-        )
-        .map_err(|e| JwtError::TokenCreationFailed(e.to_string()))
+            &EncodingKey::from_secret(self.secret.as_ref())
+        ).map_err(|e| JwtError::TokenCreationFailed(e.to_string()))
     }
 
     /// 验证 JWT token
-    /// 
+    ///
     /// # 参数
     /// - `token`: JWT token 字符串
-    /// 
+    ///
     /// # 返回
     /// 成功时返回解析后的 Claims，失败时返回错误
     pub fn validate_token(&self, token: &str) -> Result<Claims, JwtError> {
@@ -102,59 +101,57 @@ impl JwtUtils {
             return Err(JwtError::TokenMissing);
         }
 
-        match decode::<Claims>(
-            token,
-            &DecodingKey::from_secret(self.secret.as_ref()),
-            &Validation::default(),
-        ) {
+        match
+            decode::<Claims>(
+                token,
+                &DecodingKey::from_secret(self.secret.as_ref()),
+                &Validation::default()
+            )
+        {
             Ok(token_data) => Ok(token_data.claims),
-            Err(err) => match err.kind() {
-                jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
-                    Err(JwtError::TokenExpired)
+            Err(err) =>
+                match err.kind() {
+                    jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
+                        Err(JwtError::TokenExpired)
+                    }
+                    _ => Err(JwtError::TokenInvalid),
                 }
-                _ => Err(JwtError::TokenInvalid),
-            },
         }
     }
 
     /// 从 Authorization 头中提取 Bearer token
-    /// 
+    ///
     /// # 参数
     /// - `auth_header`: Authorization 头的值
-    /// 
+    ///
     /// # 返回
     /// 成功时返回提取的 token，失败时返回 None
     pub fn extract_bearer_token(auth_header: &str) -> Option<String> {
-        if auth_header.starts_with("Bearer ") {
-            Some(auth_header[7..].to_string())
-        } else {
-            None
-        }
+        auth_header.strip_prefix("Bearer ").map(|stripped| stripped.to_string())
     }
 
     /// 创建测试用的 JWT token
-    /// 
+    ///
     /// 这个函数专门用于测试，创建短期有效的 token
-    /// 
+    ///
     /// # 参数
     /// - `user_id`: 用户 ID
     /// - `username`: 用户名
-    /// 
+    ///
     /// # 返回
     /// 测试用的 JWT token
     pub fn create_test_token(&self, user_id: &str, username: &str) -> String {
-        self.create_token(user_id, username, 1)
-            .expect("Failed to create test token")
+        self.create_token(user_id, username, 1).expect("Failed to create test token")
     }
 
     /// 创建过期的测试 token
-    /// 
+    ///
     /// 这个函数专门用于测试过期 token 的场景
-    /// 
+    ///
     /// # 参数
     /// - `user_id`: 用户 ID
     /// - `username`: 用户名
-    /// 
+    ///
     /// # 返回
     /// 已过期的 JWT token
     pub fn create_expired_test_token(&self, user_id: &str, username: &str) -> String {
@@ -166,22 +163,19 @@ impl JwtUtils {
             exp: (now - Duration::hours(1)).timestamp(), // 1小时前过期
         };
 
-        encode(
-            &Header::default(),
-            &claims,
-            &EncodingKey::from_secret(self.secret.as_ref()),
+        encode(&Header::default(), &claims, &EncodingKey::from_secret(self.secret.as_ref())).expect(
+            "Failed to create expired test token"
         )
-        .expect("Failed to create expired test token")
     }
 
     /// 创建无效签名的测试 token
-    /// 
+    ///
     /// 这个函数专门用于测试无效签名的场景
-    /// 
+    ///
     /// # 参数
     /// - `user_id`: 用户 ID
     /// - `username`: 用户名
-    /// 
+    ///
     /// # 返回
     /// 使用错误密钥签名的 JWT token
     pub fn create_invalid_test_token(&self, user_id: &str, username: &str) -> String {
@@ -197,9 +191,8 @@ impl JwtUtils {
         encode(
             &Header::default(),
             &claims,
-            &EncodingKey::from_secret("wrong-secret-key".as_ref()),
-        )
-        .expect("Failed to create invalid test token")
+            &EncodingKey::from_secret("wrong-secret-key".as_ref())
+        ).expect("Failed to create invalid test token")
     }
 }
 
@@ -212,11 +205,11 @@ mod tests {
     #[test]
     fn test_create_and_validate_token() {
         let jwt_utils = JwtUtils::new(TEST_SECRET.to_string());
-        
+
         // 创建 token
         let token = jwt_utils.create_token("user123", "testuser", 1).unwrap();
         assert!(!token.is_empty());
-        
+
         // 验证 token
         let claims = jwt_utils.validate_token(&token).unwrap();
         assert_eq!(claims.sub, "user123");
@@ -226,20 +219,20 @@ mod tests {
     #[test]
     fn test_validate_expired_token() {
         let jwt_utils = JwtUtils::new(TEST_SECRET.to_string());
-        
+
         let expired_token = jwt_utils.create_expired_test_token("user123", "testuser");
         let result = jwt_utils.validate_token(&expired_token);
-        
+
         assert_eq!(result, Err(JwtError::TokenExpired));
     }
 
     #[test]
     fn test_validate_invalid_token() {
         let jwt_utils = JwtUtils::new(TEST_SECRET.to_string());
-        
+
         let invalid_token = jwt_utils.create_invalid_test_token("user123", "testuser");
         let result = jwt_utils.validate_token(&invalid_token);
-        
+
         assert_eq!(result, Err(JwtError::TokenInvalid));
     }
 
@@ -248,7 +241,7 @@ mod tests {
         let auth_header = "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9";
         let token = JwtUtils::extract_bearer_token(auth_header);
         assert_eq!(token, Some("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9".to_string()));
-        
+
         let invalid_header = "Basic dXNlcjpwYXNz";
         let token = JwtUtils::extract_bearer_token(invalid_header);
         assert_eq!(token, None);

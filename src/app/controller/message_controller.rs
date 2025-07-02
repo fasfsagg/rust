@@ -165,7 +165,7 @@ pub async fn search_messages(
 
     // 构建分页参数
     let page = query.page.unwrap_or(1).max(1);
-    let page_size = query.page_size.unwrap_or(50).min(100).max(1);
+    let page_size = query.page_size.unwrap_or(50).clamp(1, 100);
     let desc_order = query.desc_order.unwrap_or(true);
 
     let pagination_params = MessagePaginationParams {
@@ -178,12 +178,12 @@ pub async fn search_messages(
     let filter = build_message_filter(&query)?;
 
     // 创建消息仓库实例
-    let message_repository = MessageRepository::new(app_state.db.clone());
+    let message_repository = MessageRepository::from_arc(app_state.db.clone());
 
     // 执行搜索
     let result = message_repository
         .search_messages(query.keyword, pagination_params, filter).await
-        .map_err(|e| AppError::DbErr(e))?;
+        .map_err(AppError::DbErr)?;
 
     // 转换响应格式
     let response = convert_to_paginated_response(result);
@@ -215,7 +215,7 @@ pub async fn get_chat_room_messages(
 
     // 构建分页参数
     let page = query.page.unwrap_or(1).max(1);
-    let page_size = query.page_size.unwrap_or(50).min(100).max(1);
+    let page_size = query.page_size.unwrap_or(50).clamp(1, 100);
     let desc_order = query.desc_order.unwrap_or(true);
 
     let pagination_params = MessagePaginationParams {
@@ -228,12 +228,12 @@ pub async fn get_chat_room_messages(
     let filter = build_chat_room_message_filter(&query)?;
 
     // 创建消息仓库实例
-    let message_repository = MessageRepository::new(app_state.db.clone());
+    let message_repository = MessageRepository::from_arc(app_state.db.clone());
 
     // 执行查询
     let result = message_repository
         .find_by_chat_room(chat_room_uuid, pagination_params, filter).await
-        .map_err(|e| AppError::DbErr(e))?;
+        .map_err(AppError::DbErr)?;
 
     // 转换响应格式
     let response = convert_to_paginated_response(result);

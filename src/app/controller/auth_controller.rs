@@ -67,7 +67,7 @@ pub async fn register_handler(
 
     // 2. 创建用户仓库实例
     // 从 AppState 中获取数据库连接来创建用户仓库
-    let user_repo = Arc::new(UserRepository::new(app_state.db.clone()));
+    let user_repo = Arc::new(UserRepository::from_arc(app_state.db.clone()));
 
     // 3. 调用服务层处理业务逻辑
     let user_response = register_user(user_repo, payload).await?;
@@ -128,7 +128,7 @@ pub async fn login_handler(
 
     // 2. 创建用户仓库实例
     // 从 AppState 中获取数据库连接来创建用户仓库
-    let user_repo = Arc::new(UserRepository::new(app_state.db.clone()));
+    let user_repo = Arc::new(UserRepository::from_arc(app_state.db.clone()));
 
     // 3. 调用服务层处理业务逻辑
     // 从应用状态中获取 JWT 密钥

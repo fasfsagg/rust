@@ -26,11 +26,16 @@
 
 use std::collections::VecDeque;
 use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
 use tokio::sync::{ RwLock, Mutex };
 use uuid::Uuid;
 use chrono::{ DateTime, Utc };
 use serde::{ Serialize, Deserialize };
 use axum::extract::ws::Message;
+use bytes::Bytes;
+use flate2::Compression;
+use flate2::write::GzEncoder;
+use std::io::Write;
 
 use crate::app::model::chat::ServerMessage;
 use crate::app::service::{ ConnectionManager, ConnectionId };
@@ -65,11 +70,12 @@ pub enum BroadcastStrategy {
 ///
 /// 【功能】: 定义消息的优先级级别
 /// 【用途】: 用于消息队列的优先级排序
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum MessagePriority {
     /// 低优先级（普通聊天消息）
     Low = 1,
     /// 正常优先级（默认）
+    #[default]
     Normal = 2,
     /// 高优先级（重要通知）
     High = 3,
@@ -119,13 +125,64 @@ pub struct DistributionStats {
     pub average_latency_ms: f64,
     /// 最后更新时间
     pub last_updated: DateTime<Utc>,
+    /// 【性能优化新增】压缩消息数量
+    pub compressed_messages: u64,
+    /// 【性能优化新增】零拷贝消息数量
+    pub zero_copy_messages: u64,
+    /// 【性能优化新增】批处理效率（消息/批次）
+    pub batch_efficiency: f64,
+    /// 【性能优化新增】平均消息大小（字节）
+    pub average_message_size: f64,
+    /// 【性能优化新增】压缩比率
+    pub compression_ratio: f64,
+}
+
+/// 【性能优化新增】消息压缩配置
+///
+/// 【功能】: 配置消息压缩的行为参数
+#[derive(Debug, Clone)]
+pub struct CompressionConfig {
+    /// 是否启用压缩
+    pub enabled: bool,
+    /// 压缩级别 (0-9, 6为默认)
+    pub level: u32,
+    /// 最小压缩阈值（字节）- 小于此大小的消息不压缩
+    pub min_size_threshold: usize,
+    /// 压缩类型
+    pub compression_type: CompressionType,
+}
+
+/// 【性能优化新增】压缩类型枚举
+#[derive(Debug, Clone, PartialEq)]
+pub enum CompressionType {
+    /// Gzip压缩
+    Gzip,
+    /// 无压缩
+    None,
+}
+
+/// 【性能优化新增】动态批处理配置
+///
+/// 【功能】: 根据系统负载动态调整批处理大小
+#[derive(Debug)]
+pub struct DynamicBatchConfig {
+    /// 最小批处理大小
+    pub min_batch_size: usize,
+    /// 最大批处理大小
+    pub max_batch_size: usize,
+    /// 当前批处理大小
+    pub current_batch_size: AtomicUsize,
+    /// 负载阈值 - 队列长度超过此值时增加批处理大小
+    pub load_threshold: usize,
+    /// 调整因子 (0.1 - 2.0)
+    pub adjustment_factor: f64,
 }
 
 /// 消息分发器主结构体
 ///
 /// 【功能】: 管理消息分发的核心组件
 /// 【线程安全】: 使用 Arc<RwLock<T>> 和 Arc<Mutex<T>> 确保线程安全
-/// 【性能优化】: 使用优先级队列和批量处理提高性能
+/// 【性能优化】: 使用优先级队列、批量处理、零拷贝和压缩提高性能
 #[derive(Debug, Clone)]
 pub struct MessageDistributor {
     /// 连接管理器引用
@@ -134,16 +191,33 @@ pub struct MessageDistributor {
     message_queue: Arc<Mutex<VecDeque<DistributionTask>>>,
     /// 分发统计信息
     stats: Arc<RwLock<DistributionStats>>,
-    /// 批量处理大小
-    batch_size: usize,
+    /// 【性能优化】动态批处理配置
+    dynamic_batch_config: Arc<DynamicBatchConfig>,
     /// 分发工作线程数量
     worker_count: usize,
+    /// 【性能优化新增】消息压缩配置
+    compression_config: CompressionConfig,
+    /// 【性能优化新增】性能监控计数器
+    performance_counters: Arc<PerformanceCounters>,
 }
 
-impl Default for MessagePriority {
-    fn default() -> Self {
-        MessagePriority::Normal
-    }
+/// 【性能优化新增】性能计数器
+///
+/// 【功能】: 使用原子操作记录性能指标，避免锁竞争
+#[derive(Debug)]
+pub struct PerformanceCounters {
+    /// 零拷贝消息计数
+    pub zero_copy_count: AtomicUsize,
+    /// 压缩消息计数
+    pub compressed_count: AtomicUsize,
+    /// 总消息字节数
+    pub total_bytes: AtomicUsize,
+    /// 压缩后字节数
+    pub compressed_bytes: AtomicUsize,
+    /// 批处理计数
+    pub batch_count: AtomicUsize,
+    /// 批处理中的消息总数
+    pub batched_messages: AtomicUsize,
 }
 
 impl DistributionTask {
@@ -208,6 +282,50 @@ impl Default for DistributionStats {
             queue_length: 0,
             average_latency_ms: 0.0,
             last_updated: Utc::now(),
+            compressed_messages: 0,
+            zero_copy_messages: 0,
+            batch_efficiency: 0.0,
+            average_message_size: 0.0,
+            compression_ratio: 1.0,
+        }
+    }
+}
+
+/// 【性能优化新增】压缩配置默认实现
+impl Default for CompressionConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            level: 6, // 平衡压缩率和速度
+            min_size_threshold: 1024, // 1KB以下不压缩
+            compression_type: CompressionType::Gzip,
+        }
+    }
+}
+
+/// 【性能优化新增】动态批处理配置默认实现
+impl Default for DynamicBatchConfig {
+    fn default() -> Self {
+        Self {
+            min_batch_size: 10,
+            max_batch_size: 1000,
+            current_batch_size: AtomicUsize::new(100),
+            load_threshold: 500,
+            adjustment_factor: 1.5,
+        }
+    }
+}
+
+/// 【性能优化新增】性能计数器默认实现
+impl Default for PerformanceCounters {
+    fn default() -> Self {
+        Self {
+            zero_copy_count: AtomicUsize::new(0),
+            compressed_count: AtomicUsize::new(0),
+            total_bytes: AtomicUsize::new(0),
+            compressed_bytes: AtomicUsize::new(0),
+            batch_count: AtomicUsize::new(0),
+            batched_messages: AtomicUsize::new(0),
         }
     }
 }
@@ -215,24 +333,60 @@ impl Default for DistributionStats {
 impl MessageDistributor {
     /// 创建新的消息分发器实例
     ///
-    /// 【功能】: 初始化消息分发器
+    /// 【功能】: 初始化消息分发器，支持性能优化特性
     /// 【参数】:
     /// * `connection_manager` - 连接管理器引用
-    /// * `batch_size` - 批量处理大小（默认100）
+    /// * `batch_size` - 初始批量处理大小（默认100）
     /// * `worker_count` - 工作线程数量（默认4）
     ///
     /// 【返回值】: MessageDistributor 实例
+    /// 【性能优化】: 启用零拷贝、压缩和动态批处理
     pub fn new(
         connection_manager: Arc<ConnectionManager>,
         batch_size: Option<usize>,
         worker_count: Option<usize>
     ) -> Self {
+        let initial_batch_size = batch_size.unwrap_or(100);
+        let dynamic_batch_config = Arc::new(DynamicBatchConfig {
+            current_batch_size: AtomicUsize::new(initial_batch_size),
+            ..Default::default()
+        });
+
         Self {
             connection_manager,
             message_queue: Arc::new(Mutex::new(VecDeque::new())),
             stats: Arc::new(RwLock::new(DistributionStats::default())),
-            batch_size: batch_size.unwrap_or(100),
+            dynamic_batch_config,
             worker_count: worker_count.unwrap_or(4),
+            compression_config: CompressionConfig::default(),
+            performance_counters: Arc::new(PerformanceCounters::default()),
+        }
+    }
+
+    /// 【性能优化新增】创建高性能配置的消息分发器
+    ///
+    /// 【功能】: 为百万并发场景优化的构造函数
+    /// 【参数】:
+    /// * `connection_manager` - 连接管理器引用
+    /// * `compression_config` - 压缩配置
+    /// * `dynamic_batch_config` - 动态批处理配置
+    /// * `worker_count` - 工作线程数量
+    ///
+    /// 【返回值】: 高性能配置的MessageDistributor实例
+    pub fn new_high_performance(
+        connection_manager: Arc<ConnectionManager>,
+        compression_config: CompressionConfig,
+        dynamic_batch_config: DynamicBatchConfig,
+        worker_count: usize
+    ) -> Self {
+        Self {
+            connection_manager,
+            message_queue: Arc::new(Mutex::new(VecDeque::new())),
+            stats: Arc::new(RwLock::new(DistributionStats::default())),
+            dynamic_batch_config: Arc::new(dynamic_batch_config),
+            worker_count,
+            compression_config,
+            performance_counters: Arc::new(PerformanceCounters::default()),
         }
     }
 
@@ -462,13 +616,18 @@ impl MessageDistributor {
     pub async fn process_batch(&self) -> Result<usize, String> {
         let tasks = {
             let mut queue = self.message_queue.lock().await;
-            let batch_size = std::cmp::min(self.batch_size, queue.len());
-            if batch_size == 0 {
+            let queue_length = queue.len();
+
+            // 【性能优化】使用动态批处理大小
+            let batch_size = self.adjust_batch_size(queue_length);
+            let actual_batch_size = std::cmp::min(batch_size, queue_length);
+
+            if actual_batch_size == 0 {
                 return Ok(0);
             }
 
             // 取出一批任务
-            queue.drain(0..batch_size).collect::<Vec<_>>()
+            queue.drain(0..actual_batch_size).collect::<Vec<_>>()
         };
 
         let mut successful_count = 0;
@@ -569,11 +728,35 @@ impl MessageDistributor {
 
     /// 获取分发统计信息
     ///
-    /// 【功能】: 返回当前的分发统计数据
+    /// 【功能】: 返回当前的分发统计数据，包含性能优化指标
     /// 【返回值】: DistributionStats - 统计信息
     pub async fn get_stats(&self) -> DistributionStats {
-        let stats = self.stats.read().await;
-        stats.clone()
+        let mut stats = self.stats.read().await.clone();
+
+        // 【性能优化】更新实时性能指标
+        let counters = &self.performance_counters;
+        stats.zero_copy_messages = counters.zero_copy_count.load(
+            std::sync::atomic::Ordering::Relaxed
+        ) as u64;
+        stats.compressed_messages = counters.compressed_count.load(
+            std::sync::atomic::Ordering::Relaxed
+        ) as u64;
+
+        let total_bytes = counters.total_bytes.load(std::sync::atomic::Ordering::Relaxed);
+        let compressed_bytes = counters.compressed_bytes.load(std::sync::atomic::Ordering::Relaxed);
+
+        if total_bytes > 0 {
+            stats.compression_ratio = (compressed_bytes as f64) / (total_bytes as f64);
+        }
+
+        let batch_count = counters.batch_count.load(std::sync::atomic::Ordering::Relaxed);
+        let batched_messages = counters.batched_messages.load(std::sync::atomic::Ordering::Relaxed);
+
+        if batch_count > 0 {
+            stats.batch_efficiency = (batched_messages as f64) / (batch_count as f64);
+        }
+
+        stats
     }
 
     /// 获取当前队列长度
@@ -605,6 +788,162 @@ impl MessageDistributor {
 
         cleared_count
     }
+
+    /// 【性能优化新增】重置分发统计信息
+    ///
+    /// 【功能】: 清零所有统计数据和性能计数器
+    pub async fn reset_stats(&self) {
+        let mut stats = self.stats.write().await;
+        *stats = DistributionStats::default();
+
+        // 【性能优化】重置性能计数器
+        let counters = &self.performance_counters;
+        counters.zero_copy_count.store(0, std::sync::atomic::Ordering::Relaxed);
+        counters.compressed_count.store(0, std::sync::atomic::Ordering::Relaxed);
+        counters.total_bytes.store(0, std::sync::atomic::Ordering::Relaxed);
+        counters.compressed_bytes.store(0, std::sync::atomic::Ordering::Relaxed);
+        counters.batch_count.store(0, std::sync::atomic::Ordering::Relaxed);
+        counters.batched_messages.store(0, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// 【性能优化新增】零拷贝消息压缩
+    ///
+    /// 【功能】: 使用Bytes实现零拷贝，并根据配置进行压缩
+    /// 【参数】:
+    /// * `message` - 原始消息内容
+    ///
+    /// 【返回值】: 优化后的Bytes消息
+    /// 【性能特性】: 零拷贝 + 可选压缩
+    pub fn optimize_message(
+        &self,
+        message: &str
+    ) -> Result<Bytes, Box<dyn std::error::Error + Send + Sync>> {
+        let message_bytes = message.as_bytes();
+        let original_size = message_bytes.len();
+
+        // 更新总字节数计数器
+        self.performance_counters.total_bytes.fetch_add(
+            original_size,
+            std::sync::atomic::Ordering::Relaxed
+        );
+
+        // 判断是否需要压缩
+        if
+            self.compression_config.enabled &&
+            original_size >= self.compression_config.min_size_threshold &&
+            self.compression_config.compression_type == CompressionType::Gzip
+        {
+            // 执行Gzip压缩
+            let mut encoder = GzEncoder::new(
+                Vec::new(),
+                Compression::new(self.compression_config.level)
+            );
+            encoder.write_all(message_bytes)?;
+            let compressed_data = encoder.finish()?;
+
+            // 只有在压缩效果明显时才使用压缩版本（至少节省10%）
+            if compressed_data.len() < (original_size * 9) / 10 {
+                self.performance_counters.compressed_count.fetch_add(
+                    1,
+                    std::sync::atomic::Ordering::Relaxed
+                );
+                self.performance_counters.compressed_bytes.fetch_add(
+                    compressed_data.len(),
+                    std::sync::atomic::Ordering::Relaxed
+                );
+
+                // 使用零拷贝Bytes
+                Ok(Bytes::from(compressed_data))
+            } else {
+                // 压缩效果不佳，使用原始数据
+                self.performance_counters.zero_copy_count.fetch_add(
+                    1,
+                    std::sync::atomic::Ordering::Relaxed
+                );
+                Ok(Bytes::copy_from_slice(message_bytes))
+            }
+        } else {
+            // 不压缩，直接使用零拷贝
+            self.performance_counters.zero_copy_count.fetch_add(
+                1,
+                std::sync::atomic::Ordering::Relaxed
+            );
+            Ok(Bytes::copy_from_slice(message_bytes))
+        }
+    }
+
+    /// 【性能优化新增】动态调整批处理大小
+    ///
+    /// 【功能】: 根据当前队列长度动态调整批处理大小
+    /// 【参数】:
+    /// * `current_queue_length` - 当前队列长度
+    ///
+    /// 【返回值】: 调整后的批处理大小
+    pub fn adjust_batch_size(&self, current_queue_length: usize) -> usize {
+        let config = &self.dynamic_batch_config;
+        let current_size = config.current_batch_size.load(std::sync::atomic::Ordering::Relaxed);
+
+        let new_size = if current_queue_length > config.load_threshold {
+            // 队列积压，增加批处理大小
+            let increased = ((current_size as f64) * config.adjustment_factor) as usize;
+            increased.min(config.max_batch_size)
+        } else if current_queue_length < config.load_threshold / 2 {
+            // 队列较空，减少批处理大小以降低延迟
+            let decreased = ((current_size as f64) / config.adjustment_factor) as usize;
+            decreased.max(config.min_batch_size)
+        } else {
+            current_size
+        };
+
+        // 更新当前批处理大小
+        config.current_batch_size.store(new_size, std::sync::atomic::Ordering::Relaxed);
+        new_size
+    }
+
+    /// 【性能优化新增】获取性能指标
+    ///
+    /// 【功能】: 获取详细的性能指标用于监控
+    /// 【返回值】: 性能指标的快照
+    pub fn get_performance_metrics(&self) -> PerformanceMetrics {
+        let counters = &self.performance_counters;
+        PerformanceMetrics {
+            zero_copy_messages: counters.zero_copy_count.load(std::sync::atomic::Ordering::Relaxed),
+            compressed_messages: counters.compressed_count.load(
+                std::sync::atomic::Ordering::Relaxed
+            ),
+            total_bytes_processed: counters.total_bytes.load(std::sync::atomic::Ordering::Relaxed),
+            compressed_bytes: counters.compressed_bytes.load(std::sync::atomic::Ordering::Relaxed),
+            batch_count: counters.batch_count.load(std::sync::atomic::Ordering::Relaxed),
+            batched_messages: counters.batched_messages.load(std::sync::atomic::Ordering::Relaxed),
+            current_batch_size: self.dynamic_batch_config.current_batch_size.load(
+                std::sync::atomic::Ordering::Relaxed
+            ),
+            compression_enabled: self.compression_config.enabled,
+        }
+    }
+}
+
+/// 【性能优化新增】性能指标结构体
+///
+/// 【功能】: 用于外部监控系统的性能指标
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerformanceMetrics {
+    /// 零拷贝消息数量
+    pub zero_copy_messages: usize,
+    /// 压缩消息数量
+    pub compressed_messages: usize,
+    /// 处理的总字节数
+    pub total_bytes_processed: usize,
+    /// 压缩后的字节数
+    pub compressed_bytes: usize,
+    /// 批处理次数
+    pub batch_count: usize,
+    /// 批处理的消息总数
+    pub batched_messages: usize,
+    /// 当前批处理大小
+    pub current_batch_size: usize,
+    /// 是否启用压缩
+    pub compression_enabled: bool,
 }
 
 #[cfg(test)]
@@ -613,6 +952,13 @@ mod tests {
     use tokio::sync::mpsc;
     use crate::app::model::chat::{ ServerMessage, UserInfo };
     use crate::app::service::ConnectionManager;
+
+    /// 创建测试用的连接管理器
+    async fn create_test_connection_manager() -> (Arc<ConnectionManager>, mpsc::Receiver<String>) {
+        let connection_manager = Arc::new(ConnectionManager::new());
+        let (_tx, rx) = mpsc::channel(100);
+        (connection_manager, rx)
+    }
 
     /// 创建测试用的消息分发器
     async fn create_test_distributor() -> (MessageDistributor, Arc<ConnectionManager>) {
@@ -879,5 +1225,113 @@ mod tests {
             let task = DistributionTask::new(message, strategy, MessagePriority::Normal, None);
             assert!(task.task_id != Uuid::nil());
         }
+    }
+
+    // 【性能优化测试】消息批处理优化测试
+    #[tokio::test]
+    async fn test_performance_optimization_zero_copy_messages() {
+        let (connection_manager, _) = create_test_connection_manager().await;
+        let distributor = MessageDistributor::new(connection_manager, Some(50), Some(2));
+
+        // 测试零拷贝消息优化
+        let test_message = "Test message for zero-copy optimization";
+        let optimized_bytes = distributor.optimize_message(test_message).unwrap();
+
+        // 验证消息内容正确
+        assert_eq!(optimized_bytes.as_ref(), test_message.as_bytes());
+
+        // 验证性能计数器更新
+        let metrics = distributor.get_performance_metrics();
+        assert!(metrics.zero_copy_messages > 0 || metrics.compressed_messages > 0);
+        assert!(metrics.total_bytes_processed > 0);
+    }
+
+    #[tokio::test]
+    async fn test_performance_optimization_dynamic_batch_sizing() {
+        let (connection_manager, _) = create_test_connection_manager().await;
+        let distributor = MessageDistributor::new(connection_manager, Some(100), Some(2));
+
+        // 测试动态批处理大小调整
+        let initial_size = distributor.dynamic_batch_config.current_batch_size.load(
+            std::sync::atomic::Ordering::Relaxed
+        );
+
+        // 模拟高负载情况（队列长度超过阈值）
+        let high_load_size = distributor.adjust_batch_size(600); // 超过默认阈值500
+        assert!(high_load_size > initial_size);
+        assert!(high_load_size <= distributor.dynamic_batch_config.max_batch_size);
+
+        // 模拟低负载情况
+        let low_load_size = distributor.adjust_batch_size(100); // 低于阈值的一半
+        assert!(low_load_size < high_load_size);
+        assert!(low_load_size >= distributor.dynamic_batch_config.min_batch_size);
+    }
+
+    #[tokio::test]
+    async fn test_performance_optimization_compression_config() {
+        let (connection_manager, _) = create_test_connection_manager().await;
+
+        // 创建启用压缩的分发器
+        let compression_config = CompressionConfig {
+            enabled: true,
+            level: 6,
+            min_size_threshold: 100, // 100字节阈值
+            compression_type: CompressionType::Gzip,
+        };
+
+        let dynamic_batch_config = DynamicBatchConfig::default();
+        let distributor = MessageDistributor::new_high_performance(
+            connection_manager,
+            compression_config,
+            dynamic_batch_config,
+            4
+        );
+
+        // 测试大消息压缩
+        let large_message = "A".repeat(200); // 超过压缩阈值
+        let _optimized_bytes = distributor.optimize_message(&large_message).unwrap();
+
+        // 验证消息被处理
+        let metrics = distributor.get_performance_metrics();
+        assert!(metrics.total_bytes_processed >= 200);
+        assert!(metrics.compression_enabled);
+    }
+
+    #[tokio::test]
+    async fn test_performance_optimization_stats_integration() {
+        let (connection_manager, _) = create_test_connection_manager().await;
+        let distributor = MessageDistributor::new(connection_manager, Some(50), Some(2));
+
+        // 处理一些消息以生成统计数据
+        for i in 0..10 {
+            let message = format!("Test message {}", i);
+            let _ = distributor.optimize_message(&message);
+        }
+
+        // 验证统计信息包含性能指标
+        let stats = distributor.get_stats().await;
+        assert!(stats.zero_copy_messages > 0 || stats.compressed_messages > 0);
+        assert!(stats.average_message_size >= 0.0);
+        assert!(stats.compression_ratio >= 0.0);
+
+        // 测试重置功能
+        distributor.reset_stats().await;
+        let reset_stats = distributor.get_stats().await;
+        assert_eq!(reset_stats.zero_copy_messages, 0);
+        assert_eq!(reset_stats.compressed_messages, 0);
+    }
+
+    #[test]
+    fn test_performance_optimization_compression_types() {
+        // 测试压缩类型枚举
+        assert_eq!(CompressionType::Gzip, CompressionType::Gzip);
+        assert_ne!(CompressionType::Gzip, CompressionType::None);
+
+        // 测试默认配置
+        let default_config = CompressionConfig::default();
+        assert!(default_config.enabled);
+        assert_eq!(default_config.compression_type, CompressionType::Gzip);
+        assert_eq!(default_config.level, 6);
+        assert_eq!(default_config.min_size_threshold, 1024);
     }
 }

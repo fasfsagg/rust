@@ -73,6 +73,13 @@ pub mod notification_service;
 // 【可见性】: `pub` 使得 `status_sync_service` 模块本身可以被外部访问。
 pub mod status_sync_service;
 
+// 【任务13.2新增】`pub mod async_performance_optimizer;`
+// 【作用】: 声明存在一个名为 `async_performance_optimizer` 的公共子模块。
+// 【查找规则】: Rust 编译器会查找 `src/app/service/async_performance_optimizer.rs` 文件。
+// 【可见性】: `pub` 使得 `async_performance_optimizer` 模块本身可以被外部访问。
+// 【功能】: 异步性能优化服务，包含Tokio任务调度、I/O多路复用、背压处理等优化功能
+pub mod async_performance_optimizer;
+
 // --- 重新导出公共项 ---
 // `pub use task_service::*;`
 // 【作用】: 将 `task_service` 模块中所有 `pub` 的项（主要是服务函数）引入到当前的 `service` 模块作用域，并使它们也成为 `pub`。
@@ -104,3 +111,8 @@ pub use notification_service::*;
 // 【作用】: 将 `status_sync_service` 模块中所有 `pub` 的项（主要是状态同步服务结构体和方法）引入到当前的 `service` 模块作用域，并使它们也成为 `pub`。
 // 【效果】: 简化 Controller 层及其他调用者的导入和调用路径。
 pub use status_sync_service::*;
+
+// 【任务13.2新增】`pub use async_performance_optimizer::*;`
+// 【作用】: 将 `async_performance_optimizer` 模块中所有 `pub` 的项（主要是异步性能优化器结构体和方法）引入到当前的 `service` 模块作用域，并使它们也成为 `pub`。
+// 【效果】: 简化 Controller 层及其他调用者的导入和调用路径。
+pub use async_performance_optimizer::*;

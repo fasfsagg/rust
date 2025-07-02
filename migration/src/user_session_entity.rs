@@ -4,11 +4,12 @@
 //! 为企业级聊天应用提供可靠的连接管理和状态跟踪。
 
 use sea_orm::entity::prelude::*;
-use serde::{Deserialize, Serialize};
+use sea_orm::sea_query::StringLen;
+use serde::{ Deserialize, Serialize };
 
 /// 会话状态枚举
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
-#[sea_orm(rs_type = "String", db_type = "String(Some(20))")]
+#[sea_orm(rs_type = "String", db_type = "String(StringLen::N(20))")]
 pub enum SessionStatus {
     /// 在线状态
     #[sea_orm(string_value = "online")]
@@ -29,7 +30,7 @@ pub enum SessionStatus {
 
 /// 设备类型枚举
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
-#[sea_orm(rs_type = "String", db_type = "String(Some(20))")]
+#[sea_orm(rs_type = "String", db_type = "String(StringLen::N(20))")]
 pub enum DeviceType {
     /// 桌面端
     #[sea_orm(string_value = "desktop")]
@@ -46,7 +47,7 @@ pub enum DeviceType {
 }
 
 /// 用户会话实体模型
-/// 
+///
 /// 设计考虑：
 /// - 高并发支持：使用UUID主键，支持分布式环境下的会话管理
 /// - 实时性：记录连接时间、心跳时间，支持连接状态监控
@@ -65,7 +66,7 @@ pub struct Model {
     pub user_id: Uuid,
 
     /// 会话令牌（用于WebSocket认证）
-    #[sea_orm(column_type = "String(Some(255))", unique)]
+    #[sea_orm(column_type = "String(StringLen::N(255))", unique)]
     pub session_token: String,
 
     /// 会话状态
@@ -75,11 +76,11 @@ pub struct Model {
     pub device_type: DeviceType,
 
     /// 设备信息（如设备名称、操作系统等）
-    #[sea_orm(column_type = "String(Some(255))", nullable)]
+    #[sea_orm(column_type = "String(StringLen::N(255))", nullable)]
     pub device_info: Option<String>,
 
     /// 客户端IP地址
-    #[sea_orm(column_type = "String(Some(45))")]
+    #[sea_orm(column_type = "String(StringLen::N(45))")]
     pub ip_address: String,
 
     /// 用户代理字符串

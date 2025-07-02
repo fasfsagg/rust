@@ -38,8 +38,57 @@
 
 // --- 导入依赖 ---
 use std::net::SocketAddr; // 用于表示 IP 地址和端口号
+use std::time::Duration; // 用于表示时间间隔
 
 // --- 配置结构体定义 ---
+
+/// 数据库连接池配置结构体
+///
+/// 【目的】: 专门用于配置SeaORM数据库连接池的参数，支持百万并发连接优化
+/// 【设计】: 基于SeaORM ConnectOptions的最佳实践配置
+#[derive(Clone, Debug)]
+pub struct DatabasePoolConfig {
+    /// 最大连接数 - 支持百万并发的关键参数
+    pub max_connections: u32,
+    /// 最小连接数 - 保持基础连接池大小
+    pub min_connections: u32,
+    /// 连接超时时间 - 防止连接建立过慢
+    pub connect_timeout: Duration,
+    /// 空闲超时时间 - 自动清理空闲连接
+    pub idle_timeout: Duration,
+    /// 连接最大生命周期 - 防止连接过期
+    pub max_lifetime: Option<Duration>,
+    /// 获取连接超时时间 - 防止应用阻塞
+    pub acquire_timeout: Duration,
+    /// 启用TCP_NODELAY - 减少网络延迟
+    pub tcp_nodelay: bool,
+    /// 启用连接保活 - 检测断开的连接
+    pub tcp_keepalive: bool,
+}
+
+/// WebSocket连接池配置结构体
+///
+/// 【目的】: 配置WebSocket连接池和复用参数，优化实时通信性能
+/// 【设计】: 支持连接复用、负载均衡和故障转移
+#[derive(Clone, Debug)]
+pub struct WebSocketPoolConfig {
+    /// 最大WebSocket连接数
+    pub max_connections: u32,
+    /// 连接池大小 - 用于连接复用
+    pub pool_size: u32,
+    /// 心跳间隔 - 保持连接活跃
+    pub heartbeat_interval: Duration,
+    /// 连接超时时间
+    pub connection_timeout: Duration,
+    /// 重连最大尝试次数
+    pub max_reconnect_attempts: u32,
+    /// 重连间隔
+    pub reconnect_interval: Duration,
+    /// 启用连接负载均衡
+    pub enable_load_balancing: bool,
+    /// 启用故障转移
+    pub enable_failover: bool,
+}
 
 /// 应用程序配置结构体 (Application Configuration Struct)
 ///
@@ -66,9 +115,87 @@ pub struct AppConfig {
     /// 用于签名和验证 JWT 令牌的密钥。
     /// 在生产环境中，这应该是一个强随机字符串。
     pub jwt_secret: String,
+
+    /// 数据库连接池配置
+    /// 【任务13.4新增】: 专门的数据库连接池优化配置
+    pub database_pool: DatabasePoolConfig,
+
+    /// WebSocket连接池配置
+    /// 【任务13.4新增】: WebSocket连接池和复用配置
+    pub websocket_pool: WebSocketPoolConfig,
 }
 
 // --- 配置加载实现 ---
+
+impl DatabasePoolConfig {
+    /// 创建生产环境优化的数据库连接池配置
+    ///
+    /// 【功能】: 为百万并发场景优化的数据库连接池配置
+    /// 【参数】: 基于SeaORM最佳实践和企业级应用需求
+    pub fn production() -> Self {
+        Self {
+            max_connections: 100, // 支持高并发的连接数
+            min_connections: 10, // 保持基础连接池
+            connect_timeout: Duration::from_secs(30), // 连接建立超时
+            idle_timeout: Duration::from_secs(600), // 10分钟空闲超时
+            max_lifetime: Some(Duration::from_secs(3600)), // 1小时最大生命周期
+            acquire_timeout: Duration::from_secs(10), // 获取连接超时
+            tcp_nodelay: true, // 启用TCP_NODELAY减少延迟
+            tcp_keepalive: true, // 启用TCP保活检测
+        }
+    }
+
+    /// 创建开发环境的数据库连接池配置
+    ///
+    /// 【功能】: 适合开发和测试的轻量级配置
+    pub fn development() -> Self {
+        Self {
+            max_connections: 20, // 开发环境较少连接
+            min_connections: 2, // 最小连接数
+            connect_timeout: Duration::from_secs(10), // 较短连接超时
+            idle_timeout: Duration::from_secs(300), // 5分钟空闲超时
+            max_lifetime: Some(Duration::from_secs(1800)), // 30分钟最大生命周期
+            acquire_timeout: Duration::from_secs(5), // 获取连接超时
+            tcp_nodelay: true, // 仍然启用TCP_NODELAY
+            tcp_keepalive: true, // 启用TCP保活检测
+        }
+    }
+}
+
+impl WebSocketPoolConfig {
+    /// 创建生产环境优化的WebSocket连接池配置
+    ///
+    /// 【功能】: 支持百万并发WebSocket连接的配置
+    /// 【特性】: 包含负载均衡和故障转移机制
+    pub fn production() -> Self {
+        Self {
+            max_connections: 1_000_000, // 支持百万并发连接
+            pool_size: 1000, // 连接池大小
+            heartbeat_interval: Duration::from_secs(30), // 30秒心跳
+            connection_timeout: Duration::from_secs(10), // 连接超时
+            max_reconnect_attempts: 5, // 最大重连次数
+            reconnect_interval: Duration::from_secs(2), // 重连间隔
+            enable_load_balancing: true, // 启用负载均衡
+            enable_failover: true, // 启用故障转移
+        }
+    }
+
+    /// 创建开发环境的WebSocket连接池配置
+    ///
+    /// 【功能】: 适合开发和测试的配置
+    pub fn development() -> Self {
+        Self {
+            max_connections: 1000, // 开发环境较少连接
+            pool_size: 50, // 小连接池
+            heartbeat_interval: Duration::from_secs(60), // 1分钟心跳
+            connection_timeout: Duration::from_secs(5), // 连接超时
+            max_reconnect_attempts: 3, // 重连次数
+            reconnect_interval: Duration::from_secs(1), // 重连间隔
+            enable_load_balancing: false, // 开发环境关闭负载均衡
+            enable_failover: false, // 开发环境关闭故障转移
+        }
+    }
+}
 
 impl AppConfig {
     /// 从环境变量加载配置，提供默认值 (Associated Function / Constructor)
@@ -113,12 +240,38 @@ impl AppConfig {
             .unwrap_or_else(|_| "your-secret-key-change-in-production".to_string());
         println!("  - JWT 密钥: [已设置]"); // 不打印实际密钥以保证安全
 
+        // --- 【任务13.4新增】加载连接池配置 ---
+        // 检测运行环境，决定使用生产环境还是开发环境配置
+        let is_production =
+            std::env
+                ::var("ENVIRONMENT")
+                .unwrap_or_else(|_| "development".to_string())
+                .to_lowercase() == "production";
+
+        let database_pool = if is_production {
+            println!("  - 数据库连接池: 生产环境配置 (最大连接数: 100)");
+            DatabasePoolConfig::production()
+        } else {
+            println!("  - 数据库连接池: 开发环境配置 (最大连接数: 20)");
+            DatabasePoolConfig::development()
+        };
+
+        let websocket_pool = if is_production {
+            println!("  - WebSocket连接池: 生产环境配置 (最大连接数: 1,000,000)");
+            WebSocketPoolConfig::production()
+        } else {
+            println!("  - WebSocket连接池: 开发环境配置 (最大连接数: 1,000)");
+            WebSocketPoolConfig::development()
+        };
+
         println!("CONFIG: 配置加载完成。");
         // --- 构建并返回 AppConfig 实例 ---
         Self {
             http_addr,
             database_url,
             jwt_secret,
+            database_pool,
+            websocket_pool,
         }
     }
 }

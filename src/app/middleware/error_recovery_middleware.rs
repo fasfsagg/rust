@@ -17,7 +17,7 @@ use crate::app::utils::ErrorRecoveryManager;
 use crate::error::{ AppError, Result };
 
 /// 错误恢复中间件状态
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ErrorRecoveryState {
     pub manager: Arc<ErrorRecoveryManager>,
 }

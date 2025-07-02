@@ -338,9 +338,10 @@ impl NotificationService {
             .get(user_id)
             .cloned()
             .unwrap_or_else(|| {
-                let mut default_prefs = NotificationPreferences::default();
-                default_prefs.user_id = *user_id;
-                default_prefs
+                NotificationPreferences {
+                    user_id: *user_id,
+                    ..Default::default()
+                }
             })
     }
 
@@ -357,7 +358,7 @@ impl NotificationService {
     ) -> Result<usize, String> {
         println!(
             "NOTIFICATION_SERVICE: 处理通知事件 {} - {}",
-            event.notification_type.to_string(),
+            event.notification_type,
             event.content
         );
 
@@ -437,9 +438,10 @@ impl NotificationService {
                 .get(user_id)
                 .cloned()
                 .unwrap_or_else(|| {
-                    let mut default_prefs = NotificationPreferences::default();
-                    default_prefs.user_id = *user_id;
-                    default_prefs
+                    NotificationPreferences {
+                        user_id: *user_id,
+                        ..Default::default()
+                    }
                 });
 
             // 检查用户是否启用了此类型的通知

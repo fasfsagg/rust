@@ -595,7 +595,7 @@ impl ConnectionManager {
 
             // 稳定性评分：连接时间越长、重连次数越少，评分越高
             // 即使连接时间很短，也要考虑重连次数的影响
-            let stability_score = (100.0 - reconnections * 10.0).max(0.0).min(100.0);
+            let stability_score = (100.0 - reconnections * 10.0).clamp(0.0, 100.0);
 
             total_stability_score += stability_score;
 
