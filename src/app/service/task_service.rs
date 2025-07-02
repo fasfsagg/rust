@@ -78,14 +78,14 @@
 
 // --- 导入依赖 ---
 // 导入模型层定义的结构体：任务 DTO `Task`，以及用于创建和更新的载荷。
-use crate::app::model::task::{ CreateTaskPayload, Task, UpdateTaskPayload };
+use crate::app::model::task::{CreateTaskPayload, Task, UpdateTaskPayload};
 // 导入自定义的 `Result` 类型别名，用于统一函数返回值。
-use crate::error::{ AppError, Result, InstrumentResult };
+use crate::error::{AppError, InstrumentResult, Result};
 // 导入仓库层 Trait 和具体实现
 use crate::app::repository::task_repository::TaskRepositoryContract;
 // 导入 SeaORM 相关模块和数据库实体
 use migration::task_entity::ActiveModel; // 直接导入 ActiveModel
-use sea_orm::{ prelude::Uuid, ActiveValue, IntoActiveModel };
+use sea_orm::{ActiveValue, IntoActiveModel, prelude::Uuid};
 use std::sync::Arc;
 
 // --- 服务函数定义 ---
@@ -94,7 +94,8 @@ use std::sync::Arc;
 ///
 /// 【认证与授权】: 使用传入的用户ID作为任务的所有者
 pub async fn create_task<T>(repo: Arc<T>, payload: CreateTaskPayload, user_id: Uuid) -> Result<Task>
-    where T: TaskRepositoryContract
+where
+    T: TaskRepositoryContract,
 {
     tracing::info!(user_id = %user_id, "开始处理创建任务请求");
 
@@ -122,7 +123,8 @@ pub async fn create_task<T>(repo: Arc<T>, payload: CreateTaskPayload, user_id: U
 ///
 /// 【认证与授权】: 只返回属于指定用户的任务
 pub async fn get_all_tasks<T>(repo: Arc<T>, user_id: Uuid) -> Result<Vec<Task>>
-    where T: TaskRepositoryContract
+where
+    T: TaskRepositoryContract,
 {
     tracing::info!(user_id = %user_id, "开始处理获取所有任务请求");
 
@@ -130,10 +132,7 @@ pub async fn get_all_tasks<T>(repo: Arc<T>, user_id: Uuid) -> Result<Vec<Task>>
     let db_tasks = repo.find_all_by_user(user_id).await?;
 
     // 使用迭代器的 `map` 和 `collect` 将 Vec<db_model::Model> 转换为 Vec<Task>
-    let tasks: Vec<Task> = db_tasks
-        .into_iter()
-        .map(|db_task| db_task.into())
-        .collect();
+    let tasks: Vec<Task> = db_tasks.into_iter().map(|db_task| db_task.into()).collect();
 
     tracing::info!(user_id = %user_id, task_count = tasks.len(), "获取所有任务请求处理完成");
     Ok(tasks)
@@ -143,7 +142,8 @@ pub async fn get_all_tasks<T>(repo: Arc<T>, user_id: Uuid) -> Result<Vec<Task>>
 ///
 /// 【认证与授权】: 只能获取属于指定用户的任务
 pub async fn get_task_by_id<T>(repo: Arc<T>, id: Uuid, user_id: Uuid) -> Result<Task>
-    where T: TaskRepositoryContract
+where
+    T: TaskRepositoryContract,
 {
     tracing::info!(task_id = %id, user_id = %user_id, "开始处理获取单个任务请求");
 
@@ -173,9 +173,10 @@ pub async fn update_task<T>(
     repo: Arc<T>,
     id: Uuid,
     payload: UpdateTaskPayload,
-    user_id: Uuid
+    user_id: Uuid,
 ) -> Result<Task>
-    where T: TaskRepositoryContract
+where
+    T: TaskRepositoryContract,
 {
     tracing::info!(task_id = %id, user_id = %user_id, "开始处理更新任务请求");
 
@@ -214,7 +215,8 @@ pub async fn update_task<T>(
 ///
 /// 【认证与授权】: 只能删除属于指定用户的任务
 pub async fn delete_task<T>(repo: Arc<T>, id: Uuid, user_id: Uuid) -> Result<()>
-    where T: TaskRepositoryContract
+where
+    T: TaskRepositoryContract,
 {
     tracing::info!(task_id = %id, user_id = %user_id, "开始处理删除任务请求");
 
@@ -250,13 +252,15 @@ pub async fn delete_task<T>(repo: Arc<T>, id: Uuid, user_id: Uuid) -> Result<()>
 pub async fn get_task_with_enhanced_error_tracking<R>(
     repo: Arc<R>,
     task_id: Uuid,
-    user_id: Uuid
+    user_id: Uuid,
 ) -> Result<Task>
-    where R: TaskRepositoryContract + Send + Sync
+where
+    R: TaskRepositoryContract + Send + Sync,
 {
     // 使用 InstrumentResult trait 自动捕获 span 上下文
     let task = repo
-        .find_by_id(task_id).await
+        .find_by_id(task_id)
+        .await
         .in_current_span(axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
 
     match task {
@@ -264,12 +268,10 @@ pub async fn get_task_with_enhanced_error_tracking<R>(
             // 验证用户权限（示例业务逻辑）
             if task_entity.user_id != Some(user_id) {
                 // 使用 AppError::with_span_trace 创建带有上下文的错误
-                return Err(
-                    AppError::with_span_trace(
-                        format!("用户 {} 无权访问任务 {}", user_id, task_id),
-                        axum::http::StatusCode::FORBIDDEN
-                    )
-                );
+                return Err(AppError::with_span_trace(
+                    format!("用户 {} 无权访问任务 {}", user_id, task_id),
+                    axum::http::StatusCode::FORBIDDEN,
+                ));
             }
 
             tracing::info!(
@@ -294,12 +296,10 @@ pub async fn get_task_with_enhanced_error_tracking<R>(
         }
         None => {
             // 使用 AppError::with_span_trace 创建带有上下文的错误
-            Err(
-                AppError::with_span_trace(
-                    format!("未找到ID为 {} 的任务", task_id),
-                    axum::http::StatusCode::NOT_FOUND
-                )
-            )
+            Err(AppError::with_span_trace(
+                format!("未找到ID为 {} 的任务", task_id),
+                axum::http::StatusCode::NOT_FOUND,
+            ))
         }
     }
 }
@@ -310,8 +310,8 @@ mod tests {
     use super::*;
 
     use migration::task_entity;
-    use sea_orm::{ prelude::Uuid, DbErr, DeleteResult };
-    use std::sync::{ Arc, Mutex };
+    use sea_orm::{DbErr, DeleteResult, prelude::Uuid};
+    use std::sync::{Arc, Mutex};
 
     // 1. 创建模拟仓库 (Mock Repository)
     // 这个结构体将模拟真实的 TaskRepository，但它不与数据库交互。
@@ -337,7 +337,7 @@ mod tests {
     impl TaskRepositoryContract for MockTaskRepository {
         async fn create(
             &self,
-            _data: ActiveModel
+            _data: ActiveModel,
         ) -> std::result::Result<task_entity::Model, DbErr> {
             self.create_result.lock().unwrap().take().unwrap()
         }
@@ -346,13 +346,13 @@ mod tests {
         }
         async fn find_by_id(
             &self,
-            _id: Uuid
+            _id: Uuid,
         ) -> std::result::Result<Option<task_entity::Model>, DbErr> {
             self.find_by_id_result.lock().unwrap().take().unwrap()
         }
         async fn update(
             &self,
-            _data: ActiveModel
+            _data: ActiveModel,
         ) -> std::result::Result<task_entity::Model, DbErr> {
             self.update_result.lock().unwrap().take().unwrap()
         }
@@ -363,7 +363,7 @@ mod tests {
         // 新增的用户相关方法
         async fn find_all_by_user(
             &self,
-            _user_id: Uuid
+            _user_id: Uuid,
         ) -> std::result::Result<Vec<task_entity::Model>, DbErr> {
             self.find_all_result.lock().unwrap().take().unwrap()
         }
@@ -371,7 +371,7 @@ mod tests {
         async fn find_by_id_and_user(
             &self,
             _id: Uuid,
-            _user_id: Uuid
+            _user_id: Uuid,
         ) -> std::result::Result<Option<task_entity::Model>, DbErr> {
             self.find_by_id_result.lock().unwrap().take().unwrap()
         }
@@ -379,7 +379,7 @@ mod tests {
         async fn delete_by_id_and_user(
             &self,
             _id: Uuid,
-            _user_id: Uuid
+            _user_id: Uuid,
         ) -> std::result::Result<DeleteResult, DbErr> {
             self.delete_result.lock().unwrap().take().unwrap()
         }
@@ -573,7 +573,11 @@ mod tests {
         // --- 断言 (Assert) ---
         assert!(result.is_err());
         match result.unwrap_err() {
-            AppError::TracedError { message, status_code, .. } => {
+            AppError::TracedError {
+                message,
+                status_code,
+                ..
+            } => {
                 assert!(message.contains("无权访问任务"));
                 assert_eq!(status_code, axum::http::StatusCode::FORBIDDEN);
             }
@@ -597,7 +601,11 @@ mod tests {
         // --- 断言 (Assert) ---
         assert!(result.is_err());
         match result.unwrap_err() {
-            AppError::TracedError { message, status_code, .. } => {
+            AppError::TracedError {
+                message,
+                status_code,
+                ..
+            } => {
                 assert!(message.contains("未找到ID为"));
                 assert_eq!(status_code, axum::http::StatusCode::NOT_FOUND);
             }

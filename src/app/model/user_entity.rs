@@ -1,7 +1,7 @@
 //! `SeaORM` Entity, DTO, and related implementations for the `User` entity.
 
 use sea_orm::entity::prelude::*;
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 
 /// Defines the `user` entity, which will be mapped to the `user` table in the database.
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Deserialize)]

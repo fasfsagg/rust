@@ -33,32 +33,29 @@
 // 【关键技术】: `axum::Router`, 中间件 (`tower::Layer`, `tower::ServiceBuilder`), 状态管理 (`AppState`), 依赖注入 (将 `AppState` 传递给路由)。
 
 // --- 导入依赖 ---
-use axum::Router; // Axum 的核心路由类型
-use tower::ServiceBuilder; // Tower 提供的用于构建中间件栈的服务构建器
-use tower_http::cors::{ Any, CorsLayer }; // Tower HTTP 提供的 CORS 中间件和相关配置
 use anyhow::Result; // anyhow 用于简化错误处理
-use migration::{ Migrator, MigratorTrait }; // 导入迁移器
-use sea_orm::{ Database, DatabaseConnection }; // 导入 SeaORM 的核心类型
+use axum::Router; // Axum 的核心路由类型
+use migration::{Migrator, MigratorTrait}; // 导入迁移器
+use sea_orm::{Database, DatabaseConnection}; // 导入 SeaORM 的核心类型
 use std::sync::Arc;
+use tower::ServiceBuilder; // Tower 提供的用于构建中间件栈的服务构建器
+use tower_http::cors::{Any, CorsLayer}; // Tower HTTP 提供的 CORS 中间件和相关配置
 use tracing::warn; // 【任务13.4新增】用于记录警告日志
 
 // --- 导入项目内部模块 ---
 use crate::app::middleware; // 中间件模块 (日志等)
-use crate::app::middleware::security_audit::security_audit_middleware; // 安全审计中间件
 use crate::app::middleware::error_recovery_middleware::ErrorRecoveryState; // 错误恢复中间件状态
+use crate::app::middleware::security_audit::security_audit_middleware; // 安全审计中间件
 use crate::app::repository::task_repository::TaskRepository; // 导入仓库
 use crate::app::service::{
-    AsyncPerformanceOptimizer,
-    ConnectionManager,
-    MessageDistributor,
-    NotificationService,
+    AsyncPerformanceOptimizer, ConnectionManager, MessageDistributor, NotificationService,
     StatusSyncService,
 }; // 导入连接管理器、消息分发器、通知服务、状态同步服务和异步性能优化器
 use crate::app::utils::{
-    ErrorRecoveryManager,
-    memory_manager::{ MemoryManager, MemoryManagerConfig },
     DatabasePoolManager, // 【任务13.4新增】数据库连接池管理器
+    ErrorRecoveryManager,
     WebSocketPoolManager, // 【任务13.4新增】WebSocket连接池管理器
+    memory_manager::{MemoryManager, MemoryManagerConfig},
 }; // 错误恢复管理器
 use crate::config::AppConfig; // 应用配置结构体
 use crate::routes; // 路由定义模块
@@ -73,8 +70,8 @@ use crate::routes; // 路由定义模块
 #[derive(Clone)]
 pub struct AppState {
     pub task_repo: Arc<TaskRepository>, // 任务仓库的具体实现
-    pub db: Arc<DatabaseConnection>, // 数据库连接，用于创建其他仓库实例
-    pub jwt_secret: String, // JWT 签名密钥
+    pub db: Arc<DatabaseConnection>,    // 数据库连接，用于创建其他仓库实例
+    pub jwt_secret: String,             // JWT 签名密钥
     pub connection_manager: Arc<ConnectionManager>, // WebSocket 连接管理器
     pub message_distributor: Arc<MessageDistributor>, // 消息分发器
     pub notification_service: Arc<NotificationService>, // 用户通知服务
@@ -84,9 +81,9 @@ pub struct AppState {
     pub database_pool_manager: Arc<DatabasePoolManager>, // 数据库连接池管理器
     pub websocket_pool_manager: Arc<WebSocketPoolManager>, // WebSocket连接池管理器
     pub performance_metrics: Arc<middleware::PerformanceMetrics>, // 性能指标收集器
-    pub error_recovery_state: ErrorRecoveryState, // 错误恢复状态
+    pub error_recovery_state: ErrorRecoveryState,        // 错误恢复状态
     pub async_performance_optimizer: Arc<AsyncPerformanceOptimizer>, // 【任务13.2新增】异步性能优化器
-    pub memory_manager: Arc<MemoryManager>, // 【任务13.3新增】内存管理器
+    pub memory_manager: Arc<MemoryManager>,                          // 【任务13.3新增】内存管理器
 }
 
 impl AppState {
@@ -94,23 +91,23 @@ impl AppState {
     /// 注意：这个函数创建一个简化的测试状态，用于单元测试
     pub async fn new_for_testing(connection_manager: ConnectionManager) -> Self {
         let connection_manager = Arc::new(connection_manager);
-        let message_distributor = Arc::new(
-            MessageDistributor::new(
-                connection_manager.clone(),
-                Some(10), // 小批量用于测试
-                Some(1) // 单线程用于测试
-            )
-        );
-        let notification_service = Arc::new(
-            NotificationService::new(connection_manager.clone(), message_distributor.clone())
-        );
-        let status_sync_service = Arc::new(
-            StatusSyncService::new(connection_manager.clone(), message_distributor.clone())
-        );
+        let message_distributor = Arc::new(MessageDistributor::new(
+            connection_manager.clone(),
+            Some(10), // 小批量用于测试
+            Some(1),  // 单线程用于测试
+        ));
+        let notification_service = Arc::new(NotificationService::new(
+            connection_manager.clone(),
+            message_distributor.clone(),
+        ));
+        let status_sync_service = Arc::new(StatusSyncService::new(
+            connection_manager.clone(),
+            message_distributor.clone(),
+        ));
 
         // 创建一个内存数据库连接（用于测试）
-        let db_connection = sea_orm::Database
-            ::connect("sqlite::memory:").await
+        let db_connection = sea_orm::Database::connect("sqlite::memory:")
+            .await
             .expect("Failed to create test database");
 
         // 创建性能指标收集器
@@ -138,19 +135,18 @@ impl AppState {
 
         // 【任务13.2新增】创建异步性能优化器（测试配置）
         let async_perf_config = crate::app::service::AsyncPerformanceConfig {
-            worker_threads: Some(2), // 测试时使用较少线程
+            worker_threads: Some(2),            // 测试时使用较少线程
             performance_monitoring_interval: 5, // 测试时使用较短间隔
-            max_concurrent_tasks: 100, // 测试时使用较小限制
+            max_concurrent_tasks: 100,          // 测试时使用较小限制
             ..Default::default()
         };
-        let async_performance_optimizer = Arc::new(
-            AsyncPerformanceOptimizer::new(async_perf_config)
-        );
+        let async_performance_optimizer =
+            Arc::new(AsyncPerformanceOptimizer::new(async_perf_config));
 
         // 【任务13.3新增】创建内存管理器（测试配置）
         let memory_config = MemoryManagerConfig {
-            l1_cache_max_entries: 100, // 测试时使用小缓存
-            l1_cache_ttl_seconds: 60, // 1分钟TTL
+            l1_cache_max_entries: 100,    // 测试时使用小缓存
+            l1_cache_ttl_seconds: 60,     // 1分钟TTL
             object_pool_initial_size: 10, // 小对象池
             object_pool_max_size: 50,
             memory_pool_block_size: 1024, // 1KB块
@@ -158,7 +154,7 @@ impl AppState {
             cache_eviction_interval_seconds: 30,
             memory_monitoring_interval_seconds: 10, // 测试时使用短间隔
             memory_pressure_threshold_bytes: 1024 * 1024, // 1MB阈值
-            enable_leak_detection: false, // 测试时关闭泄漏检测
+            enable_leak_detection: false,           // 测试时关闭泄漏检测
         };
         let memory_manager = Arc::new(MemoryManager::new(memory_config));
 
@@ -173,15 +169,14 @@ impl AppState {
 
         // 创建数据库连接池管理器（测试环境）
         let database_pool_manager = Arc::new(
-            DatabasePoolManager::new(&test_config).await.expect(
-                "Failed to create test database pool manager"
-            )
+            DatabasePoolManager::new(&test_config)
+                .await
+                .expect("Failed to create test database pool manager"),
         );
 
         // 创建WebSocket连接池管理器（测试环境）
-        let websocket_pool_manager = Arc::new(
-            WebSocketPoolManager::new(test_config.websocket_pool)
-        );
+        let websocket_pool_manager =
+            Arc::new(WebSocketPoolManager::new(test_config.websocket_pool));
 
         let db_arc = Arc::new(db_connection);
         Self {
@@ -196,7 +191,7 @@ impl AppState {
             error_recovery_state,
             async_performance_optimizer,
             memory_manager,
-            database_pool_manager, // 【任务13.4新增】
+            database_pool_manager,  // 【任务13.4新增】
             websocket_pool_manager, // 【任务13.4新增】
         }
     }
@@ -244,21 +239,21 @@ pub async fn init_app(config: AppConfig) -> Result<(Router, Arc<DatabaseConnecti
     // 创建连接管理器实例
     let connection_manager = Arc::new(ConnectionManager::new());
     // 创建消息分发器实例
-    let message_distributor = Arc::new(
-        MessageDistributor::new(
-            connection_manager.clone(),
-            Some(100), // 批量处理大小
-            Some(4) // 工作线程数量
-        )
-    );
+    let message_distributor = Arc::new(MessageDistributor::new(
+        connection_manager.clone(),
+        Some(100), // 批量处理大小
+        Some(4),   // 工作线程数量
+    ));
     // 创建通知服务实例
-    let notification_service = Arc::new(
-        NotificationService::new(connection_manager.clone(), message_distributor.clone())
-    );
+    let notification_service = Arc::new(NotificationService::new(
+        connection_manager.clone(),
+        message_distributor.clone(),
+    ));
     // 创建状态同步服务实例
-    let status_sync_service = Arc::new(
-        StatusSyncService::new(connection_manager.clone(), message_distributor.clone())
-    );
+    let status_sync_service = Arc::new(StatusSyncService::new(
+        connection_manager.clone(),
+        message_distributor.clone(),
+    ));
     // 创建性能监控中间件
     let performance_config = middleware::PerformanceConfig {
         enable_prometheus_metrics: false, // 暂时禁用Prometheus以简化初始实现
@@ -272,18 +267,18 @@ pub async fn init_app(config: AppConfig) -> Result<(Router, Arc<DatabaseConnecti
 
     // 【任务13.2新增】创建异步性能优化器（生产配置）
     let async_perf_config = crate::app::service::AsyncPerformanceConfig {
-        worker_threads: None, // 使用CPU核心数
+        worker_threads: None,                // 使用CPU核心数
         performance_monitoring_interval: 10, // 生产环境使用10秒间隔
-        max_concurrent_tasks: 10000, // 生产环境支持更多并发
-        enable_adaptive_tuning: true, // 启用自适应调优
+        max_concurrent_tasks: 10000,         // 生产环境支持更多并发
+        enable_adaptive_tuning: true,        // 启用自适应调优
         ..Default::default()
     };
     let async_performance_optimizer = Arc::new(AsyncPerformanceOptimizer::new(async_perf_config));
 
     // 【任务13.3新增】创建内存管理器（生产配置）
     let memory_config = MemoryManagerConfig {
-        l1_cache_max_entries: 10000, // 生产环境使用大缓存
-        l1_cache_ttl_seconds: 300, // 5分钟TTL
+        l1_cache_max_entries: 10000,    // 生产环境使用大缓存
+        l1_cache_ttl_seconds: 300,      // 5分钟TTL
         object_pool_initial_size: 1000, // 大对象池
         object_pool_max_size: 10000,
         memory_pool_block_size: 4096, // 4KB块
@@ -291,7 +286,7 @@ pub async fn init_app(config: AppConfig) -> Result<(Router, Arc<DatabaseConnecti
         cache_eviction_interval_seconds: 60,
         memory_monitoring_interval_seconds: 30, // 生产环境30秒间隔
         memory_pressure_threshold_bytes: 1024 * 1024 * 1024, // 1GB阈值
-        enable_leak_detection: true, // 生产环境启用泄漏检测
+        enable_leak_detection: true,            // 生产环境启用泄漏检测
     };
     let memory_manager = Arc::new(MemoryManager::new(memory_config));
 
@@ -302,16 +297,16 @@ pub async fn init_app(config: AppConfig) -> Result<(Router, Arc<DatabaseConnecti
     // 创建应用状态，包含任务仓库、数据库连接、JWT 密钥、连接管理器、消息分发器、通知服务、状态同步服务、性能指标、错误恢复状态、异步性能优化器、内存管理器和连接池管理器
     let app_state = AppState {
         task_repo,
-        db: db_arc, // 添加数据库连接到应用状态
-        jwt_secret: config.jwt_secret.clone(), // 添加 JWT 密钥到应用状态
-        connection_manager, // 添加连接管理器到应用状态
-        message_distributor, // 添加消息分发器到应用状态
-        notification_service, // 添加通知服务到应用状态
-        status_sync_service, // 添加状态同步服务到应用状态
-        performance_metrics: performance_metrics.clone(), // 克隆性能指标收集器到应用状态
-        error_recovery_state: error_recovery_state.clone(), // 克隆错误恢复状态到应用状态
+        db: db_arc,                                           // 添加数据库连接到应用状态
+        jwt_secret: config.jwt_secret.clone(),                // 添加 JWT 密钥到应用状态
+        connection_manager,                                   // 添加连接管理器到应用状态
+        message_distributor,                                  // 添加消息分发器到应用状态
+        notification_service,                                 // 添加通知服务到应用状态
+        status_sync_service,                                  // 添加状态同步服务到应用状态
+        performance_metrics: performance_metrics.clone(),     // 克隆性能指标收集器到应用状态
+        error_recovery_state: error_recovery_state.clone(),   // 克隆错误恢复状态到应用状态
         async_performance_optimizer, // 【任务13.2新增】添加异步性能优化器到应用状态
-        memory_manager, // 【任务13.3新增】添加内存管理器到应用状态
+        memory_manager,              // 【任务13.3新增】添加内存管理器到应用状态
         database_pool_manager: database_pool_manager.clone(), // 【任务13.4新增】添加数据库连接池管理器到应用状态
         websocket_pool_manager, // 【任务13.4新增】添加WebSocket连接池管理器到应用状态
     };
@@ -349,23 +344,24 @@ pub async fn init_app(config: AppConfig) -> Result<(Router, Arc<DatabaseConnecti
     // --- 步骤 4: 构建中间件栈 ---
     let middleware_stack = ServiceBuilder::new()
         .layer(middleware::trace_layer())
-        .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any),
+        )
         // 添加安全审计中间件 - 记录所有HTTP请求的安全相关信息
         .layer(axum::middleware::from_fn(security_audit_middleware))
         // 添加性能监控中间件 - 使用 from_fn_with_state
-        .layer(
-            axum::middleware::from_fn_with_state(
-                performance_metrics.clone(),
-                middleware::performance_monitoring_middleware
-            )
-        )
+        .layer(axum::middleware::from_fn_with_state(
+            performance_metrics.clone(),
+            middleware::performance_monitoring_middleware,
+        ))
         // 添加错误恢复中间件 - 提供自动重试、断路器和降级处理
-        .layer(
-            axum::middleware::from_fn_with_state(
-                app_state.clone(),
-                middleware::error_recovery_middleware::error_recovery_middleware
-            )
-        );
+        .layer(axum::middleware::from_fn_with_state(
+            app_state.clone(),
+            middleware::error_recovery_middleware::error_recovery_middleware,
+        ));
     println!(
         "STARTUP: 中间件栈构建完成 (Trace, CORS, Security Audit, Performance, Error Recovery)。"
     );

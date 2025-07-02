@@ -4,9 +4,9 @@
 //!
 //! 本示例演示和验证数据库连接池管理器和WebSocket连接池管理器的功能
 
-use axum_tutorial::config::{ AppConfig, DatabasePoolConfig, WebSocketPoolConfig };
-use axum_tutorial::app::utils::{ DatabasePoolManager, WebSocketPoolManager };
 use axum::extract::ws::Message;
+use axum_tutorial::app::utils::{DatabasePoolManager, WebSocketPoolManager};
+use axum_tutorial::config::{AppConfig, DatabasePoolConfig, WebSocketPoolConfig};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
@@ -47,11 +47,15 @@ async fn test_database_pool_manager(config: &AppConfig) -> Result<(), Box<dyn st
     let metrics = pool_manager.get_metrics();
     println!(
         "    - 总连接数: {}",
-        metrics.total_connections.load(std::sync::atomic::Ordering::Relaxed)
+        metrics
+            .total_connections
+            .load(std::sync::atomic::Ordering::Relaxed)
     );
     println!(
         "    - 活跃连接数: {}",
-        metrics.active_connections.load(std::sync::atomic::Ordering::Relaxed)
+        metrics
+            .active_connections
+            .load(std::sync::atomic::Ordering::Relaxed)
     );
     println!("    - 健康状态: {}", metrics.is_healthy());
 
@@ -75,11 +79,15 @@ async fn test_database_pool_manager(config: &AppConfig) -> Result<(), Box<dyn st
     let updated_metrics = pool_manager.get_metrics();
     println!(
         "    - 总获取次数: {}",
-        updated_metrics.total_acquires.load(std::sync::atomic::Ordering::Relaxed)
+        updated_metrics
+            .total_acquires
+            .load(std::sync::atomic::Ordering::Relaxed)
     );
     println!(
         "    - 成功获取次数: {}",
-        updated_metrics.successful_acquires.load(std::sync::atomic::Ordering::Relaxed)
+        updated_metrics
+            .successful_acquires
+            .load(std::sync::atomic::Ordering::Relaxed)
     );
     println!("    - 成功率: {:.1}%", updated_metrics.get_success_rate());
 
@@ -93,10 +101,15 @@ async fn test_websocket_pool_manager(config: &AppConfig) -> Result<(), Box<dyn s
 
     println!("  验证连接池初始状态...");
     let metrics = pool_manager.get_metrics();
-    println!("    - 最大连接数: {}", config.websocket_pool.max_connections);
+    println!(
+        "    - 最大连接数: {}",
+        config.websocket_pool.max_connections
+    );
     println!(
         "    - 当前活跃连接数: {}",
-        metrics.active_connections.load(std::sync::atomic::Ordering::Relaxed)
+        metrics
+            .active_connections
+            .load(std::sync::atomic::Ordering::Relaxed)
     );
     println!("    - 健康状态: {}", metrics.is_healthy());
 
@@ -110,13 +123,19 @@ async fn test_websocket_pool_manager(config: &AppConfig) -> Result<(), Box<dyn s
     let (sender2, mut receiver2) = mpsc::unbounded_channel();
 
     // 添加第一个连接
-    match pool_manager.add_connection(connection_id1, user_id1, sender1).await {
+    match pool_manager
+        .add_connection(connection_id1, user_id1, sender1)
+        .await
+    {
         Ok(_) => println!("    ✅ 连接1添加成功"),
         Err(e) => println!("    ❌ 连接1添加失败: {}", e),
     }
 
     // 添加第二个连接
-    match pool_manager.add_connection(connection_id2, user_id2, sender2).await {
+    match pool_manager
+        .add_connection(connection_id2, user_id2, sender2)
+        .await
+    {
         Ok(_) => println!("    ✅ 连接2添加成功"),
         Err(e) => println!("    ❌ 连接2添加失败: {}", e),
     }
@@ -125,14 +144,22 @@ async fn test_websocket_pool_manager(config: &AppConfig) -> Result<(), Box<dyn s
     let updated_metrics = pool_manager.get_metrics();
     println!(
         "    - 活跃连接数: {}",
-        updated_metrics.active_connections.load(std::sync::atomic::Ordering::Relaxed)
+        updated_metrics
+            .active_connections
+            .load(std::sync::atomic::Ordering::Relaxed)
     );
-    println!("    - 连接池利用率: {:.1}%", updated_metrics.get_utilization_percentage());
+    println!(
+        "    - 连接池利用率: {:.1}%",
+        updated_metrics.get_utilization_percentage()
+    );
 
     println!("  测试消息发送...");
     let test_message = Message::Text("Hello from connection pool test!".to_string().into());
 
-    match pool_manager.send_to_connection(&connection_id1, test_message.clone()).await {
+    match pool_manager
+        .send_to_connection(&connection_id1, test_message.clone())
+        .await
+    {
         Ok(_) => {
             println!("    ✅ 消息发送到连接1成功");
             // 验证消息接收
@@ -148,13 +175,19 @@ async fn test_websocket_pool_manager(config: &AppConfig) -> Result<(), Box<dyn s
     let connection_id3 = Uuid::new_v4();
     let (sender3, mut receiver3) = mpsc::unbounded_channel();
 
-    match pool_manager.add_connection(connection_id3, user_id1, sender3).await {
+    match pool_manager
+        .add_connection(connection_id3, user_id1, sender3)
+        .await
+    {
         Ok(_) => println!("    ✅ 用户多设备连接添加成功"),
         Err(e) => println!("    ❌ 多设备连接添加失败: {}", e),
     }
 
     let broadcast_message = Message::Text("Broadcast to all user devices!".to_string().into());
-    match pool_manager.broadcast_to_user(&user_id1, broadcast_message).await {
+    match pool_manager
+        .broadcast_to_user(&user_id1, broadcast_message)
+        .await
+    {
         Ok(count) => {
             println!("    ✅ 广播成功，发送到{}个连接", count);
             // 验证广播接收
@@ -182,15 +215,21 @@ async fn test_websocket_pool_manager(config: &AppConfig) -> Result<(), Box<dyn s
     let final_metrics = pool_manager.get_metrics();
     println!(
         "    - 最终活跃连接数: {}",
-        final_metrics.active_connections.load(std::sync::atomic::Ordering::Relaxed)
+        final_metrics
+            .active_connections
+            .load(std::sync::atomic::Ordering::Relaxed)
     );
     println!(
         "    - 总消息发送数: {}",
-        final_metrics.total_messages_sent.load(std::sync::atomic::Ordering::Relaxed)
+        final_metrics
+            .total_messages_sent
+            .load(std::sync::atomic::Ordering::Relaxed)
     );
     println!(
         "    - 连接失败次数: {}",
-        final_metrics.connection_failures.load(std::sync::atomic::Ordering::Relaxed)
+        final_metrics
+            .connection_failures
+            .load(std::sync::atomic::Ordering::Relaxed)
     );
 
     Ok(())

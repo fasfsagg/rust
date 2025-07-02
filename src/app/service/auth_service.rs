@@ -18,20 +18,20 @@
 //! - **依赖注入**: 通过参数传递仓库实例，便于测试
 //! - **错误处理**: 统一的错误处理和返回类型
 
-use crate::app::model::auth::{ LoginRequest, RegisterRequest };
+use crate::app::model::auth::{LoginRequest, RegisterRequest};
 use crate::app::model::user_entity::UserResponse;
 use crate::app::repository::user_repository::UserRepositoryContract;
-use crate::error::{ AppError, Result };
+use crate::error::{AppError, Result};
 use argon2::{
-    password_hash::{ PasswordHash, PasswordHasher, PasswordVerifier, SaltString },
     Argon2,
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
 };
-use rand_core::OsRng;
-use chrono::{ Duration, Utc };
-use jsonwebtoken::{ encode, EncodingKey, Header };
+use chrono::{Duration, Utc};
+use jsonwebtoken::{EncodingKey, Header, encode};
 use migration::user_entity::ActiveModel;
-use sea_orm::{ prelude::Uuid, ActiveValue };
-use serde::{ Deserialize, Serialize };
+use rand_core::OsRng;
+use sea_orm::{ActiveValue, prelude::Uuid};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use validator::Validate;
 
@@ -78,12 +78,14 @@ pub struct AuthResponse {
 /// 成功时返回新创建的用户信息，失败时返回相应错误
 pub async fn register_user(
     repo: Arc<dyn UserRepositoryContract>,
-    payload: RegisterRequest
+    payload: RegisterRequest,
 ) -> Result<UserResponse> {
     tracing::info!(username = %payload.username, "开始处理用户注册请求");
 
     // 1. 验证输入数据
-    payload.validate().map_err(|e| AppError::ValidationError(e.to_string()))?;
+    payload
+        .validate()
+        .map_err(|e| AppError::ValidationError(e.to_string()))?;
 
     // 2. 检查用户名是否已存在
     if let Some(_existing_user) = repo.find_by_username(&payload.username).await? {
@@ -133,22 +135,25 @@ pub async fn register_user(
 pub async fn login_user(
     repo: Arc<dyn UserRepositoryContract>,
     payload: LoginRequest,
-    jwt_secret: &str
+    jwt_secret: &str,
 ) -> Result<AuthResponse> {
     tracing::info!(username = %payload.username, "开始处理用户登录请求");
 
     // 1. 根据用户名查找用户
     let user = repo
-        .find_by_username(&payload.username).await?
+        .find_by_username(&payload.username)
+        .await?
         .ok_or_else(|| AppError::InvalidCredentials)?;
 
     // 2. 验证密码
     let argon2 = Argon2::default();
-    let parsed_hash = PasswordHash::new(&user.password_hash).map_err(|e|
-        AppError::PasswordHashError(e.to_string())
-    )?;
+    let parsed_hash = PasswordHash::new(&user.password_hash)
+        .map_err(|e| AppError::PasswordHashError(e.to_string()))?;
 
-    if argon2.verify_password(payload.password.as_bytes(), &parsed_hash).is_err() {
+    if argon2
+        .verify_password(payload.password.as_bytes(), &parsed_hash)
+        .is_err()
+    {
         tracing::warn!(username = %payload.username, "用户登录失败，密码验证失败");
         return Err(AppError::InvalidCredentials);
     }
@@ -168,8 +173,9 @@ pub async fn login_user(
     let token = encode(
         &Header::default(),
         &claims,
-        &EncodingKey::from_secret(jwt_secret.as_ref())
-    ).map_err(|e| AppError::TokenGenerationError(e.to_string()))?;
+        &EncodingKey::from_secret(jwt_secret.as_ref()),
+    )
+    .map_err(|e| AppError::TokenGenerationError(e.to_string()))?;
 
     tracing::info!(username = %payload.username, user_id = %user.id, "用户登录成功");
 
@@ -187,15 +193,14 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use migration::user_entity;
-    use sea_orm::{ prelude::Uuid, DbErr };
-    use std::sync::{ Arc, Mutex };
+    use sea_orm::{DbErr, prelude::Uuid};
+    use std::sync::{Arc, Mutex};
 
     // 1. 创建模拟用户仓库 (Mock User Repository)
     #[derive(Default)]
     struct MockUserRepository {
-        find_by_username_result: Mutex<
-            Option<std::result::Result<Option<user_entity::Model>, DbErr>>
-        >,
+        find_by_username_result:
+            Mutex<Option<std::result::Result<Option<user_entity::Model>, DbErr>>>,
         create_result: Mutex<Option<std::result::Result<user_entity::Model, DbErr>>>,
     }
 
@@ -204,14 +209,14 @@ mod tests {
     impl UserRepositoryContract for MockUserRepository {
         async fn find_by_username(
             &self,
-            _username: &str
+            _username: &str,
         ) -> std::result::Result<Option<user_entity::Model>, DbErr> {
             self.find_by_username_result.lock().unwrap().take().unwrap()
         }
 
         async fn create(
             &self,
-            _data: user_entity::ActiveModel
+            _data: user_entity::ActiveModel,
         ) -> std::result::Result<user_entity::Model, DbErr> {
             self.create_result.lock().unwrap().take().unwrap()
         }
@@ -221,7 +226,7 @@ mod tests {
     fn create_dummy_user_model(
         id: Uuid,
         username: &str,
-        password_hash: &str
+        password_hash: &str,
     ) -> user_entity::Model {
         user_entity::Model {
             id,
@@ -301,7 +306,10 @@ mod tests {
         // 使用 Argon2 生成真实的密码哈希用于测试
         let argon2 = Argon2::default();
         let salt = SaltString::generate(&mut OsRng);
-        let password_hash = argon2.hash_password(password.as_bytes(), &salt).unwrap().to_string();
+        let password_hash = argon2
+            .hash_password(password.as_bytes(), &salt)
+            .unwrap()
+            .to_string();
 
         let user = create_dummy_user_model(user_id, username, &password_hash);
 

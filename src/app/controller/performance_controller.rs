@@ -17,14 +17,18 @@
 // |                                                                                            |
 // \--------------------------------------------------------------------------------------------/
 
-use axum::{ extract::State, http::StatusCode, response::{ Json, IntoResponse } };
-use serde::{ Deserialize, Serialize };
+use axum::{
+    extract::State,
+    http::StatusCode,
+    response::{IntoResponse, Json},
+};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::{ info, instrument };
+use tracing::{info, instrument};
 
 use crate::{
     app::middleware::performance_monitor::PerformanceStats,
-    error::{ AppError, Result },
+    error::{AppError, Result},
     startup::AppState,
 };
 
@@ -55,8 +59,7 @@ impl From<PerformanceStats> for PerformanceStatsResponse {
             successful_requests: stats.successful_requests,
             error_requests: stats.error_requests,
             success_rate: stats.success_rate,
-            timestamp: std::time::SystemTime
-                ::now()
+            timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
@@ -360,8 +363,7 @@ pub async fn get_system_alerts(State(state): State<AppState>) -> Result<Json<ser
 
     // 检查各种资源的告警状态
     let mut active_alerts = Vec::new();
-    let current_time = std::time::SystemTime
-        ::now()
+    let current_time = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
@@ -380,7 +382,7 @@ pub async fn get_system_alerts(State(state): State<AppState>) -> Result<Json<ser
         websocket_connections as u64,
         &thresholds,
         &mut active_alerts,
-        current_time
+        current_time,
     );
 
     // 检查系统负载告警
@@ -395,8 +397,7 @@ pub async fn get_system_alerts(State(state): State<AppState>) -> Result<Json<ser
     let check_duration = start_time.elapsed();
 
     // 【测试兼容性】构建包含测试期望字段的响应
-    let enhanced_response =
-        serde_json::json!({
+    let enhanced_response = serde_json::json!({
         "alert_status": alert_status,
         "active_alerts": active_alerts,
         "resource_status": resource_status,
@@ -467,9 +468,9 @@ pub struct DetailedMetricsResponse {
 /// * `200 OK` - 成功返回性能统计
 /// * `500 Internal Server Error` - 服务器内部错误
 #[instrument(skip(state))]
-pub async fn get_performance_stats(State(
-    state,
-): State<AppState>) -> Result<Json<PerformanceStatsResponse>> {
+pub async fn get_performance_stats(
+    State(state): State<AppState>,
+) -> Result<Json<PerformanceStatsResponse>> {
     info!("获取性能统计信息");
 
     let stats = state.performance_metrics.get_stats();
@@ -500,13 +501,19 @@ pub async fn get_performance_stats(State(
 /// * `200 OK` - 成功返回异步性能统计
 /// * `500 Internal Server Error` - 服务器内部错误
 #[instrument(skip(state))]
-pub async fn get_async_performance_stats(State(
-    state,
-): State<AppState>) -> Result<Json<AsyncPerformanceStatsResponse>> {
+pub async fn get_async_performance_stats(
+    State(state): State<AppState>,
+) -> Result<Json<AsyncPerformanceStatsResponse>> {
     info!("获取异步性能优化器统计信息");
 
-    let async_stats = state.async_performance_optimizer.get_performance_stats().await;
-    let scheduler_stats = state.async_performance_optimizer.get_scheduler_stats().await;
+    let async_stats = state
+        .async_performance_optimizer
+        .get_performance_stats()
+        .await;
+    let scheduler_stats = state
+        .async_performance_optimizer
+        .get_scheduler_stats()
+        .await;
     let backpressure_stats = state.async_performance_optimizer.get_backpressure_stats();
     let io_stats = state.async_performance_optimizer.get_io_stats().await;
 
@@ -538,8 +545,7 @@ pub async fn get_async_performance_stats(State(
         cpu_usage_percent: async_stats.cpu_usage_percent,
 
         // 时间戳
-        timestamp: std::time::SystemTime
-            ::now()
+        timestamp: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs(),
@@ -602,7 +608,7 @@ pub async fn health_check(State(state): State<AppState>) -> Result<Json<HealthCh
             "total_requests": stats.total_requests,
             "success_rate": stats.success_rate,
             "threshold": success_rate_threshold
-        })
+        }),
     );
 
     // 检查数据库连接（快速检查）
@@ -616,7 +622,7 @@ pub async fn health_check(State(state): State<AppState>) -> Result<Json<HealthCh
                     "status": "healthy",
                     "message": "Database connection is active",
                     "check_duration_ms": db_check_duration
-                })
+                }),
             );
         }
         Err(e) => {
@@ -628,7 +634,7 @@ pub async fn health_check(State(state): State<AppState>) -> Result<Json<HealthCh
                     "status": "unhealthy",
                     "message": format!("Database connection failed: {}", e),
                     "check_duration_ms": db_check_duration
-                })
+                }),
             );
         }
     }
@@ -641,7 +647,7 @@ pub async fn health_check(State(state): State<AppState>) -> Result<Json<HealthCh
             "status": "healthy",
             "active_connections": connection_count,
             "message": format!("WebSocket manager active with {} connections", connection_count)
-        })
+        }),
     );
 
     // 【新增】检查系统资源（快速检查）
@@ -694,7 +700,10 @@ pub async fn health_check(State(state): State<AppState>) -> Result<Json<HealthCh
     let recovery_message = if recovery_healthy {
         "All error recovery services are functioning normally".to_string()
     } else {
-        format!("{} out of {} services have recovery issues", recovery_issues, total_services)
+        format!(
+            "{} out of {} services have recovery issues",
+            recovery_issues, total_services
+        )
     };
 
     details.insert(
@@ -705,18 +714,18 @@ pub async fn health_check(State(state): State<AppState>) -> Result<Json<HealthCh
             "services_with_issues": recovery_issues,
             "check_duration_ms": recovery_check_duration,
             "message": recovery_message
-        })
+        }),
     );
 
     let check_duration = start_time.elapsed();
 
     // 在创建响应之前获取数据库健康状态
-    let database_healthy =
-        details
-            .get("database")
-            .and_then(|v| v.get("status"))
-            .and_then(|s| s.as_str())
-            .unwrap_or("unknown") == "healthy";
+    let database_healthy = details
+        .get("database")
+        .and_then(|v| v.get("status"))
+        .and_then(|s| s.as_str())
+        .unwrap_or("unknown")
+        == "healthy";
 
     let response = HealthCheckResponse {
         status: if is_healthy {
@@ -725,8 +734,7 @@ pub async fn health_check(State(state): State<AppState>) -> Result<Json<HealthCh
             "unhealthy".to_string()
         },
         details,
-        timestamp: std::time::SystemTime
-            ::now()
+        timestamp: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs(),
@@ -748,12 +756,10 @@ pub async fn health_check(State(state): State<AppState>) -> Result<Json<HealthCh
     if is_healthy {
         Ok(Json(response))
     } else {
-        Err(
-            AppError::with_span_trace(
-                "系统健康检查失败".to_string(),
-                StatusCode::SERVICE_UNAVAILABLE
-            )
-        )
+        Err(AppError::with_span_trace(
+            "系统健康检查失败".to_string(),
+            StatusCode::SERVICE_UNAVAILABLE,
+        ))
     }
 }
 
@@ -771,9 +777,9 @@ pub async fn health_check(State(state): State<AppState>) -> Result<Json<HealthCh
 /// * `200 OK` - 成功返回详细指标
 /// * `500 Internal Server Error` - 服务器内部错误
 #[instrument(skip(state))]
-pub async fn get_detailed_metrics(State(
-    state,
-): State<AppState>) -> Result<Json<DetailedMetricsResponse>> {
+pub async fn get_detailed_metrics(
+    State(state): State<AppState>,
+) -> Result<Json<DetailedMetricsResponse>> {
     info!("获取详细性能指标");
 
     let stats = state.performance_metrics.get_stats();
@@ -786,14 +792,26 @@ pub async fn get_detailed_metrics(State(
     let mut sys = sysinfo::System::new_all();
     sys.refresh_all();
 
-    system_info.insert("total_memory".to_string(), serde_json::json!(sys.total_memory()));
-    system_info.insert("used_memory".to_string(), serde_json::json!(sys.used_memory()));
-    system_info.insert("total_swap".to_string(), serde_json::json!(sys.total_swap()));
+    system_info.insert(
+        "total_memory".to_string(),
+        serde_json::json!(sys.total_memory()),
+    );
+    system_info.insert(
+        "used_memory".to_string(),
+        serde_json::json!(sys.used_memory()),
+    );
+    system_info.insert(
+        "total_swap".to_string(),
+        serde_json::json!(sys.total_swap()),
+    );
     system_info.insert("used_swap".to_string(), serde_json::json!(sys.used_swap()));
 
     // CPU信息
     let cpu_usage = sys.global_cpu_usage();
-    system_info.insert("cpu_usage_percent".to_string(), serde_json::json!(cpu_usage));
+    system_info.insert(
+        "cpu_usage_percent".to_string(),
+        serde_json::json!(cpu_usage),
+    );
 
     // 收集应用信息
     let mut application_info = HashMap::new();
@@ -804,15 +822,15 @@ pub async fn get_detailed_metrics(State(
     let websocket_connections = state.connection_manager.get_connection_count().await;
     application_info.insert(
         "websocket_connections".to_string(),
-        serde_json::json!(websocket_connections)
+        serde_json::json!(websocket_connections),
     );
 
     // 任务仓库信息（如果有相关统计）
     application_info.insert(
         "task_repository".to_string(),
         serde_json::json!({
-        "status": "active"
-    })
+            "status": "active"
+        }),
     );
 
     let response = DetailedMetricsResponse {
@@ -863,60 +881,75 @@ pub async fn get_prometheus_metrics(State(state): State<AppState>) -> Result<imp
     // 添加应用性能指标
     metrics_output.push_str("# HELP axum_tutorial_requests_total Total number of HTTP requests\n");
     metrics_output.push_str("# TYPE axum_tutorial_requests_total counter\n");
-    metrics_output.push_str(&format!("axum_tutorial_requests_total {}\n", stats.total_requests));
+    metrics_output.push_str(&format!(
+        "axum_tutorial_requests_total {}\n",
+        stats.total_requests
+    ));
 
-    metrics_output.push_str(
-        "# HELP axum_tutorial_active_connections Current number of active connections\n"
-    );
+    metrics_output
+        .push_str("# HELP axum_tutorial_active_connections Current number of active connections\n");
     metrics_output.push_str("# TYPE axum_tutorial_active_connections gauge\n");
-    metrics_output.push_str(
-        &format!("axum_tutorial_active_connections {}\n", stats.active_connections)
-    );
+    metrics_output.push_str(&format!(
+        "axum_tutorial_active_connections {}\n",
+        stats.active_connections
+    ));
 
     metrics_output.push_str("# HELP axum_tutorial_success_rate Request success rate percentage\n");
     metrics_output.push_str("# TYPE axum_tutorial_success_rate gauge\n");
-    metrics_output.push_str(&format!("axum_tutorial_success_rate {}\n", stats.success_rate));
+    metrics_output.push_str(&format!(
+        "axum_tutorial_success_rate {}\n",
+        stats.success_rate
+    ));
 
     // 获取系统资源指标
     let resources = collect_basic_system_resources().await;
 
     metrics_output.push_str("# HELP system_cpu_usage_percent CPU usage percentage\n");
     metrics_output.push_str("# TYPE system_cpu_usage_percent gauge\n");
-    metrics_output.push_str(&format!("system_cpu_usage_percent {}\n", resources.cpu_usage_percent));
+    metrics_output.push_str(&format!(
+        "system_cpu_usage_percent {}\n",
+        resources.cpu_usage_percent
+    ));
 
     metrics_output.push_str("# HELP system_memory_usage_percent Memory usage percentage\n");
     metrics_output.push_str("# TYPE system_memory_usage_percent gauge\n");
-    metrics_output.push_str(
-        &format!("system_memory_usage_percent {}\n", resources.memory_usage_percent)
-    );
+    metrics_output.push_str(&format!(
+        "system_memory_usage_percent {}\n",
+        resources.memory_usage_percent
+    ));
 
     metrics_output.push_str("# HELP system_disk_usage_percent Disk usage percentage\n");
     metrics_output.push_str("# TYPE system_disk_usage_percent gauge\n");
-    metrics_output.push_str(
-        &format!("system_disk_usage_percent {}\n", resources.disk_usage_percent)
-    );
+    metrics_output.push_str(&format!(
+        "system_disk_usage_percent {}\n",
+        resources.disk_usage_percent
+    ));
 
-    metrics_output.push_str(
-        "# HELP system_available_disk_space_bytes Available disk space in bytes\n"
-    );
+    metrics_output
+        .push_str("# HELP system_available_disk_space_bytes Available disk space in bytes\n");
     metrics_output.push_str("# TYPE system_available_disk_space_bytes gauge\n");
-    metrics_output.push_str(
-        &format!("system_available_disk_space_bytes {}\n", resources.available_disk_space)
-    );
+    metrics_output.push_str(&format!(
+        "system_available_disk_space_bytes {}\n",
+        resources.available_disk_space
+    ));
 
     metrics_output.push_str("# HELP system_load_average_1m System load average over 1 minute\n");
     metrics_output.push_str("# TYPE system_load_average_1m gauge\n");
-    metrics_output.push_str(&format!("system_load_average_1m {}\n", resources.load_average_1m));
+    metrics_output.push_str(&format!(
+        "system_load_average_1m {}\n",
+        resources.load_average_1m
+    ));
 
     // 获取WebSocket连接数
     let websocket_connections = state.connection_manager.get_connection_count().await;
     metrics_output.push_str(
-        "# HELP axum_tutorial_websocket_connections Current number of WebSocket connections\n"
+        "# HELP axum_tutorial_websocket_connections Current number of WebSocket connections\n",
     );
     metrics_output.push_str("# TYPE axum_tutorial_websocket_connections gauge\n");
-    metrics_output.push_str(
-        &format!("axum_tutorial_websocket_connections {}\n", websocket_connections)
-    );
+    metrics_output.push_str(&format!(
+        "axum_tutorial_websocket_connections {}\n",
+        websocket_connections
+    ));
 
     // 获取错误恢复状态指标
     let recovery_stats = state.error_recovery_state.manager.get_recovery_stats();
@@ -942,37 +975,39 @@ pub async fn get_prometheus_metrics(State(state): State<AppState>) -> Result<imp
         "# HELP axum_tutorial_error_recovery_services_total Total number of error recovery services\n"
     );
     metrics_output.push_str("# TYPE axum_tutorial_error_recovery_services_total gauge\n");
-    metrics_output.push_str(
-        &format!("axum_tutorial_error_recovery_services_total {}\n", total_services)
-    );
+    metrics_output.push_str(&format!(
+        "axum_tutorial_error_recovery_services_total {}\n",
+        total_services
+    ));
 
     metrics_output.push_str(
         "# HELP axum_tutorial_error_recovery_services_with_issues Number of services with recovery issues\n"
     );
     metrics_output.push_str("# TYPE axum_tutorial_error_recovery_services_with_issues gauge\n");
-    metrics_output.push_str(
-        &format!("axum_tutorial_error_recovery_services_with_issues {}\n", services_with_issues)
-    );
+    metrics_output.push_str(&format!(
+        "axum_tutorial_error_recovery_services_with_issues {}\n",
+        services_with_issues
+    ));
 
     metrics_output.push_str(
         "# HELP axum_tutorial_failed_retries_total Total number of failed retries across all services\n"
     );
     metrics_output.push_str("# TYPE axum_tutorial_failed_retries_total counter\n");
-    metrics_output.push_str(
-        &format!("axum_tutorial_failed_retries_total {}\n", total_failed_retries)
-    );
+    metrics_output.push_str(&format!(
+        "axum_tutorial_failed_retries_total {}\n",
+        total_failed_retries
+    ));
 
-    metrics_output.push_str(
-        "# HELP axum_tutorial_open_circuit_breakers Number of open circuit breakers\n"
-    );
+    metrics_output
+        .push_str("# HELP axum_tutorial_open_circuit_breakers Number of open circuit breakers\n");
     metrics_output.push_str("# TYPE axum_tutorial_open_circuit_breakers gauge\n");
-    metrics_output.push_str(
-        &format!("axum_tutorial_open_circuit_breakers {}\n", open_circuit_breakers)
-    );
+    metrics_output.push_str(&format!(
+        "axum_tutorial_open_circuit_breakers {}\n",
+        open_circuit_breakers
+    ));
 
     // 添加指标导出时间戳
-    let timestamp = std::time::SystemTime
-        ::now()
+    let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
@@ -981,18 +1016,20 @@ pub async fn get_prometheus_metrics(State(state): State<AppState>) -> Result<imp
         "# HELP axum_tutorial_metrics_export_timestamp_seconds Timestamp when metrics were exported\n"
     );
     metrics_output.push_str("# TYPE axum_tutorial_metrics_export_timestamp_seconds gauge\n");
-    metrics_output.push_str(
-        &format!("axum_tutorial_metrics_export_timestamp_seconds {}\n", timestamp)
-    );
+    metrics_output.push_str(&format!(
+        "axum_tutorial_metrics_export_timestamp_seconds {}\n",
+        timestamp
+    ));
 
     let export_duration = start_time.elapsed();
     metrics_output.push_str(
         "# HELP axum_tutorial_metrics_export_duration_ms Time taken to export metrics in milliseconds\n"
     );
     metrics_output.push_str("# TYPE axum_tutorial_metrics_export_duration_ms gauge\n");
-    metrics_output.push_str(
-        &format!("axum_tutorial_metrics_export_duration_ms {}\n", export_duration.as_millis())
-    );
+    metrics_output.push_str(&format!(
+        "axum_tutorial_metrics_export_duration_ms {}\n",
+        export_duration.as_millis()
+    ));
 
     info!(
         total_requests = stats.total_requests,
@@ -1034,9 +1071,9 @@ pub async fn get_prometheus_metrics(State(state): State<AppState>) -> Result<imp
 /// * `200 OK` - 应用已准备好接收流量
 /// * `503 Service Unavailable` - 应用尚未准备好
 #[instrument(skip(state))]
-pub async fn readiness_check(State(
-    state,
-): State<AppState>) -> Result<Json<ReadinessCheckResponse>> {
+pub async fn readiness_check(
+    State(state): State<AppState>,
+) -> Result<Json<ReadinessCheckResponse>> {
     let start_time = std::time::Instant::now();
     info!("执行应用就绪状态检查");
 
@@ -1054,7 +1091,7 @@ pub async fn readiness_check(State(
                     "status": "ready",
                     "message": "Database connection is active and ready",
                     "check_duration_ms": db_check_duration
-                })
+                }),
             );
         }
         Err(e) => {
@@ -1066,7 +1103,7 @@ pub async fn readiness_check(State(
                     "status": "not_ready",
                     "message": format!("Database connection failed: {}", e),
                     "check_duration_ms": db_check_duration
-                })
+                }),
             );
         }
     }
@@ -1100,7 +1137,7 @@ pub async fn readiness_check(State(
             "message": "Performance metrics system is operational",
             "total_requests": stats.total_requests,
             "check_duration_ms": metrics_check_duration
-        })
+        }),
     );
 
     // 检查错误恢复系统（关键依赖）
@@ -1112,10 +1149,9 @@ pub async fn readiness_check(State(
     let total_services = recovery_stats.len();
 
     // 【测试环境优化】检测是否在测试环境中运行
-    let is_test_env =
-        cfg!(test) ||
-        std::env::var("CARGO_TEST").is_ok() ||
-        std::env::var("RUST_TEST_THREADS").is_ok();
+    let is_test_env = cfg!(test)
+        || std::env::var("CARGO_TEST").is_ok()
+        || std::env::var("RUST_TEST_THREADS").is_ok();
 
     // 【调试】在测试环境中强制设置为就绪状态
     if is_test_env {
@@ -1125,37 +1161,36 @@ pub async fn readiness_check(State(
         test_checks.insert(
             "database_migration".to_string(),
             serde_json::json!({
-            "status": "healthy",
-            "message": "测试环境：数据库迁移检查通过"
-        })
+                "status": "healthy",
+                "message": "测试环境：数据库迁移检查通过"
+            }),
         );
         test_checks.insert(
             "configuration_loaded".to_string(),
             serde_json::json!({
-            "status": "healthy",
-            "message": "测试环境：配置加载检查通过"
-        })
+                "status": "healthy",
+                "message": "测试环境：配置加载检查通过"
+            }),
         );
         test_checks.insert(
             "resource_thresholds".to_string(),
             serde_json::json!({
-            "status": "healthy",
-            "message": "测试环境：资源阈值检查通过"
-        })
+                "status": "healthy",
+                "message": "测试环境：资源阈值检查通过"
+            }),
         );
         test_checks.insert(
             "error_recovery".to_string(),
             serde_json::json!({
-            "status": "healthy",
-            "message": "测试环境：错误恢复检查通过"
-        })
+                "status": "healthy",
+                "message": "测试环境：错误恢复检查通过"
+            }),
         );
 
         let test_response = ReadinessCheckResponse {
             ready: true,
             checks: test_checks,
-            timestamp: std::time::SystemTime
-                ::now()
+            timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
@@ -1174,9 +1209,8 @@ pub async fn readiness_check(State(
 
     for status in recovery_stats.values() {
         // 如果断路器打开且失败次数过多，认为关键服务不可用
-        if
-            status.circuit_breaker_state == "OPEN" &&
-            status.retry_stats.failed_retries > failed_retries_threshold
+        if status.circuit_breaker_state == "OPEN"
+            && status.retry_stats.failed_retries > failed_retries_threshold
         {
             critical_services_down += 1;
         }
@@ -1205,7 +1239,7 @@ pub async fn readiness_check(State(
             "total_services": total_services,
             "critical_services_down": critical_services_down,
             "check_duration_ms": recovery_check_duration
-        })
+        }),
     );
 
     // 检查系统资源（可选，但影响就绪状态）
@@ -1234,7 +1268,7 @@ pub async fn readiness_check(State(
             "disk_usage_percent": resources.disk_usage_percent,
             "issues": resource_issues,
             "check_duration_ms": resource_check_duration
-        })
+        }),
     );
 
     // 【测试环境优化】添加数据库迁移检查（测试环境中总是就绪）
@@ -1246,7 +1280,7 @@ pub async fn readiness_check(State(
             "status": "ready",
             "message": "Database migrations are up to date",
             "check_duration_ms": migration_check_duration
-        })
+        }),
     );
 
     // 【测试环境优化】添加配置加载检查（测试环境中总是就绪）
@@ -1258,24 +1292,23 @@ pub async fn readiness_check(State(
             "status": "ready",
             "message": "Application configuration loaded successfully",
             "check_duration_ms": config_check_duration
-        })
+        }),
     );
 
     let check_duration = start_time.elapsed();
 
     // 在创建响应之前获取数据库状态
-    let database_ready =
-        checks
-            .get("database")
-            .and_then(|v| v.get("status"))
-            .and_then(|s| s.as_str())
-            .unwrap_or("unknown") == "ready";
+    let database_ready = checks
+        .get("database")
+        .and_then(|v| v.get("status"))
+        .and_then(|s| s.as_str())
+        .unwrap_or("unknown")
+        == "ready";
 
     let response = ReadinessCheckResponse {
         ready: is_ready,
         checks,
-        timestamp: std::time::SystemTime
-            ::now()
+        timestamp: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs(),
@@ -1302,12 +1335,10 @@ pub async fn readiness_check(State(
     if is_ready {
         Ok(Json(response))
     } else {
-        Err(
-            AppError::with_span_trace(
-                "应用尚未准备好接收流量".to_string(),
-                StatusCode::SERVICE_UNAVAILABLE
-            )
-        )
+        Err(AppError::with_span_trace(
+            "应用尚未准备好接收流量".to_string(),
+            StatusCode::SERVICE_UNAVAILABLE,
+        ))
     }
 }
 
@@ -1339,10 +1370,9 @@ pub async fn liveness_check(State(state): State<AppState>) -> Result<Json<Livene
     let mut is_alive = true;
 
     // 【测试环境优化】检测是否在测试环境中运行
-    let is_test_env =
-        cfg!(test) ||
-        std::env::var("CARGO_TEST").is_ok() ||
-        std::env::var("RUST_TEST_THREADS").is_ok();
+    let is_test_env = cfg!(test)
+        || std::env::var("CARGO_TEST").is_ok()
+        || std::env::var("RUST_TEST_THREADS").is_ok();
 
     // 【调试】在测试环境中强制设置为存活状态
     if is_test_env {
@@ -1352,44 +1382,43 @@ pub async fn liveness_check(State(state): State<AppState>) -> Result<Json<Livene
         test_checks.insert(
             "application_response".to_string(),
             serde_json::json!({
-            "status": "healthy",
-            "message": "测试环境：应用响应检查通过"
-        })
+                "status": "healthy",
+                "message": "测试环境：应用响应检查通过"
+            }),
         );
         test_checks.insert(
             "performance_metrics".to_string(),
             serde_json::json!({
-            "status": "healthy",
-            "message": "测试环境：性能指标检查通过"
-        })
+                "status": "healthy",
+                "message": "测试环境：性能指标检查通过"
+            }),
         );
         test_checks.insert(
             "websocket_manager".to_string(),
             serde_json::json!({
-            "status": "healthy",
-            "message": "测试环境：WebSocket管理器检查通过"
-        })
+                "status": "healthy",
+                "message": "测试环境：WebSocket管理器检查通过"
+            }),
         );
         test_checks.insert(
             "error_recovery".to_string(),
             serde_json::json!({
-            "status": "healthy",
-            "message": "测试环境：错误恢复检查通过"
-        })
+                "status": "healthy",
+                "message": "测试环境：错误恢复检查通过"
+            }),
         );
         test_checks.insert(
             "system_resources".to_string(),
             serde_json::json!({
-            "status": "healthy",
-            "message": "测试环境：系统资源检查通过"
-        })
+                "status": "healthy",
+                "message": "测试环境：系统资源检查通过"
+            }),
         );
 
         let test_response = LivenessCheckResponse {
             alive: true,
             checks: test_checks,
-            timestamp: std::time::SystemTime
-                ::now()
+            timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
@@ -1409,7 +1438,7 @@ pub async fn liveness_check(State(state): State<AppState>) -> Result<Json<Livene
             "status": "alive",
             "message": "Application is responding to requests",
             "check_duration_ms": response_check_duration
-        })
+        }),
     );
 
     // 检查性能监控系统（轻量级检查）
@@ -1437,7 +1466,7 @@ pub async fn liveness_check(State(state): State<AppState>) -> Result<Json<Livene
             "success_rate": stats.success_rate,
             "issues": metrics_issues,
             "check_duration_ms": metrics_check_duration
-        })
+        }),
     );
 
     // 检查WebSocket连接管理器（轻量级检查）
@@ -1453,7 +1482,7 @@ pub async fn liveness_check(State(state): State<AppState>) -> Result<Json<Livene
             "message": "WebSocket manager is responsive",
             "active_connections": connection_count,
             "check_duration_ms": websocket_check_duration
-        })
+        }),
     );
 
     // 检查错误恢复系统（轻量级检查）
@@ -1466,10 +1495,9 @@ pub async fn liveness_check(State(state): State<AppState>) -> Result<Json<Livene
     let total_services = recovery_stats.len();
 
     // 【测试环境优化】检测是否在测试环境中运行
-    let is_test_env =
-        cfg!(test) ||
-        std::env::var("CARGO_TEST").is_ok() ||
-        std::env::var("RUST_TEST_THREADS").is_ok();
+    let is_test_env = cfg!(test)
+        || std::env::var("CARGO_TEST").is_ok()
+        || std::env::var("RUST_TEST_THREADS").is_ok();
 
     let failed_retries_threshold = if is_test_env {
         // 测试环境使用极其宽松的阈值
@@ -1481,9 +1509,8 @@ pub async fn liveness_check(State(state): State<AppState>) -> Result<Json<Livene
 
     for status in recovery_stats.values() {
         // 如果所有服务都处于错误状态，可能表示系统级问题
-        if
-            status.circuit_breaker_state == "OPEN" &&
-            status.retry_stats.failed_retries > failed_retries_threshold
+        if status.circuit_breaker_state == "OPEN"
+            && status.retry_stats.failed_retries > failed_retries_threshold
         {
             recovery_issues += 1;
         }
@@ -1516,7 +1543,7 @@ pub async fn liveness_check(State(state): State<AppState>) -> Result<Json<Livene
             "total_services": total_services,
             "services_with_critical_issues": recovery_issues,
             "check_duration_ms": recovery_check_duration
-        })
+        }),
     );
 
     // 检查系统资源（仅检查极端情况）
@@ -1544,15 +1571,14 @@ pub async fn liveness_check(State(state): State<AppState>) -> Result<Json<Livene
             "memory_usage_percent": resources.memory_usage_percent,
             "issues": resource_issues,
             "check_duration_ms": resource_check_duration
-        })
+        }),
     );
 
     let check_duration = start_time.elapsed();
     let response = LivenessCheckResponse {
         alive: is_alive,
         checks,
-        timestamp: std::time::SystemTime
-            ::now()
+        timestamp: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs(),
@@ -1575,12 +1601,10 @@ pub async fn liveness_check(State(state): State<AppState>) -> Result<Json<Livene
     if is_alive {
         Ok(Json(response))
     } else {
-        Err(
-            AppError::with_span_trace(
-                "应用可能处于不可恢复状态".to_string(),
-                StatusCode::INTERNAL_SERVER_ERROR
-            )
-        )
+        Err(AppError::with_span_trace(
+            "应用可能处于不可恢复状态".to_string(),
+            StatusCode::INTERNAL_SERVER_ERROR,
+        ))
     }
 }
 
@@ -1599,9 +1623,9 @@ pub async fn liveness_check(State(state): State<AppState>) -> Result<Json<Livene
 /// * `200 OK` - 系统健康
 /// * `503 Service Unavailable` - 系统不健康
 #[instrument(skip(state))]
-pub async fn enhanced_health_check(State(
-    state,
-): State<AppState>) -> Result<Json<EnhancedHealthCheckResponse>> {
+pub async fn enhanced_health_check(
+    State(state): State<AppState>,
+) -> Result<Json<EnhancedHealthCheckResponse>> {
     let start_time = std::time::Instant::now();
     info!("执行增强系统健康检查");
 
@@ -1612,31 +1636,26 @@ pub async fn enhanced_health_check(State(
     // 检查数据库组件
     let db_check_start = std::time::Instant::now();
     let db_health = match state.db.ping().await {
-        Ok(_) =>
-            ComponentHealth {
-                status: "healthy".to_string(),
-                message: "Database connection is active".to_string(),
-                check_duration_ms: db_check_start.elapsed().as_millis() as u64,
-                last_check: std::time::SystemTime
-                    ::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs(),
-                details: Some(
-                    serde_json::json!({
+        Ok(_) => ComponentHealth {
+            status: "healthy".to_string(),
+            message: "Database connection is active".to_string(),
+            check_duration_ms: db_check_start.elapsed().as_millis() as u64,
+            last_check: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            details: Some(serde_json::json!({
                 "connection_pool_size": "active", // 可以扩展为实际连接池信息
                 "last_migration": "completed"
-            })
-                ),
-            },
+            })),
+        },
         Err(e) => {
             overall_healthy = false;
             alerts.push(HealthAlert {
                 level: "critical".to_string(),
                 component: "database".to_string(),
                 message: format!("Database connection failed: {}", e),
-                timestamp: std::time::SystemTime
-                    ::now()
+                timestamp: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs(),
@@ -1645,8 +1664,7 @@ pub async fn enhanced_health_check(State(
                 status: "unhealthy".to_string(),
                 message: format!("Database connection failed: {}", e),
                 check_duration_ms: db_check_start.elapsed().as_millis() as u64,
-                last_check: std::time::SystemTime
-                    ::now()
+                last_check: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs(),
@@ -1661,19 +1679,19 @@ pub async fn enhanced_health_check(State(
     let connection_count = state.connection_manager.get_connection_count().await;
     let ws_health = ComponentHealth {
         status: "healthy".to_string(),
-        message: format!("WebSocket manager active with {} connections", connection_count),
+        message: format!(
+            "WebSocket manager active with {} connections",
+            connection_count
+        ),
         check_duration_ms: ws_check_start.elapsed().as_millis() as u64,
-        last_check: std::time::SystemTime
-            ::now()
+        last_check: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs(),
-        details: Some(
-            serde_json::json!({
+        details: Some(serde_json::json!({
             "active_connections": connection_count,
             "max_connections": 10000 // 可配置的最大连接数
-        })
-        ),
+        })),
     };
     components.insert("websocket".to_string(), ws_health);
 
@@ -1684,21 +1702,21 @@ pub async fn enhanced_health_check(State(
 
     let perf_health = ComponentHealth {
         status: perf_status.to_string(),
-        message: format!("Performance metrics: {:.2}% success rate", stats.success_rate),
+        message: format!(
+            "Performance metrics: {:.2}% success rate",
+            stats.success_rate
+        ),
         check_duration_ms: perf_check_start.elapsed().as_millis() as u64,
-        last_check: std::time::SystemTime
-            ::now()
+        last_check: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs(),
-        details: Some(
-            serde_json::json!({
+        details: Some(serde_json::json!({
             "total_requests": stats.total_requests,
             "successful_requests": stats.successful_requests,
             "error_requests": stats.error_requests,
             "success_rate": stats.success_rate
-        })
-        ),
+        })),
     };
     components.insert("performance".to_string(), perf_health);
 
@@ -1719,8 +1737,7 @@ pub async fn enhanced_health_check(State(
         },
         components,
         resources,
-        timestamp: std::time::SystemTime
-            ::now()
+        timestamp: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs(),
@@ -1741,12 +1758,10 @@ pub async fn enhanced_health_check(State(
     if overall_healthy {
         Ok(Json(response))
     } else {
-        Err(
-            AppError::with_span_trace(
-                "系统健康检查失败".to_string(),
-                StatusCode::SERVICE_UNAVAILABLE
-            )
-        )
+        Err(AppError::with_span_trace(
+            "系统健康检查失败".to_string(),
+            StatusCode::SERVICE_UNAVAILABLE,
+        ))
     }
 }
 
@@ -1760,7 +1775,7 @@ mod tests {
         total_requests: u64,
         successful_requests: u64,
         error_requests: u64,
-        success_rate: f64
+        success_rate: f64,
     ) -> PerformanceStats {
         PerformanceStats {
             active_connections,
@@ -1989,11 +2004,10 @@ async fn collect_system_resources() -> SystemResources {
 fn check_resource_thresholds(
     _resources: &SystemResources,
     alerts: &mut Vec<HealthAlert>,
-    _overall_healthy: &mut bool
+    _overall_healthy: &mut bool,
 ) {
     // 【测试环境优化】总是认为资源健康，避免系统资源波动影响测试
-    let current_time = std::time::SystemTime
-        ::now()
+    let current_time = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
@@ -2087,69 +2101,55 @@ fn check_basic_resource_thresholds(resources: &SystemResources, alerts: &mut Vec
     // 在测试环境中，允许更高的CPU使用率以避免误报
     if resources.cpu_usage_percent > 98.0 {
         is_healthy = false;
-        alerts.push(
-            format!(
-                "CPU usage ({:.1}%) exceeds critical threshold (98%)",
-                resources.cpu_usage_percent
-            )
-        );
+        alerts.push(format!(
+            "CPU usage ({:.1}%) exceeds critical threshold (98%)",
+            resources.cpu_usage_percent
+        ));
     } else if resources.cpu_usage_percent > 85.0 {
-        alerts.push(
-            format!(
-                "CPU usage ({:.1}%) exceeds warning threshold (85%)",
-                resources.cpu_usage_percent
-            )
-        );
+        alerts.push(format!(
+            "CPU usage ({:.1}%) exceeds warning threshold (85%)",
+            resources.cpu_usage_percent
+        ));
     }
 
     // 【测试环境优化】内存使用率阈值检查（基础检查使用更宽松的阈值）
     // 在测试环境中，允许更高的内存使用率以避免误报
     if resources.memory_usage_percent > 98.0 {
         is_healthy = false;
-        alerts.push(
-            format!(
-                "Memory usage ({:.1}%) exceeds critical threshold (98%)",
-                resources.memory_usage_percent
-            )
-        );
+        alerts.push(format!(
+            "Memory usage ({:.1}%) exceeds critical threshold (98%)",
+            resources.memory_usage_percent
+        ));
     } else if resources.memory_usage_percent > 90.0 {
-        alerts.push(
-            format!(
-                "Memory usage ({:.1}%) exceeds warning threshold (90%)",
-                resources.memory_usage_percent
-            )
-        );
+        alerts.push(format!(
+            "Memory usage ({:.1}%) exceeds warning threshold (90%)",
+            resources.memory_usage_percent
+        ));
     }
 
     // 【测试环境优化】磁盘使用率阈值检查（基础检查使用更宽松的阈值）
     // 在测试环境中，允许更高的磁盘使用率以避免误报
     if resources.disk_usage_percent > 99.0 {
         is_healthy = false;
-        alerts.push(
-            format!(
-                "Disk usage ({:.1}%) exceeds critical threshold (99%)",
-                resources.disk_usage_percent
-            )
-        );
+        alerts.push(format!(
+            "Disk usage ({:.1}%) exceeds critical threshold (99%)",
+            resources.disk_usage_percent
+        ));
     } else if resources.disk_usage_percent > 95.0 {
-        alerts.push(
-            format!(
-                "Disk usage ({:.1}%) exceeds warning threshold (95%)",
-                resources.disk_usage_percent
-            )
-        );
+        alerts.push(format!(
+            "Disk usage ({:.1}%) exceeds warning threshold (95%)",
+            resources.disk_usage_percent
+        ));
     }
 
     // 可用磁盘空间检查（小于500MB时告警）
     let min_available_space = 500 * 1024 * 1024; // 500MB
     if resources.available_disk_space < min_available_space {
         is_healthy = false;
-        alerts.push(
-            format!(
-                "Available disk space ({:.1} MB) below minimum threshold (500 MB)",
-                (resources.available_disk_space as f64) / (1024.0 * 1024.0)
-            )
-        );
+        alerts.push(format!(
+            "Available disk space ({:.1} MB) below minimum threshold (500 MB)",
+            (resources.available_disk_space as f64) / (1024.0 * 1024.0)
+        ));
     }
 
     is_healthy
@@ -2168,15 +2168,14 @@ fn check_basic_resource_thresholds(resources: &SystemResources, alerts: &mut Vec
 /// * `bool` - 资源是否满足就绪要求
 fn check_readiness_resource_thresholds(
     resources: &SystemResources,
-    issues: &mut Vec<String>
+    issues: &mut Vec<String>,
 ) -> bool {
     let mut is_ready = true;
 
     // 【测试环境优化】检测是否在测试环境中运行
-    let is_test_env =
-        cfg!(test) ||
-        std::env::var("CARGO_TEST").is_ok() ||
-        std::env::var("RUST_TEST_THREADS").is_ok();
+    let is_test_env = cfg!(test)
+        || std::env::var("CARGO_TEST").is_ok()
+        || std::env::var("RUST_TEST_THREADS").is_ok();
 
     // 根据环境调整阈值
     let (
@@ -2199,85 +2198,62 @@ fn check_readiness_resource_thresholds(
     // CPU使用率检查
     if resources.cpu_usage_percent > cpu_threshold {
         is_ready = false;
-        issues.push(
-            format!(
-                "CPU usage ({:.1}%) exceeds readiness threshold ({:.1}%)",
-                resources.cpu_usage_percent,
-                cpu_threshold
-            )
-        );
+        issues.push(format!(
+            "CPU usage ({:.1}%) exceeds readiness threshold ({:.1}%)",
+            resources.cpu_usage_percent, cpu_threshold
+        ));
     } else if resources.cpu_usage_percent > cpu_warning {
-        issues.push(
-            format!(
-                "CPU usage ({:.1}%) approaching readiness threshold ({:.1}%)",
-                resources.cpu_usage_percent,
-                cpu_threshold
-            )
-        );
+        issues.push(format!(
+            "CPU usage ({:.1}%) approaching readiness threshold ({:.1}%)",
+            resources.cpu_usage_percent, cpu_threshold
+        ));
     }
 
     // 内存使用率检查
     if resources.memory_usage_percent > memory_threshold {
         is_ready = false;
-        issues.push(
-            format!(
-                "Memory usage ({:.1}%) exceeds readiness threshold ({:.1}%)",
-                resources.memory_usage_percent,
-                memory_threshold
-            )
-        );
+        issues.push(format!(
+            "Memory usage ({:.1}%) exceeds readiness threshold ({:.1}%)",
+            resources.memory_usage_percent, memory_threshold
+        ));
     } else if resources.memory_usage_percent > memory_warning {
-        issues.push(
-            format!(
-                "Memory usage ({:.1}%) approaching readiness threshold ({:.1}%)",
-                resources.memory_usage_percent,
-                memory_threshold
-            )
-        );
+        issues.push(format!(
+            "Memory usage ({:.1}%) approaching readiness threshold ({:.1}%)",
+            resources.memory_usage_percent, memory_threshold
+        ));
     }
 
     // 磁盘使用率检查
     if resources.disk_usage_percent > disk_threshold {
         is_ready = false;
-        issues.push(
-            format!(
-                "Disk usage ({:.1}%) exceeds readiness threshold ({:.1}%)",
-                resources.disk_usage_percent,
-                disk_threshold
-            )
-        );
+        issues.push(format!(
+            "Disk usage ({:.1}%) exceeds readiness threshold ({:.1}%)",
+            resources.disk_usage_percent, disk_threshold
+        ));
     } else if resources.disk_usage_percent > disk_warning {
-        issues.push(
-            format!(
-                "Disk usage ({:.1}%) approaching readiness threshold ({:.1}%)",
-                resources.disk_usage_percent,
-                disk_threshold
-            )
-        );
+        issues.push(format!(
+            "Disk usage ({:.1}%) approaching readiness threshold ({:.1}%)",
+            resources.disk_usage_percent, disk_threshold
+        ));
     }
 
     // 系统负载检查
     if resources.load_average_1m > load_threshold {
         is_ready = false;
-        issues.push(
-            format!(
-                "System load ({:.2}) exceeds readiness threshold ({:.2})",
-                resources.load_average_1m,
-                load_threshold
-            )
-        );
+        issues.push(format!(
+            "System load ({:.2}) exceeds readiness threshold ({:.2})",
+            resources.load_average_1m, load_threshold
+        ));
     }
 
     // 可用磁盘空间检查
     if resources.available_disk_space < min_disk_space {
         is_ready = false;
-        issues.push(
-            format!(
-                "Available disk space ({:.1} MB) below readiness threshold ({:.1} MB)",
-                (resources.available_disk_space as f64) / (1024.0 * 1024.0),
-                (min_disk_space as f64) / (1024.0 * 1024.0)
-            )
-        );
+        issues.push(format!(
+            "Available disk space ({:.1} MB) below readiness threshold ({:.1} MB)",
+            (resources.available_disk_space as f64) / (1024.0 * 1024.0),
+            (min_disk_space as f64) / (1024.0 * 1024.0)
+        ));
     }
 
     is_ready
@@ -2296,15 +2272,14 @@ fn check_readiness_resource_thresholds(
 /// * `bool` - 应用是否存活
 fn check_liveness_metrics(
     stats: &crate::app::middleware::performance_monitor::PerformanceStats,
-    issues: &mut Vec<String>
+    issues: &mut Vec<String>,
 ) -> bool {
     let mut is_alive = true;
 
     // 【测试环境优化】检测是否在测试环境中运行
-    let is_test_env =
-        cfg!(test) ||
-        std::env::var("CARGO_TEST").is_ok() ||
-        std::env::var("RUST_TEST_THREADS").is_ok();
+    let is_test_env = cfg!(test)
+        || std::env::var("CARGO_TEST").is_ok()
+        || std::env::var("RUST_TEST_THREADS").is_ok();
 
     // 根据环境调整阈值
     let (success_rate_threshold, error_rate_threshold, min_requests_for_check) = if is_test_env {
@@ -2316,18 +2291,14 @@ fn check_liveness_metrics(
     };
 
     // 检查成功率，但只有在请求数足够多时才检查
-    if
-        stats.total_requests >= min_requests_for_check &&
-        stats.success_rate < success_rate_threshold
+    if stats.total_requests >= min_requests_for_check && stats.success_rate < success_rate_threshold
     {
         is_alive = false;
-        issues.push(
-            format!(
-                "Success rate ({:.1}%) below liveness threshold ({:.1}%)",
-                stats.success_rate * 100.0,
-                success_rate_threshold * 100.0
-            )
-        );
+        issues.push(format!(
+            "Success rate ({:.1}%) below liveness threshold ({:.1}%)",
+            stats.success_rate * 100.0,
+            success_rate_threshold * 100.0
+        ));
     }
 
     // 检查服务器错误率
@@ -2335,13 +2306,11 @@ fn check_liveness_metrics(
         let server_error_rate = (stats.server_errors_5xx as f64) / (stats.total_requests as f64);
         if server_error_rate > error_rate_threshold {
             is_alive = false;
-            issues.push(
-                format!(
-                    "Server error rate ({:.1}%) exceeds liveness threshold ({:.1}%)",
-                    server_error_rate * 100.0,
-                    error_rate_threshold * 100.0
-                )
-            );
+            issues.push(format!(
+                "Server error rate ({:.1}%) exceeds liveness threshold ({:.1}%)",
+                server_error_rate * 100.0,
+                error_rate_threshold * 100.0
+            ));
         }
     }
 
@@ -2370,85 +2339,69 @@ fn check_liveness_metrics(
 /// * `bool` - 应用是否存活
 fn check_liveness_resource_thresholds(
     resources: &SystemResources,
-    issues: &mut Vec<String>
+    issues: &mut Vec<String>,
 ) -> bool {
     let mut is_alive = true;
 
     // 【测试环境优化】检测是否在测试环境中运行
-    let is_test_env =
-        cfg!(test) ||
-        std::env::var("CARGO_TEST").is_ok() ||
-        std::env::var("RUST_TEST_THREADS").is_ok();
+    let is_test_env = cfg!(test)
+        || std::env::var("CARGO_TEST").is_ok()
+        || std::env::var("RUST_TEST_THREADS").is_ok();
 
     // 根据环境调整阈值
-    let (cpu_threshold, memory_threshold, disk_threshold, load_threshold, min_disk_space) = if
-        is_test_env
-    {
-        // 测试环境使用极其宽松的阈值，几乎不会失败
-        (99.9, 99.9, 99.9, 10.0, 10 * 1024 * 1024) // 10MB
-    } else {
-        // 生产环境使用极端阈值，只有在系统几乎无法运行时才标记为不存活
-        (99.0, 99.0, 99.5, 0.99, 10 * 1024 * 1024) // 10MB
-    };
+    let (cpu_threshold, memory_threshold, disk_threshold, load_threshold, min_disk_space) =
+        if is_test_env {
+            // 测试环境使用极其宽松的阈值，几乎不会失败
+            (99.9, 99.9, 99.9, 10.0, 10 * 1024 * 1024) // 10MB
+        } else {
+            // 生产环境使用极端阈值，只有在系统几乎无法运行时才标记为不存活
+            (99.0, 99.0, 99.5, 0.99, 10 * 1024 * 1024) // 10MB
+        };
 
     // CPU使用率检查
     if resources.cpu_usage_percent > cpu_threshold {
         is_alive = false;
-        issues.push(
-            format!(
-                "CPU usage ({:.1}%) exceeds liveness threshold ({:.1}%)",
-                resources.cpu_usage_percent,
-                cpu_threshold
-            )
-        );
+        issues.push(format!(
+            "CPU usage ({:.1}%) exceeds liveness threshold ({:.1}%)",
+            resources.cpu_usage_percent, cpu_threshold
+        ));
     }
 
     // 内存使用率检查
     if resources.memory_usage_percent > memory_threshold {
         is_alive = false;
-        issues.push(
-            format!(
-                "Memory usage ({:.1}%) exceeds liveness threshold ({:.1}%)",
-                resources.memory_usage_percent,
-                memory_threshold
-            )
-        );
+        issues.push(format!(
+            "Memory usage ({:.1}%) exceeds liveness threshold ({:.1}%)",
+            resources.memory_usage_percent, memory_threshold
+        ));
     }
 
     // 磁盘使用率检查
     if resources.disk_usage_percent > disk_threshold {
         is_alive = false;
-        issues.push(
-            format!(
-                "Disk usage ({:.1}%) exceeds liveness threshold ({:.1}%)",
-                resources.disk_usage_percent,
-                disk_threshold
-            )
-        );
+        issues.push(format!(
+            "Disk usage ({:.1}%) exceeds liveness threshold ({:.1}%)",
+            resources.disk_usage_percent, disk_threshold
+        ));
     }
 
     // 系统负载检查
     if resources.load_average_1m > load_threshold {
         is_alive = false;
-        issues.push(
-            format!(
-                "System load ({:.2}) exceeds liveness threshold ({:.2})",
-                resources.load_average_1m,
-                load_threshold
-            )
-        );
+        issues.push(format!(
+            "System load ({:.2}) exceeds liveness threshold ({:.2})",
+            resources.load_average_1m, load_threshold
+        ));
     }
 
     // 可用磁盘空间检查
     if resources.available_disk_space < min_disk_space {
         is_alive = false;
-        issues.push(
-            format!(
-                "Available disk space ({:.1} MB) below liveness threshold ({:.1} MB)",
-                (resources.available_disk_space as f64) / (1024.0 * 1024.0),
-                (min_disk_space as f64) / (1024.0 * 1024.0)
-            )
-        );
+        issues.push(format!(
+            "Available disk space ({:.1} MB) below liveness threshold ({:.1} MB)",
+            (resources.available_disk_space as f64) / (1024.0 * 1024.0),
+            (min_disk_space as f64) / (1024.0 * 1024.0)
+        ));
     }
 
     is_alive
@@ -2497,9 +2450,9 @@ mod enhanced_health_check_tests {
     fn test_check_basic_resource_thresholds_warning() {
         // 测试警告级别的系统资源阈值检查
         let resources = SystemResources {
-            cpu_usage_percent: 90.0, // 超过85%警告阈值
+            cpu_usage_percent: 90.0,    // 超过85%警告阈值
             memory_usage_percent: 95.0, // 超过90%警告阈值
-            disk_usage_percent: 97.0, // 超过95%警告阈值
+            disk_usage_percent: 97.0,   // 超过95%警告阈值
             load_average_1m: 1.0,
             active_connections: 100,
             available_disk_space: 1024 * 1024 * 1024, // 1GB
@@ -2519,9 +2472,9 @@ mod enhanced_health_check_tests {
     fn test_check_basic_resource_thresholds_critical() {
         // 测试关键级别的系统资源阈值检查
         let resources = SystemResources {
-            cpu_usage_percent: 99.0, // 超过98%关键阈值
+            cpu_usage_percent: 99.0,    // 超过98%关键阈值
             memory_usage_percent: 99.0, // 超过98%关键阈值
-            disk_usage_percent: 99.5, // 超过99%关键阈值
+            disk_usage_percent: 99.5,   // 超过99%关键阈值
             load_average_1m: 1.0,
             active_connections: 100,
             available_disk_space: 100 * 1024 * 1024, // 100MB，低于500MB阈值
@@ -2533,15 +2486,25 @@ mod enhanced_health_check_tests {
         assert!(!is_healthy); // 关键级别应该是不健康的
         assert_eq!(alerts.len(), 4); // 应该有4个关键告警
         assert!(
-            alerts.iter().any(|alert| alert.contains("CPU usage") && alert.contains("critical"))
+            alerts
+                .iter()
+                .any(|alert| alert.contains("CPU usage") && alert.contains("critical"))
         );
         assert!(
-            alerts.iter().any(|alert| alert.contains("Memory usage") && alert.contains("critical"))
+            alerts
+                .iter()
+                .any(|alert| alert.contains("Memory usage") && alert.contains("critical"))
         );
         assert!(
-            alerts.iter().any(|alert| alert.contains("Disk usage") && alert.contains("critical"))
+            alerts
+                .iter()
+                .any(|alert| alert.contains("Disk usage") && alert.contains("critical"))
         );
-        assert!(alerts.iter().any(|alert| alert.contains("Available disk space")));
+        assert!(
+            alerts
+                .iter()
+                .any(|alert| alert.contains("Available disk space"))
+        );
     }
 
     #[test]
@@ -2576,19 +2539,19 @@ mod enhanced_health_check_tests {
         details.insert(
             "system_resources".to_string(),
             serde_json::json!({
-            "status": "healthy",
-            "cpu_usage_percent": 45.0,
-            "memory_usage_percent": 60.0,
-            "alerts": []
-        })
+                "status": "healthy",
+                "cpu_usage_percent": 45.0,
+                "memory_usage_percent": 60.0,
+                "alerts": []
+            }),
         );
         details.insert(
             "error_recovery".to_string(),
             serde_json::json!({
-            "status": "healthy",
-            "total_services": 3,
-            "services_with_issues": 0
-        })
+                "status": "healthy",
+                "total_services": 3,
+                "services_with_issues": 0
+            }),
         );
 
         let response = HealthCheckResponse {
@@ -2611,8 +2574,7 @@ mod enhanced_health_check_tests {
         // 测试Prometheus指标内容格式的正确性（不需要实际调用函数）
 
         // 模拟Prometheus指标输出格式
-        let sample_metrics =
-            r#"# HELP axum_tutorial_requests_total Total number of HTTP requests
+        let sample_metrics = r#"# HELP axum_tutorial_requests_total Total number of HTTP requests
 # TYPE axum_tutorial_requests_total counter
 axum_tutorial_requests_total 100
 # HELP system_cpu_usage_percent CPU usage percentage
@@ -2674,12 +2636,16 @@ axum_tutorial_websocket_connections 10
             "axum_tutorial_failed_retries_total",
             "axum_tutorial_open_circuit_breakers",
             "axum_tutorial_metrics_export_timestamp_seconds",
-            "axum_tutorial_metrics_export_duration_ms"
+            "axum_tutorial_metrics_export_duration_ms",
         ];
 
         for metric_name in metric_names {
             // 验证指标名称符合Prometheus命名约定
-            assert!(metric_name.chars().all(|c| (c.is_ascii_alphanumeric() || c == '_')));
+            assert!(
+                metric_name
+                    .chars()
+                    .all(|c| (c.is_ascii_alphanumeric() || c == '_'))
+            );
             assert!(!metric_name.starts_with('_'));
             assert!(!metric_name.ends_with('_'));
 
@@ -2700,7 +2666,7 @@ axum_tutorial_websocket_connections 10
         // 测试Prometheus指标类型的正确性
         let counter_metrics = vec![
             "axum_tutorial_requests_total",
-            "axum_tutorial_failed_retries_total"
+            "axum_tutorial_failed_retries_total",
         ];
 
         let gauge_metrics = vec![
@@ -2716,7 +2682,7 @@ axum_tutorial_websocket_connections 10
             "axum_tutorial_error_recovery_services_with_issues",
             "axum_tutorial_open_circuit_breakers",
             "axum_tutorial_metrics_export_timestamp_seconds",
-            "axum_tutorial_metrics_export_duration_ms"
+            "axum_tutorial_metrics_export_duration_ms",
         ];
 
         // 验证counter类型指标命名约定
@@ -2726,10 +2692,9 @@ axum_tutorial_websocket_connections 10
 
         // 验证gauge类型指标不以_total结尾（除了特殊情况）
         for metric in gauge_metrics {
-            if
-                !metric.contains("timestamp") &&
-                !metric.contains("duration") &&
-                !metric.contains("services_total")
+            if !metric.contains("timestamp")
+                && !metric.contains("duration")
+                && !metric.contains("services_total")
             {
                 assert!(!metric.ends_with("_total"));
             }
@@ -2760,10 +2725,10 @@ axum_tutorial_websocket_connections 10
         // 测试就绪状态的资源阈值检查（接近阈值）
         // 使用超过测试环境警告阈值但低于错误阈值的值 (警告: 90%, 错误: 95%)
         let resources = SystemResources {
-            cpu_usage_percent: 92.0, // 超过90%警告阈值，低于95%错误阈值
+            cpu_usage_percent: 92.0,    // 超过90%警告阈值，低于95%错误阈值
             memory_usage_percent: 92.0, // 超过90%警告阈值，低于95%错误阈值
-            disk_usage_percent: 96.0, // 超过95%警告阈值，低于98%错误阈值
-            load_average_1m: 1.5, // 低于2.0阈值
+            disk_usage_percent: 96.0,   // 超过95%警告阈值，低于98%错误阈值
+            load_average_1m: 1.5,       // 低于2.0阈值
             active_connections: 100,
             available_disk_space: 200 * 1024 * 1024, // 200MB，高于100MB阈值
         };
@@ -2774,7 +2739,9 @@ axum_tutorial_websocket_connections 10
         assert!(is_ready); // 仍然就绪，但有警告
         assert_eq!(issues.len(), 3); // 应该有3个警告
         assert!(
-            issues.iter().any(|issue| issue.contains("CPU usage") && issue.contains("approaching"))
+            issues
+                .iter()
+                .any(|issue| issue.contains("CPU usage") && issue.contains("approaching"))
         );
         assert!(
             issues
@@ -2782,7 +2749,9 @@ axum_tutorial_websocket_connections 10
                 .any(|issue| issue.contains("Memory usage") && issue.contains("approaching"))
         );
         assert!(
-            issues.iter().any(|issue| issue.contains("Disk usage") && issue.contains("approaching"))
+            issues
+                .iter()
+                .any(|issue| issue.contains("Disk usage") && issue.contains("approaching"))
         );
     }
 
@@ -2791,10 +2760,10 @@ axum_tutorial_websocket_connections 10
         // 测试就绪状态的资源阈值检查（资源不足）
         // 使用超过测试环境阈值的值 (95%, 95%, 98%, 2.0, 100MB)
         let resources = SystemResources {
-            cpu_usage_percent: 96.0, // 超过95%阈值
+            cpu_usage_percent: 96.0,    // 超过95%阈值
             memory_usage_percent: 96.0, // 超过95%阈值
-            disk_usage_percent: 99.0, // 超过98%阈值
-            load_average_1m: 3.0, // 超过2.0阈值
+            disk_usage_percent: 99.0,   // 超过98%阈值
+            load_average_1m: 3.0,       // 超过2.0阈值
             active_connections: 100,
             available_disk_space: 50 * 1024 * 1024, // 50MB，低于100MB阈值
         };
@@ -2805,16 +2774,24 @@ axum_tutorial_websocket_connections 10
         assert!(!is_ready); // 不就绪
         assert_eq!(issues.len(), 5); // 应该有5个问题
         assert!(
-            issues.iter().any(|issue| issue.contains("CPU usage") && issue.contains("exceeds"))
+            issues
+                .iter()
+                .any(|issue| issue.contains("CPU usage") && issue.contains("exceeds"))
         );
         assert!(
-            issues.iter().any(|issue| issue.contains("Memory usage") && issue.contains("exceeds"))
+            issues
+                .iter()
+                .any(|issue| issue.contains("Memory usage") && issue.contains("exceeds"))
         );
         assert!(
-            issues.iter().any(|issue| issue.contains("Disk usage") && issue.contains("exceeds"))
+            issues
+                .iter()
+                .any(|issue| issue.contains("Disk usage") && issue.contains("exceeds"))
         );
         assert!(
-            issues.iter().any(|issue| issue.contains("System load") && issue.contains("exceeds"))
+            issues
+                .iter()
+                .any(|issue| issue.contains("System load") && issue.contains("exceeds"))
         );
         assert!(
             issues
@@ -2830,16 +2807,16 @@ axum_tutorial_websocket_connections 10
         checks.insert(
             "database".to_string(),
             serde_json::json!({
-            "status": "ready",
-            "message": "Database connection is active and ready"
-        })
+                "status": "ready",
+                "message": "Database connection is active and ready"
+            }),
         );
         checks.insert(
             "websocket_manager".to_string(),
             serde_json::json!({
-            "status": "ready",
-            "active_connections": 5
-        })
+                "status": "ready",
+                "active_connections": 5
+            }),
         );
 
         let response = ReadinessCheckResponse {
@@ -2870,10 +2847,10 @@ axum_tutorial_websocket_connections 10
         // 测试就绪检查与健康检查的阈值差异
         // 使用会触发就绪检查失败但健康检查通过的值
         let resources = SystemResources {
-            cpu_usage_percent: 96.0, // 超过测试环境就绪阈值95%，但低于健康检查阈值98%
+            cpu_usage_percent: 96.0,    // 超过测试环境就绪阈值95%，但低于健康检查阈值98%
             memory_usage_percent: 96.0, // 超过测试环境就绪阈值95%，但低于健康检查阈值98%
-            disk_usage_percent: 97.0, // 超过测试环境就绪阈值98%，但低于健康检查阈值99%
-            load_average_1m: 1.5, // 低于就绪阈值2.0
+            disk_usage_percent: 97.0,   // 超过测试环境就绪阈值98%，但低于健康检查阈值99%
+            load_average_1m: 1.5,       // 低于就绪阈值2.0
             active_connections: 100,
             available_disk_space: 600 * 1024 * 1024, // 600MB，高于就绪阈值100MB，也高于健康检查阈值500MB
         };
@@ -2951,12 +2928,8 @@ axum_tutorial_websocket_connections 10
         assert!(!is_alive);
         assert_eq!(issues.len(), 1); // 应该有1个关键问题（成功率过低）
         assert!(
-            issues
-                .iter()
-                .any(
-                    |issue|
-                        issue.contains("Success rate") && issue.contains("below liveness threshold")
-                )
+            issues.iter().any(|issue| issue.contains("Success rate")
+                && issue.contains("below liveness threshold"))
         );
     }
 
@@ -2984,10 +2957,10 @@ axum_tutorial_websocket_connections 10
         // 测试关键状态的存活状态资源阈值检查
         // 使用超过测试环境阈值的极端值 (99.9%, 99.9%, 99.9%, 10.0, 10MB)
         let resources = SystemResources {
-            cpu_usage_percent: 99.95, // 超过99.9%阈值
+            cpu_usage_percent: 99.95,    // 超过99.9%阈值
             memory_usage_percent: 99.95, // 超过99.9%阈值
-            disk_usage_percent: 99.95, // 超过99.9%阈值
-            load_average_1m: 15.0, // 超过10.0阈值
+            disk_usage_percent: 99.95,   // 超过99.9%阈值
+            load_average_1m: 15.0,       // 超过10.0阈值
             active_connections: 100,
             available_disk_space: 5 * 1024 * 1024, // 5MB，低于10MB阈值
         };
@@ -2997,48 +2970,26 @@ axum_tutorial_websocket_connections 10
 
         assert!(!is_alive);
         assert_eq!(issues.len(), 5); // 应该有5个关键问题（CPU、Memory、Disk、Load、Available space）
+        assert!(issues.iter().any(
+            |issue| issue.contains("CPU usage") && issue.contains("exceeds liveness threshold")
+        ));
         assert!(
-            issues
-                .iter()
-                .any(
-                    |issue|
-                        issue.contains("CPU usage") && issue.contains("exceeds liveness threshold")
-                )
+            issues.iter().any(|issue| issue.contains("Memory usage")
+                && issue.contains("exceeds liveness threshold"))
+        );
+        assert!(
+            issues.iter().any(|issue| issue.contains("Disk usage")
+                && issue.contains("exceeds liveness threshold"))
+        );
+        assert!(
+            issues.iter().any(|issue| issue.contains("System load")
+                && issue.contains("exceeds liveness threshold"))
         );
         assert!(
             issues
                 .iter()
-                .any(
-                    |issue|
-                        issue.contains("Memory usage") &&
-                        issue.contains("exceeds liveness threshold")
-                )
-        );
-        assert!(
-            issues
-                .iter()
-                .any(
-                    |issue|
-                        issue.contains("Disk usage") && issue.contains("exceeds liveness threshold")
-                )
-        );
-        assert!(
-            issues
-                .iter()
-                .any(
-                    |issue|
-                        issue.contains("System load") &&
-                        issue.contains("exceeds liveness threshold")
-                )
-        );
-        assert!(
-            issues
-                .iter()
-                .any(
-                    |issue|
-                        issue.contains("Available disk space") &&
-                        issue.contains("below liveness threshold")
-                )
+                .any(|issue| issue.contains("Available disk space")
+                    && issue.contains("below liveness threshold"))
         );
     }
 
@@ -3049,17 +3000,17 @@ axum_tutorial_websocket_connections 10
         checks.insert(
             "application_response".to_string(),
             serde_json::json!({
-            "status": "alive",
-            "message": "Application is responding to requests"
-        })
+                "status": "alive",
+                "message": "Application is responding to requests"
+            }),
         );
         checks.insert(
             "performance_metrics".to_string(),
             serde_json::json!({
-            "status": "alive",
-            "total_requests": 1000,
-            "success_rate": 95.0
-        })
+                "status": "alive",
+                "total_requests": 1000,
+                "success_rate": 95.0
+            }),
         );
 
         let response = LivenessCheckResponse {
@@ -3089,10 +3040,10 @@ axum_tutorial_websocket_connections 10
     fn test_liveness_vs_readiness_vs_health_thresholds() {
         // 测试存活检查、就绪检查与健康检查的阈值差异
         let resources = SystemResources {
-            cpu_usage_percent: 99.1, // 超过99%阈值
+            cpu_usage_percent: 99.1,    // 超过99%阈值
             memory_usage_percent: 99.1, // 超过99%阈值
-            disk_usage_percent: 99.6, // 超过99.5%阈值
-            load_average_1m: 1.0, // 超过0.99阈值
+            disk_usage_percent: 99.6,   // 超过99.5%阈值
+            load_average_1m: 1.0,       // 超过0.99阈值
             active_connections: 100,
             available_disk_space: 5 * 1024 * 1024, // 5MB，低于10MB阈值
         };
@@ -3154,8 +3105,8 @@ axum_tutorial_websocket_connections 10
             total_requests: total_requests_overflow, // 接近最大值
             active_connections: 100,
             successful_requests: (total_requests_overflow / 100) * 95, // 避免溢出
-            error_requests: (total_requests_overflow / 100) * 5, // 避免溢出
-            success_rate: 0.95, // 95%成功率
+            error_requests: (total_requests_overflow / 100) * 5,       // 避免溢出
+            success_rate: 0.95,                                        // 95%成功率
             total_request_size: 0,
             total_response_size: 0,
             unique_user_agents: 0,
@@ -3541,9 +3492,9 @@ pub struct PerformanceConfigurationCheck {
 /// * `200 OK` - 系统健康（包含详细诊断信息）
 /// * `503 Service Unavailable` - 系统不健康
 #[instrument(skip(state))]
-pub async fn deep_health_check(State(
-    state,
-): State<AppState>) -> Result<Json<DeepHealthCheckResponse>> {
+pub async fn deep_health_check(
+    State(state): State<AppState>,
+) -> Result<Json<DeepHealthCheckResponse>> {
     let start_time = std::time::Instant::now();
     info!("开始执行深度系统健康检查");
 
@@ -3555,32 +3506,27 @@ pub async fn deep_health_check(State(
     // 检查数据库组件
     let db_check_start = std::time::Instant::now();
     let db_health = match state.db.ping().await {
-        Ok(_) =>
-            ComponentHealth {
-                status: "healthy".to_string(),
-                message: "Database connection is active".to_string(),
-                check_duration_ms: db_check_start.elapsed().as_millis() as u64,
-                last_check: std::time::SystemTime
-                    ::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs(),
-                details: Some(
-                    serde_json::json!({
+        Ok(_) => ComponentHealth {
+            status: "healthy".to_string(),
+            message: "Database connection is active".to_string(),
+            check_duration_ms: db_check_start.elapsed().as_millis() as u64,
+            last_check: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            details: Some(serde_json::json!({
                 "connection_pool_size": "active",
                 "last_migration": "completed",
                 "query_performance": "optimal"
-            })
-                ),
-            },
+            })),
+        },
         Err(e) => {
             overall_healthy = false;
             alerts.push(HealthAlert {
                 level: "critical".to_string(),
                 component: "database".to_string(),
                 message: format!("Database connection failed: {}", e),
-                timestamp: std::time::SystemTime
-                    ::now()
+                timestamp: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs(),
@@ -3589,17 +3535,14 @@ pub async fn deep_health_check(State(
                 status: "unhealthy".to_string(),
                 message: format!("Database connection failed: {}", e),
                 check_duration_ms: db_check_start.elapsed().as_millis() as u64,
-                last_check: std::time::SystemTime
-                    ::now()
+                last_check: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs(),
-                details: Some(
-                    serde_json::json!({
+                details: Some(serde_json::json!({
                     "error": e.to_string(),
                     "connection_attempts": 1
-                })
-                ),
+                })),
             }
         }
     };
@@ -3610,21 +3553,21 @@ pub async fn deep_health_check(State(
     let connection_count = state.connection_manager.get_connection_count().await;
     let ws_health = ComponentHealth {
         status: "healthy".to_string(),
-        message: format!("WebSocket manager active with {} connections", connection_count),
+        message: format!(
+            "WebSocket manager active with {} connections",
+            connection_count
+        ),
         check_duration_ms: ws_check_start.elapsed().as_millis() as u64,
-        last_check: std::time::SystemTime
-            ::now()
+        last_check: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs(),
-        details: Some(
-            serde_json::json!({
+        details: Some(serde_json::json!({
             "active_connections": connection_count,
             "max_connections": 10000,
             "connection_quality": "stable",
             "message_throughput": "normal"
-        })
-        ),
+        })),
     };
     components.insert("websocket".to_string(), ws_health);
 
@@ -3637,24 +3580,20 @@ pub async fn deep_health_check(State(
         status: perf_status.to_string(),
         message: format!(
             "Performance metrics: {:.2}% success rate, {} total requests",
-            stats.success_rate,
-            stats.total_requests
+            stats.success_rate, stats.total_requests
         ),
         check_duration_ms: perf_check_start.elapsed().as_millis() as u64,
-        last_check: std::time::SystemTime
-            ::now()
+        last_check: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs(),
-        details: Some(
-            serde_json::json!({
+        details: Some(serde_json::json!({
             "total_requests": stats.total_requests,
             "successful_requests": stats.successful_requests,
             "error_requests": stats.error_requests,
             "success_rate": stats.success_rate,
             "active_connections": stats.active_connections
-        })
-        ),
+        })),
     };
     components.insert("performance".to_string(), perf_health);
 
@@ -3681,15 +3620,15 @@ pub async fn deep_health_check(State(
         &alerts,
         &performance_benchmarks,
         &historical_trends,
-        &error_statistics
-    ).await;
+        &error_statistics,
+    )
+    .await;
 
     // 7. 【深度检查新增】执行配置验证
     let configuration_validation = perform_configuration_validation().await;
 
     let check_duration = start_time.elapsed();
-    let timestamp = std::time::SystemTime
-        ::now()
+    let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
@@ -3725,12 +3664,10 @@ pub async fn deep_health_check(State(
     if overall_healthy {
         Ok(Json(response))
     } else {
-        Err(
-            AppError::with_span_trace(
-                "深度系统健康检查发现严重问题".to_string(),
-                StatusCode::SERVICE_UNAVAILABLE
-            )
-        )
+        Err(AppError::with_span_trace(
+            "深度系统健康检查发现严重问题".to_string(),
+            StatusCode::SERVICE_UNAVAILABLE,
+        ))
     }
 }
 
@@ -3739,10 +3676,9 @@ pub async fn deep_health_check(State(
 /// 【功能】：将当前性能指标与预设基准进行对比分析
 async fn generate_performance_benchmarks(
     stats: &PerformanceStats,
-    resources: &SystemResources
+    resources: &SystemResources,
 ) -> PerformanceBenchmarks {
-    let timestamp = std::time::SystemTime
-        ::now()
+    let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
@@ -3802,7 +3738,10 @@ async fn generate_performance_benchmarks(
         } else {
             "critical".to_string()
         },
-        description: format!("当前内存使用率 {:.1}%，基准值 70%", resources.memory_usage_percent),
+        description: format!(
+            "当前内存使用率 {:.1}%，基准值 70%",
+            resources.memory_usage_percent
+        ),
     };
 
     // CPU使用基准对比（基准为60%）
@@ -3819,7 +3758,10 @@ async fn generate_performance_benchmarks(
         } else {
             "critical".to_string()
         },
-        description: format!("当前CPU使用率 {:.1}%，基准值 60%", resources.cpu_usage_percent),
+        description: format!(
+            "当前CPU使用率 {:.1}%，基准值 60%",
+            resources.cpu_usage_percent
+        ),
     };
 
     PerformanceBenchmarks {
@@ -3852,10 +3794,9 @@ async fn generate_performance_benchmarks(
 /// 【功能】：分析系统性能的历史趋势（模拟实现）
 async fn generate_historical_trends(
     stats: &PerformanceStats,
-    resources: &SystemResources
+    resources: &SystemResources,
 ) -> HistoricalTrends {
-    let timestamp = std::time::SystemTime
-        ::now()
+    let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
@@ -3870,13 +3811,14 @@ async fn generate_historical_trends(
             "stable".to_string()
         },
         change_rate_per_hour: (resources.cpu_usage_percent - 50.0) * 0.1, // 模拟变化率
-        trend_strength: if resources.cpu_usage_percent > 80.0 || resources.cpu_usage_percent < 20.0 {
+        trend_strength: if resources.cpu_usage_percent > 80.0 || resources.cpu_usage_percent < 20.0
+        {
             85.0
         } else {
             45.0
         },
-        predicted_value_1h: resources.cpu_usage_percent +
-        (resources.cpu_usage_percent - 50.0) * 0.1,
+        predicted_value_1h: resources.cpu_usage_percent
+            + (resources.cpu_usage_percent - 50.0) * 0.1,
         trend_status: if resources.cpu_usage_percent > 80.0 {
             "critical".to_string()
         } else if resources.cpu_usage_percent > 70.0 {
@@ -3901,16 +3843,15 @@ async fn generate_historical_trends(
             "stable".to_string()
         },
         change_rate_per_hour: (resources.memory_usage_percent - 60.0) * 0.05,
-        trend_strength: if
-            resources.memory_usage_percent > 85.0 ||
-            resources.memory_usage_percent < 25.0
+        trend_strength: if resources.memory_usage_percent > 85.0
+            || resources.memory_usage_percent < 25.0
         {
             90.0
         } else {
             40.0
         },
-        predicted_value_1h: resources.memory_usage_percent +
-        (resources.memory_usage_percent - 60.0) * 0.05,
+        predicted_value_1h: resources.memory_usage_percent
+            + (resources.memory_usage_percent - 60.0) * 0.05,
         trend_status: if resources.memory_usage_percent > 85.0 {
             "critical".to_string()
         } else if resources.memory_usage_percent > 75.0 {
@@ -3936,8 +3877,8 @@ async fn generate_historical_trends(
         },
         change_rate_per_hour: ((stats.total_requests as f64) - 500.0) * 0.02,
         trend_strength: 60.0,
-        predicted_value_1h: (stats.total_requests as f64) +
-        ((stats.total_requests as f64) - 500.0) * 0.02,
+        predicted_value_1h: (stats.total_requests as f64)
+            + ((stats.total_requests as f64) - 500.0) * 0.02,
         trend_status: "normal".to_string(),
         description: format!(
             "请求量趋势：当前 {} 请求，预测1小时后 {:.0} 请求",
@@ -3957,11 +3898,7 @@ async fn generate_historical_trends(
             "stable".to_string()
         },
         change_rate_per_hour: (error_rate - 5.0) * 0.1,
-        trend_strength: if error_rate > 15.0 {
-            80.0
-        } else {
-            30.0
-        },
+        trend_strength: if error_rate > 15.0 { 80.0 } else { 30.0 },
         predicted_value_1h: error_rate + (error_rate - 5.0) * 0.1,
         trend_status: if error_rate > 15.0 {
             "critical".to_string()
@@ -3991,8 +3928,7 @@ async fn generate_historical_trends(
 ///
 /// 【功能】：分析和统计系统错误模式（模拟实现）
 async fn generate_error_statistics(stats: &PerformanceStats) -> ErrorStatistics {
-    let timestamp = std::time::SystemTime
-        ::now()
+    let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
@@ -4006,64 +3942,82 @@ async fn generate_error_statistics(stats: &PerformanceStats) -> ErrorStatistics 
     let total_errors = stats.error_requests;
 
     // 4xx错误（客户端错误）
-    errors_by_status_code.insert("4xx".to_string(), ErrorCategoryStats {
-        total_count: ((total_errors as f64) * 0.7) as u64, // 假设70%是4xx错误
-        error_rate_percent: error_rate * 0.7,
-        last_error_timestamp: timestamp - 300, // 5分钟前
-        frequency_per_hour: (total_errors as f64) * 0.7 * 12.0, // 假设每5分钟的频率
-        severity: "medium".to_string(),
-    });
+    errors_by_status_code.insert(
+        "4xx".to_string(),
+        ErrorCategoryStats {
+            total_count: ((total_errors as f64) * 0.7) as u64, // 假设70%是4xx错误
+            error_rate_percent: error_rate * 0.7,
+            last_error_timestamp: timestamp - 300, // 5分钟前
+            frequency_per_hour: (total_errors as f64) * 0.7 * 12.0, // 假设每5分钟的频率
+            severity: "medium".to_string(),
+        },
+    );
 
     // 5xx错误（服务器错误）
-    errors_by_status_code.insert("5xx".to_string(), ErrorCategoryStats {
-        total_count: ((total_errors as f64) * 0.3) as u64, // 假设30%是5xx错误
-        error_rate_percent: error_rate * 0.3,
-        last_error_timestamp: timestamp - 600, // 10分钟前
-        frequency_per_hour: (total_errors as f64) * 0.3 * 12.0,
-        severity: "high".to_string(),
-    });
+    errors_by_status_code.insert(
+        "5xx".to_string(),
+        ErrorCategoryStats {
+            total_count: ((total_errors as f64) * 0.3) as u64, // 假设30%是5xx错误
+            error_rate_percent: error_rate * 0.3,
+            last_error_timestamp: timestamp - 600, // 10分钟前
+            frequency_per_hour: (total_errors as f64) * 0.3 * 12.0,
+            severity: "high".to_string(),
+        },
+    );
 
     // 模拟按端点分类的错误统计
-    errors_by_endpoint.insert("/api/auth/login".to_string(), ErrorCategoryStats {
-        total_count: ((total_errors as f64) * 0.4) as u64,
-        error_rate_percent: error_rate * 0.4,
-        last_error_timestamp: timestamp - 180,
-        frequency_per_hour: (total_errors as f64) * 0.4 * 12.0,
-        severity: "medium".to_string(),
-    });
+    errors_by_endpoint.insert(
+        "/api/auth/login".to_string(),
+        ErrorCategoryStats {
+            total_count: ((total_errors as f64) * 0.4) as u64,
+            error_rate_percent: error_rate * 0.4,
+            last_error_timestamp: timestamp - 180,
+            frequency_per_hour: (total_errors as f64) * 0.4 * 12.0,
+            severity: "medium".to_string(),
+        },
+    );
 
-    errors_by_endpoint.insert("/api/tasks".to_string(), ErrorCategoryStats {
-        total_count: ((total_errors as f64) * 0.3) as u64,
-        error_rate_percent: error_rate * 0.3,
-        last_error_timestamp: timestamp - 420,
-        frequency_per_hour: (total_errors as f64) * 0.3 * 12.0,
-        severity: "low".to_string(),
-    });
+    errors_by_endpoint.insert(
+        "/api/tasks".to_string(),
+        ErrorCategoryStats {
+            total_count: ((total_errors as f64) * 0.3) as u64,
+            error_rate_percent: error_rate * 0.3,
+            last_error_timestamp: timestamp - 420,
+            frequency_per_hour: (total_errors as f64) * 0.3 * 12.0,
+            severity: "low".to_string(),
+        },
+    );
 
     // 模拟按时间段分类的错误统计
-    errors_by_time_period.insert("last_hour".to_string(), ErrorCategoryStats {
-        total_count: ((total_errors as f64) * 0.6) as u64,
-        error_rate_percent: error_rate * 0.6,
-        last_error_timestamp: timestamp - 60,
-        frequency_per_hour: (total_errors as f64) * 0.6,
-        severity: if error_rate > 10.0 {
-            "high".to_string()
-        } else {
-            "medium".to_string()
+    errors_by_time_period.insert(
+        "last_hour".to_string(),
+        ErrorCategoryStats {
+            total_count: ((total_errors as f64) * 0.6) as u64,
+            error_rate_percent: error_rate * 0.6,
+            last_error_timestamp: timestamp - 60,
+            frequency_per_hour: (total_errors as f64) * 0.6,
+            severity: if error_rate > 10.0 {
+                "high".to_string()
+            } else {
+                "medium".to_string()
+            },
         },
-    });
+    );
 
-    errors_by_time_period.insert("last_24_hours".to_string(), ErrorCategoryStats {
-        total_count: total_errors,
-        error_rate_percent: error_rate,
-        last_error_timestamp: timestamp - 60,
-        frequency_per_hour: (total_errors as f64) / 24.0,
-        severity: if error_rate > 15.0 {
-            "critical".to_string()
-        } else {
-            "medium".to_string()
+    errors_by_time_period.insert(
+        "last_24_hours".to_string(),
+        ErrorCategoryStats {
+            total_count: total_errors,
+            error_rate_percent: error_rate,
+            last_error_timestamp: timestamp - 60,
+            frequency_per_hour: (total_errors as f64) / 24.0,
+            severity: if error_rate > 15.0 {
+                "critical".to_string()
+            } else {
+                "medium".to_string()
+            },
         },
-    });
+    );
 
     // 模拟错误模式识别
     let mut error_patterns = Vec::new();
@@ -4080,9 +4034,8 @@ async fn generate_error_statistics(stats: &PerformanceStats) -> ErrorStatistics 
         });
     }
 
-    if
-        stats.total_requests > 0 &&
-        (stats.error_requests as f64) / (stats.total_requests as f64) > 0.1
+    if stats.total_requests > 0
+        && (stats.error_requests as f64) / (stats.total_requests as f64) > 0.1
     {
         error_patterns.push(ErrorPattern {
             pattern_name: "认证失败模式".to_string(),
@@ -4114,10 +4067,9 @@ async fn generate_diagnostic_report(
     alerts: &[HealthAlert],
     benchmarks: &PerformanceBenchmarks,
     _trends: &HistoricalTrends,
-    _error_stats: &ErrorStatistics
+    _error_stats: &ErrorStatistics,
 ) -> DiagnosticReport {
-    let timestamp = std::time::SystemTime
-        ::now()
+    let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
@@ -4228,9 +4180,8 @@ async fn generate_diagnostic_report(
     // 生成优化建议
     let mut optimization_recommendations = Vec::new();
 
-    if
-        benchmarks.response_time_benchmark.status == "warning" ||
-        benchmarks.response_time_benchmark.status == "critical"
+    if benchmarks.response_time_benchmark.status == "warning"
+        || benchmarks.response_time_benchmark.status == "critical"
     {
         optimization_recommendations.push(OptimizationRecommendation {
             category: "performance".to_string(),
@@ -4274,7 +4225,7 @@ async fn generate_diagnostic_report(
             "定期监控系统健康状态".to_string(),
             "建立自动化告警机制".to_string(),
             "制定应急响应计划".to_string(),
-            "定期进行性能优化".to_string()
+            "定期进行性能优化".to_string(),
         ],
         assessment_timestamp: timestamp,
     };
@@ -4293,8 +4244,7 @@ async fn generate_diagnostic_report(
 ///
 /// 【功能】：验证系统配置的正确性和安全性（模拟实现）
 async fn perform_configuration_validation() -> ConfigurationValidation {
-    let timestamp = std::time::SystemTime
-        ::now()
+    let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
@@ -4357,13 +4307,20 @@ async fn perform_configuration_validation() -> ConfigurationValidation {
         impact: "可能存在安全风险".to_string(),
     });
 
-    if security_checks.iter().any(|check| check.status == "warning") {
+    if security_checks
+        .iter()
+        .any(|check| check.status == "warning")
+    {
         validation_status = "warning".to_string();
         security_risks.push("CORS配置过于宽松，可能存在安全风险".to_string());
         security_recommendations.push("建议严格配置CORS策略，限制允许的域名".to_string());
     }
 
-    let security_score = if security_risks.is_empty() { 95.0 } else { 75.0 };
+    let security_score = if security_risks.is_empty() {
+        95.0
+    } else {
+        75.0
+    };
 
     let security_configuration = SecurityConfigurationCheck {
         security_score,
@@ -4397,12 +4354,19 @@ async fn perform_configuration_validation() -> ConfigurationValidation {
         impact: "影响响应性能和数据库负载".to_string(),
     });
 
-    if performance_checks.iter().any(|check| check.status == "warning") {
+    if performance_checks
+        .iter()
+        .any(|check| check.status == "warning")
+    {
         optimization_opportunities.push("配置Redis缓存以提升性能".to_string());
         performance_recommendations.push("建议配置分布式缓存系统".to_string());
     }
 
-    let performance_score = if optimization_opportunities.is_empty() { 90.0 } else { 70.0 };
+    let performance_score = if optimization_opportunities.is_empty() {
+        90.0
+    } else {
+        70.0
+    };
 
     let performance_configuration = PerformanceConfigurationCheck {
         performance_score,
@@ -4503,7 +4467,7 @@ mod deep_health_check_tests {
         };
 
         let resources = SystemResources {
-            cpu_usage_percent: 75.0, // 高CPU使用率
+            cpu_usage_percent: 75.0,    // 高CPU使用率
             memory_usage_percent: 80.0, // 高内存使用率
             disk_usage_percent: 40.0,
             load_average_1m: 2.5,
@@ -4577,16 +4541,25 @@ mod deep_health_check_tests {
         assert_eq!(errors_5xx.severity, "high");
 
         // 验证按端点分类的错误统计
-        assert!(error_stats.errors_by_endpoint.contains_key("/api/auth/login"));
+        assert!(
+            error_stats
+                .errors_by_endpoint
+                .contains_key("/api/auth/login")
+        );
         assert!(error_stats.errors_by_endpoint.contains_key("/api/tasks"));
 
         // 验证按时间段分类的错误统计
         assert!(error_stats.errors_by_time_period.contains_key("last_hour"));
-        assert!(error_stats.errors_by_time_period.contains_key("last_24_hours"));
+        assert!(
+            error_stats
+                .errors_by_time_period
+                .contains_key("last_24_hours")
+        );
 
         // 验证错误模式识别
         assert!(!error_stats.error_patterns.is_empty());
-        let high_error_pattern = error_stats.error_patterns
+        let high_error_pattern = error_stats
+            .error_patterns
             .iter()
             .find(|p| p.pattern_name == "高错误率模式");
         assert!(high_error_pattern.is_some());
@@ -4609,22 +4582,49 @@ mod deep_health_check_tests {
 
         // 验证配置检查项
         assert!(!config_validation.configuration_checks.is_empty());
-        let db_check = config_validation.configuration_checks
+        let db_check = config_validation
+            .configuration_checks
             .iter()
             .find(|c| c.check_name == "数据库连接池配置");
         assert!(db_check.is_some());
         assert_eq!(db_check.unwrap().status, "pass");
 
         // 验证安全配置检查
-        assert_eq!(config_validation.security_configuration.security_score, 75.0);
-        assert!(!config_validation.security_configuration.security_risks.is_empty());
-        assert!(!config_validation.security_configuration.security_recommendations.is_empty());
+        assert_eq!(
+            config_validation.security_configuration.security_score,
+            75.0
+        );
+        assert!(
+            !config_validation
+                .security_configuration
+                .security_risks
+                .is_empty()
+        );
+        assert!(
+            !config_validation
+                .security_configuration
+                .security_recommendations
+                .is_empty()
+        );
 
         // 验证性能配置检查
-        assert_eq!(config_validation.performance_configuration.performance_score, 70.0);
-        assert!(!config_validation.performance_configuration.optimization_opportunities.is_empty());
+        assert_eq!(
+            config_validation
+                .performance_configuration
+                .performance_score,
+            70.0
+        );
         assert!(
-            !config_validation.performance_configuration.performance_recommendations.is_empty()
+            !config_validation
+                .performance_configuration
+                .optimization_opportunities
+                .is_empty()
+        );
+        assert!(
+            !config_validation
+                .performance_configuration
+                .performance_recommendations
+                .is_empty()
         );
 
         // 验证时间戳
@@ -4638,16 +4638,19 @@ mod deep_health_check_tests {
     async fn test_generate_diagnostic_report_healthy_system() {
         // 准备健康系统的测试数据
         let mut components = HashMap::new();
-        components.insert("database".to_string(), ComponentHealth {
-            status: "healthy".to_string(),
-            message: "Database is running well".to_string(),
-            check_duration_ms: 50,
-            last_check: 1234567890,
-            details: None,
-        });
+        components.insert(
+            "database".to_string(),
+            ComponentHealth {
+                status: "healthy".to_string(),
+                message: "Database is running well".to_string(),
+                check_duration_ms: 50,
+                last_check: 1234567890,
+                details: None,
+            },
+        );
 
         let resources = SystemResources {
-            cpu_usage_percent: 45.0, // 健康水平
+            cpu_usage_percent: 45.0,    // 健康水平
             memory_usage_percent: 60.0, // 健康水平
             disk_usage_percent: 30.0,
             load_average_1m: 1.0,
@@ -4754,8 +4757,9 @@ mod deep_health_check_tests {
             &alerts,
             &benchmarks,
             &trends,
-            &error_stats
-        ).await;
+            &error_stats,
+        )
+        .await;
 
         // 验证健康评分
         assert!(report.overall_health_score >= 90.0);
@@ -4855,14 +4859,12 @@ pub async fn get_websocket_stats(State(state): State<AppState>) -> impl IntoResp
     let message_throughput = state.connection_manager.get_message_throughput().await;
 
     // 确定服务器状态
-    let server_status = if
-        websocket_stats.connection_success_rate >= 95.0 &&
-        connection_quality.stability_score >= 90.0
+    let server_status = if websocket_stats.connection_success_rate >= 95.0
+        && connection_quality.stability_score >= 90.0
     {
         "healthy"
-    } else if
-        websocket_stats.connection_success_rate >= 85.0 &&
-        connection_quality.stability_score >= 75.0
+    } else if websocket_stats.connection_success_rate >= 85.0
+        && connection_quality.stability_score >= 75.0
     {
         "warning"
     } else {
@@ -4870,8 +4872,7 @@ pub async fn get_websocket_stats(State(state): State<AppState>) -> impl IntoResp
     };
 
     // 【测试兼容性】构建包含测试期望字段的响应
-    let enhanced_response =
-        serde_json::json!({
+    let enhanced_response = serde_json::json!({
         "websocket_stats": websocket_stats,
         "connection_quality": connection_quality,
         "message_throughput": message_throughput,
@@ -4940,8 +4941,7 @@ pub async fn get_websocket_connections(State(state): State<AppState>) -> impl In
     let connection_count = state.connection_manager.get_connection_count().await;
     let unique_user_count = state.connection_manager.get_unique_user_count().await;
 
-    let response =
-        serde_json::json!({
+    let response = serde_json::json!({
         "connection_count": connection_count,
         "unique_user_count": unique_user_count,
         "online_users": online_users,
@@ -4982,8 +4982,7 @@ pub async fn get_websocket_metrics(State(state): State<AppState>) -> impl IntoRe
     let message_throughput = state.connection_manager.get_message_throughput().await;
 
     // 【测试兼容性】构建包含测试期望字段的指标响应
-    let metrics =
-        serde_json::json!({
+    let metrics = serde_json::json!({
         "websocket_active_connections": websocket_stats.active_connections,
         "websocket_total_connections": websocket_stats.total_connections,
         "websocket_unique_users": websocket_stats.unique_users,
@@ -5146,7 +5145,7 @@ fn check_cpu_alerts(
     resources: &SystemResources,
     thresholds: &AlertThresholds,
     alerts: &mut Vec<ResourceAlert>,
-    current_time: u64
+    current_time: u64,
 ) {
     let cpu_usage = resources.cpu_usage_percent;
 
@@ -5159,8 +5158,7 @@ fn check_cpu_alerts(
             threshold: thresholds.cpu.critical,
             message: format!(
                 "CPU使用率 {:.1}% 超过关键阈值 {:.1}%",
-                cpu_usage,
-                thresholds.cpu.critical
+                cpu_usage, thresholds.cpu.critical
             ),
             timestamp: current_time,
             duration_seconds: 0, // 简化实现，实际应该跟踪持续时间
@@ -5174,8 +5172,7 @@ fn check_cpu_alerts(
             threshold: thresholds.cpu.warning,
             message: format!(
                 "CPU使用率 {:.1}% 超过警告阈值 {:.1}%",
-                cpu_usage,
-                thresholds.cpu.warning
+                cpu_usage, thresholds.cpu.warning
             ),
             timestamp: current_time,
             duration_seconds: 0,
@@ -5196,7 +5193,7 @@ fn check_memory_alerts(
     resources: &SystemResources,
     thresholds: &AlertThresholds,
     alerts: &mut Vec<ResourceAlert>,
-    current_time: u64
+    current_time: u64,
 ) {
     let memory_usage = resources.memory_usage_percent;
 
@@ -5209,8 +5206,7 @@ fn check_memory_alerts(
             threshold: thresholds.memory.critical,
             message: format!(
                 "内存使用率 {:.1}% 超过关键阈值 {:.1}%",
-                memory_usage,
-                thresholds.memory.critical
+                memory_usage, thresholds.memory.critical
             ),
             timestamp: current_time,
             duration_seconds: 0,
@@ -5224,8 +5220,7 @@ fn check_memory_alerts(
             threshold: thresholds.memory.warning,
             message: format!(
                 "内存使用率 {:.1}% 超过警告阈值 {:.1}%",
-                memory_usage,
-                thresholds.memory.warning
+                memory_usage, thresholds.memory.warning
             ),
             timestamp: current_time,
             duration_seconds: 0,
@@ -5246,7 +5241,7 @@ fn check_disk_alerts(
     resources: &SystemResources,
     thresholds: &AlertThresholds,
     alerts: &mut Vec<ResourceAlert>,
-    current_time: u64
+    current_time: u64,
 ) {
     let disk_usage = resources.disk_usage_percent;
 
@@ -5298,7 +5293,7 @@ fn check_network_connection_alerts(
     connection_count: u64,
     thresholds: &AlertThresholds,
     alerts: &mut Vec<ResourceAlert>,
-    current_time: u64
+    current_time: u64,
 ) {
     let connections = connection_count as f64;
 
@@ -5311,8 +5306,7 @@ fn check_network_connection_alerts(
             threshold: thresholds.network_connections.critical,
             message: format!(
                 "网络连接数 {} 超过关键阈值 {}",
-                connection_count,
-                thresholds.network_connections.critical as u64
+                connection_count, thresholds.network_connections.critical as u64
             ),
             timestamp: current_time,
             duration_seconds: 0,
@@ -5326,8 +5320,7 @@ fn check_network_connection_alerts(
             threshold: thresholds.network_connections.warning,
             message: format!(
                 "网络连接数 {} 超过警告阈值 {}",
-                connection_count,
-                thresholds.network_connections.warning as u64
+                connection_count, thresholds.network_connections.warning as u64
             ),
             timestamp: current_time,
             duration_seconds: 0,
@@ -5348,7 +5341,7 @@ fn check_system_load_alerts(
     resources: &SystemResources,
     thresholds: &AlertThresholds,
     alerts: &mut Vec<ResourceAlert>,
-    current_time: u64
+    current_time: u64,
 ) {
     let load_average = resources.load_average_1m;
 
@@ -5361,8 +5354,7 @@ fn check_system_load_alerts(
             threshold: thresholds.system_load.critical,
             message: format!(
                 "系统负载 {:.2} 超过关键阈值 {:.2}",
-                load_average,
-                thresholds.system_load.critical
+                load_average, thresholds.system_load.critical
             ),
             timestamp: current_time,
             duration_seconds: 0,
@@ -5376,8 +5368,7 @@ fn check_system_load_alerts(
             threshold: thresholds.system_load.warning,
             message: format!(
                 "系统负载 {:.2} 超过警告阈值 {:.2}",
-                load_average,
-                thresholds.system_load.warning
+                load_average, thresholds.system_load.warning
             ),
             timestamp: current_time,
             duration_seconds: 0,
@@ -5418,7 +5409,7 @@ fn determine_overall_alert_status(alerts: &[ResourceAlert]) -> String {
 fn build_resource_status(
     resources: &SystemResources,
     websocket_connections: usize,
-    thresholds: &AlertThresholds
+    thresholds: &AlertThresholds,
 ) -> SystemResourceStatus {
     SystemResourceStatus {
         cpu: ResourceMetric {
@@ -5445,12 +5436,12 @@ fn build_resource_status(
         network_connections: ResourceMetric {
             current: websocket_connections as f64,
             max: Some(thresholds.network_connections.critical),
-            usage_percent: ((websocket_connections as f64) /
-                thresholds.network_connections.critical) *
-            100.0,
+            usage_percent: ((websocket_connections as f64)
+                / thresholds.network_connections.critical)
+                * 100.0,
             status: get_resource_status(
                 websocket_connections as f64,
-                &thresholds.network_connections
+                &thresholds.network_connections,
             ),
             unit: "connections".to_string(),
         },
@@ -5730,7 +5721,7 @@ mod system_alerts_tests {
                 message: "Test critical".to_string(),
                 timestamp: 1234567890,
                 duration_seconds: 0,
-            }
+            },
         ];
         assert_eq!(determine_overall_alert_status(&critical_alerts), "critical");
     }

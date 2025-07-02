@@ -37,9 +37,9 @@
 // 【关键技术】: 结构体 (`struct`), 派生宏 (`derive`), 环境变量读取 (`std::env::var`), 错误处理 (`Result`, `Option`, `expect`), 类型解析 (`.parse()`), 类型转换 (`Duration::from_secs`).
 
 // --- 导入依赖 ---
+use std::fmt;
 use std::net::SocketAddr; // 用于表示 IP 地址和端口号
-use std::time::Duration; // 用于表示时间间隔
-use std::fmt; // 用于实现Display trait
+use std::time::Duration; // 用于表示时间间隔 // 用于实现Display trait
 
 // --- 配置错误类型定义 ---
 
@@ -79,36 +79,45 @@ pub enum ConfigError {
 impl fmt::Display for ConfigError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ConfigError::EnvVarParseError { var_name, value, expected_type, suggestion } => {
+            ConfigError::EnvVarParseError {
+                var_name,
+                value,
+                expected_type,
+                suggestion,
+            } => {
                 write!(
                     f,
                     "环境变量 '{}' 的值 '{}' 无法解析为 {}。建议: {}",
-                    var_name,
-                    value,
-                    expected_type,
-                    suggestion
+                    var_name, value, expected_type, suggestion
                 )
             }
-            ConfigError::ValidationError { field, value, reason, suggestion } => {
+            ConfigError::ValidationError {
+                field,
+                value,
+                reason,
+                suggestion,
+            } => {
                 write!(
                     f,
                     "配置字段 '{}' 的值 '{}' 验证失败: {}。建议: {}",
-                    field,
-                    value,
-                    reason,
-                    suggestion
+                    field, value, reason, suggestion
                 )
             }
-            ConfigError::DependencyError { field, dependent_field, reason } => {
+            ConfigError::DependencyError {
+                field,
+                dependent_field,
+                reason,
+            } => {
                 write!(
                     f,
                     "配置字段 '{}' 与 '{}' 存在依赖关系错误: {}",
-                    field,
-                    dependent_field,
-                    reason
+                    field, dependent_field, reason
                 )
             }
-            ConfigError::MissingEnvVar { var_name, suggestion } => {
+            ConfigError::MissingEnvVar {
+                var_name,
+                suggestion,
+            } => {
                 write!(f, "缺少必需的环境变量 '{}'。建议: {}", var_name, suggestion)
             }
         }
@@ -214,14 +223,14 @@ impl DatabasePoolConfig {
     /// 【参数】: 基于SeaORM最佳实践和企业级应用需求
     pub fn production() -> Self {
         Self {
-            max_connections: 100, // 支持高并发的连接数
-            min_connections: 10, // 保持基础连接池
-            connect_timeout: Duration::from_secs(30), // 连接建立超时
-            idle_timeout: Duration::from_secs(600), // 10分钟空闲超时
+            max_connections: 100,                          // 支持高并发的连接数
+            min_connections: 10,                           // 保持基础连接池
+            connect_timeout: Duration::from_secs(30),      // 连接建立超时
+            idle_timeout: Duration::from_secs(600),        // 10分钟空闲超时
             max_lifetime: Some(Duration::from_secs(3600)), // 1小时最大生命周期
-            acquire_timeout: Duration::from_secs(10), // 获取连接超时
-            tcp_nodelay: true, // 启用TCP_NODELAY减少延迟
-            tcp_keepalive: true, // 启用TCP保活检测
+            acquire_timeout: Duration::from_secs(10),      // 获取连接超时
+            tcp_nodelay: true,                             // 启用TCP_NODELAY减少延迟
+            tcp_keepalive: true,                           // 启用TCP保活检测
         }
     }
 
@@ -230,14 +239,14 @@ impl DatabasePoolConfig {
     /// 【功能】: 适合开发和测试的轻量级配置
     pub fn development() -> Self {
         Self {
-            max_connections: 20, // 开发环境较少连接
-            min_connections: 2, // 最小连接数
-            connect_timeout: Duration::from_secs(10), // 较短连接超时
-            idle_timeout: Duration::from_secs(300), // 5分钟空闲超时
+            max_connections: 20,                           // 开发环境较少连接
+            min_connections: 2,                            // 最小连接数
+            connect_timeout: Duration::from_secs(10),      // 较短连接超时
+            idle_timeout: Duration::from_secs(300),        // 5分钟空闲超时
             max_lifetime: Some(Duration::from_secs(1800)), // 30分钟最大生命周期
-            acquire_timeout: Duration::from_secs(5), // 获取连接超时
-            tcp_nodelay: true, // 仍然启用TCP_NODELAY
-            tcp_keepalive: true, // 启用TCP保活检测
+            acquire_timeout: Duration::from_secs(5),       // 获取连接超时
+            tcp_nodelay: true,                             // 仍然启用TCP_NODELAY
+            tcp_keepalive: true,                           // 启用TCP保活检测
         }
     }
 
@@ -259,7 +268,10 @@ impl DatabasePoolConfig {
         if self.min_connections > self.max_connections {
             return Err(ConfigError::ValidationError {
                 field: "min_connections".to_string(),
-                value: format!("min: {}, max: {}", self.min_connections, self.max_connections),
+                value: format!(
+                    "min: {}, max: {}",
+                    self.min_connections, self.max_connections
+                ),
                 reason: "最小连接数不能大于最大连接数".to_string(),
                 suggestion: "确保min_connections <= max_connections".to_string(),
             });
@@ -307,14 +319,14 @@ impl WebSocketPoolConfig {
     /// 【特性】: 包含负载均衡和故障转移机制
     pub fn production() -> Self {
         Self {
-            max_connections: 1_000_000, // 支持百万并发连接
-            pool_size: 1000, // 连接池大小
+            max_connections: 1_000_000,                  // 支持百万并发连接
+            pool_size: 1000,                             // 连接池大小
             heartbeat_interval: Duration::from_secs(30), // 30秒心跳
             connection_timeout: Duration::from_secs(10), // 连接超时
-            max_reconnect_attempts: 5, // 最大重连次数
-            reconnect_interval: Duration::from_secs(2), // 重连间隔
-            enable_load_balancing: true, // 启用负载均衡
-            enable_failover: true, // 启用故障转移
+            max_reconnect_attempts: 5,                   // 最大重连次数
+            reconnect_interval: Duration::from_secs(2),  // 重连间隔
+            enable_load_balancing: true,                 // 启用负载均衡
+            enable_failover: true,                       // 启用故障转移
         }
     }
 
@@ -323,14 +335,14 @@ impl WebSocketPoolConfig {
     /// 【功能】: 适合开发和测试的配置
     pub fn development() -> Self {
         Self {
-            max_connections: 1000, // 开发环境较少连接
-            pool_size: 50, // 小连接池
+            max_connections: 1000,                       // 开发环境较少连接
+            pool_size: 50,                               // 小连接池
             heartbeat_interval: Duration::from_secs(60), // 1分钟心跳
-            connection_timeout: Duration::from_secs(5), // 连接超时
-            max_reconnect_attempts: 3, // 重连次数
-            reconnect_interval: Duration::from_secs(1), // 重连间隔
-            enable_load_balancing: false, // 开发环境关闭负载均衡
-            enable_failover: false, // 开发环境关闭故障转移
+            connection_timeout: Duration::from_secs(5),  // 连接超时
+            max_reconnect_attempts: 3,                   // 重连次数
+            reconnect_interval: Duration::from_secs(1),  // 重连间隔
+            enable_load_balancing: false,                // 开发环境关闭负载均衡
+            enable_failover: false,                      // 开发环境关闭故障转移
         }
     }
 
@@ -345,7 +357,8 @@ impl WebSocketPoolConfig {
                 field: "max_connections".to_string(),
                 value: self.max_connections.to_string(),
                 reason: "最大WebSocket连接数不能为0".to_string(),
-                suggestion: "设置为至少1个连接，推荐开发环境1000个，生产环境1,000,000个".to_string(),
+                suggestion: "设置为至少1个连接，推荐开发环境1000个，生产环境1,000,000个"
+                    .to_string(),
             });
         }
 
@@ -422,21 +435,22 @@ impl AppConfig {
         // 3. `.parse::<SocketAddr>()`: 将获取到的字符串（来自环境变量或默认值）解析为 `SocketAddr` 类型。
         //    返回 `Result<SocketAddr, AddrParseError>`。
         // 4. `.expect("...")`: 如果 `parse` 返回 `Err` (解析失败)，则程序 panic 并显示消息。
-        let http_addr_str = std::env
-            ::var("HTTP_ADDR")
-            .unwrap_or_else(|_| "127.0.0.1:3000".to_string()); // 默认 HTTP/1.1 端口
-        let http_addr = http_addr_str.parse().map_err(|_| ConfigError::EnvVarParseError {
-            var_name: "HTTP_ADDR".to_string(),
-            value: http_addr_str.clone(),
-            expected_type: "SocketAddr (例如: 127.0.0.1:3000)".to_string(),
-            suggestion: "请确保格式为 'IP地址:端口号'，例如 '127.0.0.1:3000' 或 '0.0.0.0:8080'".to_string(),
-        })?;
+        let http_addr_str =
+            std::env::var("HTTP_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".to_string()); // 默认 HTTP/1.1 端口
+        let http_addr = http_addr_str
+            .parse()
+            .map_err(|_| ConfigError::EnvVarParseError {
+                var_name: "HTTP_ADDR".to_string(),
+                value: http_addr_str.clone(),
+                expected_type: "SocketAddr (例如: 127.0.0.1:3000)".to_string(),
+                suggestion: "请确保格式为 'IP地址:端口号'，例如 '127.0.0.1:3000' 或 '0.0.0.0:8080'"
+                    .to_string(),
+            })?;
         println!("  - HTTP 地址: {}", http_addr);
 
         // --- 加载数据库连接 URL ---
         // 逻辑与加载 HTTP 地址类似，但不需要 .parse()，因为我们直接使用 String。
-        let database_url = std::env
-            ::var("DATABASE_URL")
+        let database_url = std::env::var("DATABASE_URL")
             .unwrap_or_else(|_| "sqlite:task_manager.db?mode=rwc".to_string());
 
         // 验证数据库URL格式
@@ -454,18 +468,16 @@ impl AppConfig {
         // --- 加载 JWT 密钥 ---
         // 从环境变量获取 JWT 密钥，如果未设置则使用默认值
         // 注意：在生产环境中，应该使用强随机字符串作为 JWT 密钥
-        let jwt_secret = std::env
-            ::var("JWT_SECRET")
+        let jwt_secret = std::env::var("JWT_SECRET")
             .unwrap_or_else(|_| "your-secret-key-change-in-production".to_string());
         println!("  - JWT 密钥: [已设置]"); // 不打印实际密钥以保证安全
 
         // --- 【任务13.4新增】加载连接池配置 ---
         // 检测运行环境，决定使用生产环境还是开发环境配置
-        let is_production =
-            std::env
-                ::var("ENVIRONMENT")
-                .unwrap_or_else(|_| "development".to_string())
-                .to_lowercase() == "production";
+        let is_production = std::env::var("ENVIRONMENT")
+            .unwrap_or_else(|_| "development".to_string())
+            .to_lowercase()
+            == "production";
 
         let database_pool = if is_production {
             println!("  - 数据库连接池: 生产环境配置 (最大连接数: 100)");
@@ -534,7 +546,8 @@ impl AppConfig {
                 field: "database_url".to_string(),
                 value: "SQLite文件数据库".to_string(),
                 reason: "生产环境建议使用PostgreSQL等企业级数据库".to_string(),
-                suggestion: "考虑使用PostgreSQL: postgresql://user:pass@localhost/dbname".to_string(),
+                suggestion: "考虑使用PostgreSQL: postgresql://user:pass@localhost/dbname"
+                    .to_string(),
             });
         }
 

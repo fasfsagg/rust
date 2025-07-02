@@ -14,26 +14,26 @@
 //! - `GET /api/messages/search`: 搜索消息（支持关键词和过滤）
 //! - `GET /api/messages/chat-room/{id}`: 获取聊天室消息（支持过滤和分页）
 
-use axum::{ extract::{ Path, Query, State, Extension }, response::Json };
-use chrono::{ DateTime, Utc };
+use axum::{
+    extract::{Extension, Path, Query, State},
+    response::Json,
+};
+use chrono::{DateTime, Utc};
 use sea_orm::prelude::Uuid;
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 
 use crate::{
     app::{
         middleware::auth_middleware::AuthenticatedUser,
         repository::message_repository::{
-            MessageFilter,
-            MessagePaginationParams,
-            MessagePaginationResult,
-            MessageRepository,
+            MessageFilter, MessagePaginationParams, MessagePaginationResult, MessageRepository,
             MessageRepositoryContract,
         },
     },
-    error::{ AppError, Result },
+    error::{AppError, Result},
     startup::AppState,
 };
-use migration::message_entity::{ MessageStatus, MessageType };
+use migration::message_entity::{MessageStatus, MessageType};
 
 /// 消息搜索请求参数
 #[derive(Debug, Deserialize)]
@@ -156,7 +156,7 @@ pub struct PaginationInfo {
 pub async fn search_messages(
     State(app_state): State<AppState>,
     Extension(_user): Extension<AuthenticatedUser>, // JWT认证
-    Query(query): Query<MessageSearchQuery>
+    Query(query): Query<MessageSearchQuery>,
 ) -> Result<Json<PaginatedMessageResponse>> {
     // 验证关键词
     if query.keyword.trim().is_empty() {
@@ -182,7 +182,8 @@ pub async fn search_messages(
 
     // 执行搜索
     let result = message_repository
-        .search_messages(query.keyword, pagination_params, filter).await
+        .search_messages(query.keyword, pagination_params, filter)
+        .await
         .map_err(AppError::DbErr)?;
 
     // 转换响应格式
@@ -206,12 +207,11 @@ pub async fn get_chat_room_messages(
     State(app_state): State<AppState>,
     Extension(_user): Extension<AuthenticatedUser>, // JWT认证
     Path(chat_room_id): Path<String>,
-    Query(query): Query<ChatRoomMessageQuery>
+    Query(query): Query<ChatRoomMessageQuery>,
 ) -> Result<Json<PaginatedMessageResponse>> {
     // 解析聊天室ID
-    let chat_room_uuid = Uuid::parse_str(&chat_room_id).map_err(|_|
-        AppError::BadRequest("无效的聊天室ID格式".to_string())
-    )?;
+    let chat_room_uuid = Uuid::parse_str(&chat_room_id)
+        .map_err(|_| AppError::BadRequest("无效的聊天室ID格式".to_string()))?;
 
     // 构建分页参数
     let page = query.page.unwrap_or(1).max(1);
@@ -232,7 +232,8 @@ pub async fn get_chat_room_messages(
 
     // 执行查询
     let result = message_repository
-        .find_by_chat_room(chat_room_uuid, pagination_params, filter).await
+        .find_by_chat_room(chat_room_uuid, pagination_params, filter)
+        .await
         .map_err(AppError::DbErr)?;
 
     // 转换响应格式
@@ -262,18 +263,16 @@ fn build_message_filter(query: &MessageSearchQuery) -> Result<Option<MessageFilt
 
     // 发送者ID过滤
     if let Some(ref sender_id_str) = query.sender_id {
-        let sender_id = Uuid::parse_str(sender_id_str).map_err(|_|
-            AppError::BadRequest("无效的发送者ID格式".to_string())
-        )?;
+        let sender_id = Uuid::parse_str(sender_id_str)
+            .map_err(|_| AppError::BadRequest("无效的发送者ID格式".to_string()))?;
         filter.sender_id = Some(sender_id);
         has_filter = true;
     }
 
     // 聊天室ID过滤
     if let Some(ref chat_room_id_str) = query.chat_room_id {
-        let chat_room_id = Uuid::parse_str(chat_room_id_str).map_err(|_|
-            AppError::BadRequest("无效的聊天室ID格式".to_string())
-        )?;
+        let chat_room_id = Uuid::parse_str(chat_room_id_str)
+            .map_err(|_| AppError::BadRequest("无效的聊天室ID格式".to_string()))?;
         filter.chat_room_id = Some(chat_room_id);
         has_filter = true;
     }
@@ -281,9 +280,9 @@ fn build_message_filter(query: &MessageSearchQuery) -> Result<Option<MessageFilt
     // 时间范围过滤
     if let Some(ref start_time_str) = query.start_time {
         let start_time = DateTime::parse_from_rfc3339(start_time_str)
-            .map_err(|_|
+            .map_err(|_| {
                 AppError::BadRequest("无效的开始时间格式，请使用ISO 8601格式".to_string())
-            )?
+            })?
             .with_timezone(&Utc);
         filter.start_time = Some(start_time);
         has_filter = true;
@@ -291,9 +290,9 @@ fn build_message_filter(query: &MessageSearchQuery) -> Result<Option<MessageFilt
 
     if let Some(ref end_time_str) = query.end_time {
         let end_time = DateTime::parse_from_rfc3339(end_time_str)
-            .map_err(|_|
+            .map_err(|_| {
                 AppError::BadRequest("无效的结束时间格式，请使用ISO 8601格式".to_string())
-            )?
+            })?
             .with_timezone(&Utc);
         filter.end_time = Some(end_time);
         has_filter = true;
@@ -331,9 +330,8 @@ fn build_chat_room_message_filter(query: &ChatRoomMessageQuery) -> Result<Option
 
     // 发送者ID过滤
     if let Some(ref sender_id_str) = query.sender_id {
-        let sender_id = Uuid::parse_str(sender_id_str).map_err(|_|
-            AppError::BadRequest("无效的发送者ID格式".to_string())
-        )?;
+        let sender_id = Uuid::parse_str(sender_id_str)
+            .map_err(|_| AppError::BadRequest("无效的发送者ID格式".to_string()))?;
         filter.sender_id = Some(sender_id);
         has_filter = true;
     }
@@ -341,9 +339,9 @@ fn build_chat_room_message_filter(query: &ChatRoomMessageQuery) -> Result<Option
     // 时间范围过滤
     if let Some(ref start_time_str) = query.start_time {
         let start_time = DateTime::parse_from_rfc3339(start_time_str)
-            .map_err(|_|
+            .map_err(|_| {
                 AppError::BadRequest("无效的开始时间格式，请使用ISO 8601格式".to_string())
-            )?
+            })?
             .with_timezone(&Utc);
         filter.start_time = Some(start_time);
         has_filter = true;
@@ -351,9 +349,9 @@ fn build_chat_room_message_filter(query: &ChatRoomMessageQuery) -> Result<Option
 
     if let Some(ref end_time_str) = query.end_time {
         let end_time = DateTime::parse_from_rfc3339(end_time_str)
-            .map_err(|_|
+            .map_err(|_| {
                 AppError::BadRequest("无效的结束时间格式，请使用ISO 8601格式".to_string())
-            )?
+            })?
             .with_timezone(&Utc);
         filter.end_time = Some(end_time);
         has_filter = true;
@@ -371,12 +369,10 @@ fn parse_message_type(type_str: &str) -> Result<MessageType> {
         "system" => Ok(MessageType::System),
         "voice" => Ok(MessageType::Voice),
         "video" => Ok(MessageType::Video),
-        _ =>
-            Err(
-                AppError::BadRequest(
-                    format!("无效的消息类型: {}。支持的类型: text, image, file, system, voice, video", type_str)
-                )
-            ),
+        _ => Err(AppError::BadRequest(format!(
+            "无效的消息类型: {}。支持的类型: text, image, file, system, voice, video",
+            type_str
+        ))),
     }
 }
 
@@ -388,18 +384,17 @@ fn parse_message_status(status_str: &str) -> Result<MessageStatus> {
         "read" => Ok(MessageStatus::Read),
         "deleted" => Ok(MessageStatus::Deleted),
         "edited" => Ok(MessageStatus::Edited),
-        _ =>
-            Err(
-                AppError::BadRequest(
-                    format!("无效的消息状态: {}。支持的状态: sent, delivered, read, deleted, edited", status_str)
-                )
-            ),
+        _ => Err(AppError::BadRequest(format!(
+            "无效的消息状态: {}。支持的状态: sent, delivered, read, deleted, edited",
+            status_str
+        ))),
     }
 }
 
 /// 转换分页结果为响应格式
 fn convert_to_paginated_response(result: MessagePaginationResult) -> PaginatedMessageResponse {
-    let messages = result.messages
+    let messages = result
+        .messages
         .into_iter()
         .map(|msg| MessageResponse {
             id: msg.id.to_string(),

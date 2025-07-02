@@ -19,17 +19,15 @@
 //! - **可复用**: 可以应用到任何需要认证的路由
 //! - **错误处理**: 统一的错误处理和返回类型
 
+use crate::app::middleware::security_audit::{
+    log_authentication_failure, log_authentication_success, log_token_validation,
+};
+use crate::app::utils::{AuthService, Claims, JwtUtils};
 use axum::{
     extract::Request,
-    http::{ header::SEC_WEBSOCKET_PROTOCOL, StatusCode, HeaderMap, Uri },
+    http::{HeaderMap, StatusCode, Uri, header::SEC_WEBSOCKET_PROTOCOL},
     middleware::Next,
     response::Response,
-};
-use crate::app::utils::{ Claims, JwtUtils, AuthService };
-use crate::app::middleware::security_audit::{
-    log_authentication_success,
-    log_authentication_failure,
-    log_token_validation,
 };
 
 // Claims 结构体现在从 utils 模块导入，避免重复定义
@@ -64,12 +62,13 @@ impl From<Claims> for AuthenticatedUser {
 /// # 返回
 /// 返回一个可以用于验证 JWT 令牌的中间件函数
 pub fn create_jwt_auth_middleware(
-    jwt_secret: String
+    jwt_secret: String,
 ) -> impl (Fn(
     Request,
-    Next
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Response, StatusCode>> + Send>>) +
-    Clone {
+    Next,
+)
+    -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Response, StatusCode>> + Send>>)
++ Clone {
     move |req, next| {
         let secret = jwt_secret.clone();
         Box::pin(async move { jwt_auth_impl(req, next, secret).await })
@@ -96,7 +95,7 @@ pub fn create_jwt_auth_middleware(
 async fn jwt_auth_impl(
     mut req: Request,
     next: Next,
-    jwt_secret: String
+    jwt_secret: String,
 ) -> Result<Response, StatusCode> {
     println!("AUTH_MIDDLEWARE: 开始验证 JWT 令牌");
 
@@ -116,7 +115,7 @@ async fn jwt_auth_impl(
                 Some(&claims.username),
                 None,
                 client_ip.as_deref(),
-                user_agent
+                user_agent,
             );
 
             // 记录认证成功事件
@@ -124,7 +123,7 @@ async fn jwt_auth_impl(
                 &claims.sub,
                 &claims.username,
                 client_ip.as_deref(),
-                user_agent
+                user_agent,
             );
 
             claims
@@ -140,7 +139,7 @@ async fn jwt_auth_impl(
                 None,
                 Some(&failure_reason),
                 client_ip.as_deref(),
-                user_agent
+                user_agent,
             );
 
             // 记录认证失败事件
@@ -148,7 +147,7 @@ async fn jwt_auth_impl(
                 None, // 无法从失败的令牌中获取用户名
                 &failure_reason,
                 client_ip.as_deref(),
-                user_agent
+                user_agent,
             );
 
             return Err(StatusCode::UNAUTHORIZED);
@@ -159,8 +158,7 @@ async fn jwt_auth_impl(
     let authenticated_user = AuthenticatedUser::from(claims);
     println!(
         "AUTH_MIDDLEWARE: JWT 验证成功，用户: {} (ID: {})",
-        authenticated_user.username,
-        authenticated_user.user_id
+        authenticated_user.username, authenticated_user.user_id
     );
 
     req.extensions_mut().insert(authenticated_user);
@@ -270,7 +268,7 @@ fn extract_token_from_protocol_header(headers: &HeaderMap) -> Option<String> {
 /// 验证 WebSocket JWT token（使用统一的 AuthService）
 pub async fn validate_websocket_jwt_token(
     token: &str,
-    jwt_secret: &str
+    jwt_secret: &str,
 ) -> Result<Claims, WebSocketAuthError> {
     let jwt_utils = JwtUtils::new(jwt_secret.to_string());
     jwt_utils.validate_token(token)
@@ -280,7 +278,7 @@ pub async fn validate_websocket_jwt_token(
 pub async fn authenticate_websocket_request(
     uri: &Uri,
     headers: &HeaderMap,
-    jwt_secret: &str
+    jwt_secret: &str,
 ) -> Result<Claims, WebSocketAuthError> {
     let auth_service = AuthService::new(jwt_secret.to_string());
     auth_service.authenticate_websocket_request(uri, headers)
@@ -368,7 +366,9 @@ mod tests {
         let jwt_utils_wrong = JwtUtils::new("wrong-secret".to_string());
 
         // 用正确密钥创建令牌
-        let token = jwt_utils_correct.create_token("test_user", "testuser", 1).unwrap();
+        let token = jwt_utils_correct
+            .create_token("test_user", "testuser", 1)
+            .unwrap();
 
         // 用错误密钥验证应该失败
         let result = jwt_utils_wrong.validate_token(&token);

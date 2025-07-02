@@ -1,7 +1,7 @@
 //! 统一身份验证服务
 //!
 //! 本模块提供统一的身份验证服务，避免 HTTP 和 WebSocket 认证逻辑的重复。
-//! 
+//!
 //! ## 核心功能
 //! - **统一的 Token 提取**：支持多种 Token 传递方式
 //! - **统一的 Token 验证**：HTTP 和 WebSocket 共用验证逻辑
@@ -13,8 +13,8 @@
 //! - **单一职责**：专注于身份验证
 //! - **策略模式**：支持多种 Token 提取策略
 
-use axum::http::{HeaderMap, Uri, header::AUTHORIZATION};
 use crate::app::utils::{Claims, JwtError, JwtUtils};
+use axum::http::{HeaderMap, Uri, header::AUTHORIZATION};
 
 /// Token 提取方法枚举
 #[derive(Debug, Clone, PartialEq)]
@@ -28,7 +28,7 @@ pub enum TokenExtractionMethod {
 }
 
 /// 统一身份验证服务
-/// 
+///
 /// 提供 HTTP 和 WebSocket 通用的身份验证功能
 pub struct AuthService {
     jwt_utils: JwtUtils,
@@ -43,36 +43,36 @@ impl AuthService {
     }
 
     /// 从 HTTP 请求中提取并验证 JWT token
-    /// 
+    ///
     /// # 参数
     /// - `headers`: HTTP 请求头
-    /// 
+    ///
     /// # 返回
     /// 成功时返回解析后的 Claims，失败时返回错误
     pub fn authenticate_http_request(&self, headers: &HeaderMap) -> Result<Claims, JwtError> {
         // 1. 提取 token
         let token = self.extract_token_from_http_headers(headers)?;
-        
+
         // 2. 验证 token
         self.jwt_utils.validate_token(&token)
     }
 
     /// 从 WebSocket 请求中提取并验证 JWT token
-    /// 
+    ///
     /// # 参数
     /// - `uri`: WebSocket 请求 URI
     /// - `headers`: WebSocket 请求头
-    /// 
+    ///
     /// # 返回
     /// 成功时返回解析后的 Claims，失败时返回错误
     pub fn authenticate_websocket_request(
-        &self, 
-        uri: &Uri, 
-        headers: &HeaderMap
+        &self,
+        uri: &Uri,
+        headers: &HeaderMap,
     ) -> Result<Claims, JwtError> {
         // 1. 提取 token
         let token = self.extract_token_from_websocket_request(uri, headers)?;
-        
+
         // 2. 验证 token
         self.jwt_utils.validate_token(&token)
     }
@@ -94,9 +94,9 @@ impl AuthService {
 
     /// 从 WebSocket 请求中提取 JWT token
     fn extract_token_from_websocket_request(
-        &self, 
-        uri: &Uri, 
-        headers: &HeaderMap
+        &self,
+        uri: &Uri,
+        headers: &HeaderMap,
     ) -> Result<String, JwtError> {
         // 1. 尝试从查询参数中提取 token
         if let Some(query) = uri.query() {
@@ -123,7 +123,7 @@ impl AuthService {
     /// 从 Sec-WebSocket-Protocol 头中提取 JWT token
     fn extract_token_from_protocol_header(&self, headers: &HeaderMap) -> Option<String> {
         use axum::http::header::SEC_WEBSOCKET_PROTOCOL;
-        
+
         let protocol_header = headers.get(SEC_WEBSOCKET_PROTOCOL)?;
         let protocol_str = protocol_header.to_str().ok()?;
 
@@ -144,7 +144,8 @@ impl AuthService {
         username: &str,
         expires_in_hours: i64,
     ) -> Result<String, JwtError> {
-        self.jwt_utils.create_token(user_id, username, expires_in_hours)
+        self.jwt_utils
+            .create_token(user_id, username, expires_in_hours)
     }
 
     /// 获取底层的 JwtUtils 实例（用于测试等特殊场景）
@@ -167,17 +168,17 @@ mod tests {
     #[test]
     fn test_http_authentication_success() {
         let auth_service = create_auth_service();
-        
+
         // 创建测试 token
         let token = auth_service.create_token("user123", "testuser", 1).unwrap();
-        
+
         // 创建 HTTP 请求头
         let mut headers = HeaderMap::new();
         headers.insert(
             AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {}", token)).unwrap()
+            HeaderValue::from_str(&format!("Bearer {}", token)).unwrap(),
         );
-        
+
         // 测试认证
         let claims = auth_service.authenticate_http_request(&headers).unwrap();
         assert_eq!(claims.sub, "user123");
@@ -188,7 +189,7 @@ mod tests {
     fn test_http_authentication_missing_header() {
         let auth_service = create_auth_service();
         let headers = HeaderMap::new();
-        
+
         let result = auth_service.authenticate_http_request(&headers);
         assert_eq!(result, Err(JwtError::TokenMissing));
     }
@@ -196,16 +197,20 @@ mod tests {
     #[test]
     fn test_websocket_authentication_query_param() {
         let auth_service = create_auth_service();
-        
+
         // 创建测试 token
         let token = auth_service.create_token("user456", "wsuser", 1).unwrap();
-        
+
         // 创建 WebSocket 请求
-        let uri: Uri = format!("ws://localhost:3000/ws?token={}", token).parse().unwrap();
+        let uri: Uri = format!("ws://localhost:3000/ws?token={}", token)
+            .parse()
+            .unwrap();
         let headers = HeaderMap::new();
-        
+
         // 测试认证
-        let claims = auth_service.authenticate_websocket_request(&uri, &headers).unwrap();
+        let claims = auth_service
+            .authenticate_websocket_request(&uri, &headers)
+            .unwrap();
         assert_eq!(claims.sub, "user456");
         assert_eq!(claims.username, "wsuser");
     }
@@ -213,20 +218,24 @@ mod tests {
     #[test]
     fn test_websocket_authentication_protocol_header() {
         let auth_service = create_auth_service();
-        
+
         // 创建测试 token
-        let token = auth_service.create_token("user789", "protocoluser", 1).unwrap();
-        
+        let token = auth_service
+            .create_token("user789", "protocoluser", 1)
+            .unwrap();
+
         // 创建 WebSocket 请求
         let uri: Uri = "ws://localhost:3000/ws".parse().unwrap();
         let mut headers = HeaderMap::new();
         headers.insert(
             SEC_WEBSOCKET_PROTOCOL,
-            HeaderValue::from_str(&format!("access_token.{}", token)).unwrap()
+            HeaderValue::from_str(&format!("access_token.{}", token)).unwrap(),
         );
-        
+
         // 测试认证
-        let claims = auth_service.authenticate_websocket_request(&uri, &headers).unwrap();
+        let claims = auth_service
+            .authenticate_websocket_request(&uri, &headers)
+            .unwrap();
         assert_eq!(claims.sub, "user789");
         assert_eq!(claims.username, "protocoluser");
     }
@@ -234,10 +243,10 @@ mod tests {
     #[test]
     fn test_websocket_authentication_missing_token() {
         let auth_service = create_auth_service();
-        
+
         let uri: Uri = "ws://localhost:3000/ws".parse().unwrap();
         let headers = HeaderMap::new();
-        
+
         let result = auth_service.authenticate_websocket_request(&uri, &headers);
         assert_eq!(result, Err(JwtError::TokenMissing));
     }
@@ -245,17 +254,19 @@ mod tests {
     #[test]
     fn test_expired_token_authentication() {
         let auth_service = create_auth_service();
-        
+
         // 创建过期 token
-        let expired_token = auth_service.jwt_utils().create_expired_test_token("user123", "testuser");
-        
+        let expired_token = auth_service
+            .jwt_utils()
+            .create_expired_test_token("user123", "testuser");
+
         // 测试 HTTP 认证
         let mut headers = HeaderMap::new();
         headers.insert(
             AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {}", expired_token)).unwrap()
+            HeaderValue::from_str(&format!("Bearer {}", expired_token)).unwrap(),
         );
-        
+
         let result = auth_service.authenticate_http_request(&headers);
         assert_eq!(result, Err(JwtError::TokenExpired));
     }

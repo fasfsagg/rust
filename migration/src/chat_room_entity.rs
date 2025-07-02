@@ -5,7 +5,7 @@
 
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::StringLen;
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 
 /// 聊天室类型枚举
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]

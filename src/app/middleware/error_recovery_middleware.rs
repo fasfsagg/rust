@@ -10,11 +10,15 @@
 // | 注意：由于HTTP请求/响应不可克隆，重试逻辑需要在应用层实现                   |
 // \-----------------------------------------------------------------------------/
 
-use axum::{ extract::{ Request, State }, middleware::Next, response::Response };
-use std::sync::Arc;
-use tracing::{ info, warn, error, instrument };
 use crate::app::utils::ErrorRecoveryManager;
-use crate::error::{ AppError, Result };
+use crate::error::{AppError, Result};
+use axum::{
+    extract::{Request, State},
+    middleware::Next,
+    response::Response,
+};
+use std::sync::Arc;
+use tracing::{error, info, instrument, warn};
 
 /// 错误恢复中间件状态
 #[derive(Debug, Clone)]
@@ -46,7 +50,7 @@ impl ErrorRecoveryState {
 pub async fn error_recovery_middleware(
     State(app_state): State<crate::startup::AppState>,
     request: Request,
-    next: Next
+    next: Next,
 ) -> Result<Response> {
     let uri = request.uri().clone();
     let method = request.method().clone();
@@ -76,14 +80,16 @@ pub async fn error_recovery_middleware(
         );
 
         // 模拟错误恢复统计更新（不实际重试）
-        let _: Result<String> = app_state.error_recovery_state.manager.execute_with_retry(
-            &service_name,
-            || {
-                async move {
-                    Err(AppError::with_span_trace(format!("服务器错误: {}", status), status))
-                }
-            }
-        ).await;
+        let _: Result<String> = app_state
+            .error_recovery_state
+            .manager
+            .execute_with_retry(&service_name, || async move {
+                Err(AppError::with_span_trace(
+                    format!("服务器错误: {}", status),
+                    status,
+                ))
+            })
+            .await;
     } else {
         info!(
             method = %method,
@@ -112,7 +118,7 @@ pub async fn error_recovery_middleware(
 pub async fn circuit_breaker_middleware(
     State(app_state): State<crate::startup::AppState>,
     request: Request,
-    next: Next
+    next: Next,
 ) -> Result<Response> {
     let uri = request.uri().clone();
     let method = request.method().clone();
@@ -142,14 +148,16 @@ pub async fn circuit_breaker_middleware(
         );
 
         // 模拟断路器统计更新（不实际断路）
-        let _: Result<String> = app_state.error_recovery_state.manager.execute_with_circuit_breaker(
-            &service_name,
-            || {
-                async move {
-                    Err(AppError::with_span_trace(format!("服务器错误: {}", status), status))
-                }
-            }
-        ).await;
+        let _: Result<String> = app_state
+            .error_recovery_state
+            .manager
+            .execute_with_circuit_breaker(&service_name, || async move {
+                Err(AppError::with_span_trace(
+                    format!("服务器错误: {}", status),
+                    status,
+                ))
+            })
+            .await;
     } else {
         info!(
             method = %method,
@@ -178,7 +186,7 @@ pub async fn circuit_breaker_middleware(
 pub async fn full_error_recovery_middleware(
     State(_app_state): State<crate::startup::AppState>,
     request: Request,
-    next: Next
+    next: Next,
 ) -> Result<Response> {
     let uri = request.uri().clone();
     let method = request.method().clone();
@@ -232,11 +240,9 @@ pub async fn full_error_recovery_middleware(
 /// # 返回值
 /// * `Result<axum::Json<_>>` - 错误恢复状态的JSON响应
 #[instrument(skip(app_state))]
-pub async fn error_recovery_status_handler(State(
-    app_state,
-): State<crate::startup::AppState>) -> Result<
-    axum::Json<std::collections::HashMap<String, crate::app::utils::RecoveryStatus>>
-> {
+pub async fn error_recovery_status_handler(
+    State(app_state): State<crate::startup::AppState>,
+) -> Result<axum::Json<std::collections::HashMap<String, crate::app::utils::RecoveryStatus>>> {
     info!("Retrieving error recovery status");
 
     let stats = app_state.error_recovery_state.manager.get_recovery_stats();

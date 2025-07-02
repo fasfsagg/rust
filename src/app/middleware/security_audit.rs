@@ -24,13 +24,17 @@
 
 use axum::{
     extract::Request,
-    http::{ StatusCode, Method, Uri, HeaderMap },
+    http::{HeaderMap, Method, StatusCode, Uri},
     middleware::Next,
     response::Response,
 };
-use serde::{ Deserialize, Serialize };
-use std::{ collections::HashMap, sync::{ Arc, RwLock }, time::{ SystemTime, UNIX_EPOCH } };
-use tracing::{ info, warn, error };
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+    time::{SystemTime, UNIX_EPOCH},
+};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 /// 安全事件类型枚举
@@ -135,11 +139,14 @@ impl SecurityAuditEvent {
     pub fn new(
         event_type: SecurityEventType,
         severity: SecuritySeverity,
-        description: String
+        description: String,
     ) -> Self {
         Self {
             event_id: Uuid::new_v4().to_string(),
-            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs(),
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
             event_type,
             severity,
             user_id: None,
@@ -188,7 +195,7 @@ impl SecurityAuditEvent {
     pub fn with_identifiers(
         mut self,
         session_id: Option<String>,
-        request_id: Option<String>
+        request_id: Option<String>,
     ) -> Self {
         self.session_id = session_id;
         self.request_id = request_id;
@@ -328,7 +335,7 @@ impl SecurityAuditor {
     /// * `event` - 要分析的安全审计事件
     fn detect_threats(&self, event: &SecurityAuditEvent) {
         match event.event_type {
-            | SecurityEventType::AuthenticationFailure
+            SecurityEventType::AuthenticationFailure
             | SecurityEventType::TokenValidationFailure => {
                 if let Some(client_ip) = &event.client_ip {
                     self.check_brute_force_attempt(client_ip, event);
@@ -376,13 +383,15 @@ impl SecurityAuditor {
                     SecuritySeverity::Critical,
                     format!(
                         "Brute force attack detected from IP: {} ({} failed attempts)",
-                        client_ip,
-                        count
-                    )
+                        client_ip, count
+                    ),
                 )
-                    .with_client_info(Some(client_ip.to_string()), event.user_agent.clone())
-                    .with_context("failure_count".to_string(), count.to_string())
-                    .with_context("threshold".to_string(), self.brute_force_threshold.to_string());
+                .with_client_info(Some(client_ip.to_string()), event.user_agent.clone())
+                .with_context("failure_count".to_string(), count.to_string())
+                .with_context(
+                    "threshold".to_string(),
+                    self.brute_force_threshold.to_string(),
+                );
 
                 // 记录暴力破解事件（避免递归调用detect_threats）
                 error!(
@@ -463,11 +472,14 @@ pub fn get_security_auditor() -> &'static SecurityAuditor {
 /// * `Result<(), &'static str>` - 初始化结果
 pub fn init_security_auditor(
     threat_detection: bool,
-    brute_force_threshold: u64
+    brute_force_threshold: u64,
 ) -> Result<(), &'static str> {
-    GLOBAL_SECURITY_AUDITOR.set(
-        SecurityAuditor::with_config(threat_detection, brute_force_threshold)
-    ).map_err(|_| "Security auditor already initialized")
+    GLOBAL_SECURITY_AUDITOR
+        .set(SecurityAuditor::with_config(
+            threat_detection,
+            brute_force_threshold,
+        ))
+        .map_err(|_| "Security auditor already initialized")
 }
 
 /// 便捷函数：记录认证成功事件
@@ -481,18 +493,18 @@ pub fn log_authentication_success(
     user_id: &str,
     username: &str,
     client_ip: Option<&str>,
-    user_agent: Option<&str>
+    user_agent: Option<&str>,
 ) {
     let event = SecurityAuditEvent::new(
         SecurityEventType::AuthenticationSuccess,
         SecuritySeverity::Info,
-        format!("User '{}' authenticated successfully", username)
+        format!("User '{}' authenticated successfully", username),
     )
-        .with_user(user_id.to_string(), username.to_string())
-        .with_client_info(
-            client_ip.map(|s| s.to_string()),
-            user_agent.map(|s| s.to_string())
-        );
+    .with_user(user_id.to_string(), username.to_string())
+    .with_client_info(
+        client_ip.map(|s| s.to_string()),
+        user_agent.map(|s| s.to_string()),
+    );
 
     let auditor = get_security_auditor();
     auditor.log_security_event(&event);
@@ -514,7 +526,7 @@ pub fn log_authentication_failure(
     username: Option<&str>,
     reason: &str,
     client_ip: Option<&str>,
-    user_agent: Option<&str>
+    user_agent: Option<&str>,
 ) {
     let description = if let Some(user) = username {
         format!("Authentication failed for user '{}': {}", user, reason)
@@ -525,13 +537,13 @@ pub fn log_authentication_failure(
     let mut event = SecurityAuditEvent::new(
         SecurityEventType::AuthenticationFailure,
         SecuritySeverity::Warning,
-        description
+        description,
     )
-        .with_client_info(
-            client_ip.map(|s| s.to_string()),
-            user_agent.map(|s| s.to_string())
-        )
-        .with_context("failure_reason".to_string(), reason.to_string());
+    .with_client_info(
+        client_ip.map(|s| s.to_string()),
+        user_agent.map(|s| s.to_string()),
+    )
+    .with_context("failure_reason".to_string(), reason.to_string());
 
     if let Some(user) = username {
         event = event.with_context("attempted_username".to_string(), user.to_string());
@@ -555,25 +567,31 @@ pub fn log_token_validation(
     username: Option<&str>,
     reason: Option<&str>,
     client_ip: Option<&str>,
-    user_agent: Option<&str>
+    user_agent: Option<&str>,
 ) {
     let (event_type, severity, description) = if success {
         (
             SecurityEventType::TokenValidationSuccess,
             SecuritySeverity::Info,
-            format!("Token validation successful for user '{}'", username.unwrap_or("unknown")),
+            format!(
+                "Token validation successful for user '{}'",
+                username.unwrap_or("unknown")
+            ),
         )
     } else {
         (
             SecurityEventType::TokenValidationFailure,
             SecuritySeverity::Warning,
-            format!("Token validation failed: {}", reason.unwrap_or("unknown reason")),
+            format!(
+                "Token validation failed: {}",
+                reason.unwrap_or("unknown reason")
+            ),
         )
     };
 
     let mut event = SecurityAuditEvent::new(event_type, severity, description).with_client_info(
         client_ip.map(|s| s.to_string()),
-        user_agent.map(|s| s.to_string())
+        user_agent.map(|s| s.to_string()),
     );
 
     if success {
@@ -602,28 +620,31 @@ pub fn log_authorization_event(
     username: &str,
     resource: &str,
     action: &str,
-    client_ip: Option<&str>
+    client_ip: Option<&str>,
 ) {
     let (event_type, severity, description) = if success {
         (
             SecurityEventType::AuthorizationSuccess,
             SecuritySeverity::Info,
-            format!("User '{}' authorized to {} on resource '{}'", username, action, resource),
+            format!(
+                "User '{}' authorized to {} on resource '{}'",
+                username, action, resource
+            ),
         )
     } else {
         (
             SecurityEventType::AuthorizationFailure,
             SecuritySeverity::Warning,
-            format!("User '{}' denied access to {} on resource '{}'", username, action, resource),
+            format!(
+                "User '{}' denied access to {} on resource '{}'",
+                username, action, resource
+            ),
         )
     };
 
     let event = SecurityAuditEvent::new(event_type, severity, description)
         .with_user(user_id.to_string(), username.to_string())
-        .with_client_info(
-            client_ip.map(|s| s.to_string()),
-            None
-        )
+        .with_client_info(client_ip.map(|s| s.to_string()), None)
         .with_context("resource".to_string(), resource.to_string())
         .with_context("action".to_string(), action.to_string());
 
@@ -643,25 +664,20 @@ pub fn log_sensitive_data_access(
     username: &str,
     data_type: &str,
     operation: &str,
-    client_ip: Option<&str>
+    client_ip: Option<&str>,
 ) {
     let event = SecurityAuditEvent::new(
         SecurityEventType::SensitiveDataAccess,
         SecuritySeverity::Info,
         format!(
             "User '{}' performed '{}' operation on sensitive data type '{}'",
-            username,
-            operation,
-            data_type
-        )
+            username, operation, data_type
+        ),
     )
-        .with_user(user_id.to_string(), username.to_string())
-        .with_client_info(
-            client_ip.map(|s| s.to_string()),
-            None
-        )
-        .with_context("data_type".to_string(), data_type.to_string())
-        .with_context("operation".to_string(), operation.to_string());
+    .with_user(user_id.to_string(), username.to_string())
+    .with_client_info(client_ip.map(|s| s.to_string()), None)
+    .with_context("data_type".to_string(), data_type.to_string())
+    .with_context("operation".to_string(), operation.to_string());
 
     get_security_auditor().log_security_event(&event);
 }
@@ -679,16 +695,14 @@ pub fn log_suspicious_activity(
     user_id: Option<&str>,
     username: Option<&str>,
     client_ip: Option<&str>,
-    context: HashMap<String, String>
+    context: HashMap<String, String>,
 ) {
     let mut event = SecurityAuditEvent::new(
         SecurityEventType::SuspiciousActivity,
         SecuritySeverity::Error,
-        description.to_string()
-    ).with_client_info(
-        client_ip.map(|s| s.to_string()),
-        None
-    );
+        description.to_string(),
+    )
+    .with_client_info(client_ip.map(|s| s.to_string()), None);
 
     if let (Some(uid), Some(uname)) = (user_id, username) {
         event = event.with_user(uid.to_string(), uname.to_string());
@@ -757,12 +771,19 @@ pub async fn security_audit_middleware(req: Request, next: Next) -> Result<Respo
     let mut event = SecurityAuditEvent::new(
         SecurityEventType::ApiAccess,
         SecuritySeverity::Info,
-        format!("{} {} - {}", method, uri, status_code)
+        format!("{} {} - {}", method, uri, status_code),
     )
-        .with_client_info(client_ip.clone(), user_agent.clone())
-        .with_http_info(method.to_string(), uri.to_string(), Some(status_code.as_u16()))
-        .with_context("processing_time_ms".to_string(), processing_time.as_millis().to_string())
-        .with_identifiers(None, Some(request_id));
+    .with_client_info(client_ip.clone(), user_agent.clone())
+    .with_http_info(
+        method.to_string(),
+        uri.to_string(),
+        Some(status_code.as_u16()),
+    )
+    .with_context(
+        "processing_time_ms".to_string(),
+        processing_time.as_millis().to_string(),
+    )
+    .with_identifiers(None, Some(request_id));
 
     // 如果有认证用户，添加用户信息
     if let Some(user) = &auth_user {
@@ -774,14 +795,21 @@ pub async fn security_audit_middleware(req: Request, next: Next) -> Result<Respo
         let suspicious_event = SecurityAuditEvent::new(
             SecurityEventType::AnomalousAccess,
             SecuritySeverity::Warning,
-            format!("Anomalous access pattern detected: {} {} - {}", method, uri, status_code)
+            format!(
+                "Anomalous access pattern detected: {} {} - {}",
+                method, uri, status_code
+            ),
         )
-            .with_client_info(client_ip.clone(), user_agent.clone())
-            .with_http_info(method.to_string(), uri.to_string(), Some(status_code.as_u16()))
-            .with_context(
-                "processing_time_ms".to_string(),
-                processing_time.as_millis().to_string()
-            );
+        .with_client_info(client_ip.clone(), user_agent.clone())
+        .with_http_info(
+            method.to_string(),
+            uri.to_string(),
+            Some(status_code.as_u16()),
+        )
+        .with_context(
+            "processing_time_ms".to_string(),
+            processing_time.as_millis().to_string(),
+        );
 
         get_security_auditor().log_security_event(&suspicious_event);
     }
@@ -847,10 +875,13 @@ fn should_flag_as_suspicious(
     method: &Method,
     uri: &Uri,
     status_code: StatusCode,
-    processing_time: &std::time::Duration
+    processing_time: &std::time::Duration,
 ) -> bool {
     // 检测可疑的状态码模式
-    if matches!(status_code, StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
+    if matches!(
+        status_code,
+        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
+    ) {
         return true;
     }
 
@@ -861,9 +892,20 @@ fn should_flag_as_suspicious(
 
     // 检测对敏感端点的访问
     let path = uri.path();
-    let sensitive_paths = ["/admin", "/config", "/debug", "/internal", "/.env", "/backup", "/logs"];
+    let sensitive_paths = [
+        "/admin",
+        "/config",
+        "/debug",
+        "/internal",
+        "/.env",
+        "/backup",
+        "/logs",
+    ];
 
-    if sensitive_paths.iter().any(|&sensitive| path.contains(sensitive)) {
+    if sensitive_paths
+        .iter()
+        .any(|&sensitive| path.contains(sensitive))
+    {
         return true;
     }
 
@@ -878,7 +920,7 @@ fn should_flag_as_suspicious(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{ HeaderValue, Method, StatusCode, Uri };
+    use axum::http::{HeaderValue, Method, StatusCode, Uri};
     use std::time::Duration;
 
     #[test]
@@ -886,7 +928,7 @@ mod tests {
         let event = SecurityAuditEvent::new(
             SecurityEventType::AuthenticationSuccess,
             SecuritySeverity::Info,
-            "Test authentication success".to_string()
+            "Test authentication success".to_string(),
         );
 
         assert_eq!(event.event_type, SecurityEventType::AuthenticationSuccess);
@@ -902,10 +944,13 @@ mod tests {
         let event = SecurityAuditEvent::new(
             SecurityEventType::AuthenticationSuccess,
             SecuritySeverity::Info,
-            "Test authentication success".to_string()
+            "Test authentication success".to_string(),
         )
-            .with_user("user123".to_string(), "testuser".to_string())
-            .with_client_info(Some("192.168.1.1".to_string()), Some("Mozilla/5.0".to_string()));
+        .with_user("user123".to_string(), "testuser".to_string())
+        .with_client_info(
+            Some("192.168.1.1".to_string()),
+            Some("Mozilla/5.0".to_string()),
+        );
 
         assert_eq!(event.user_id, Some("user123".to_string()));
         assert_eq!(event.username, Some("testuser".to_string()));
@@ -918,12 +963,15 @@ mod tests {
         let event = SecurityAuditEvent::new(
             SecurityEventType::AuthenticationFailure,
             SecuritySeverity::Warning,
-            "Test authentication failure".to_string()
+            "Test authentication failure".to_string(),
         )
-            .with_context("reason".to_string(), "invalid_password".to_string())
-            .with_context("attempt_count".to_string(), "3".to_string());
+        .with_context("reason".to_string(), "invalid_password".to_string())
+        .with_context("attempt_count".to_string(), "3".to_string());
 
-        assert_eq!(event.context.get("reason"), Some(&"invalid_password".to_string()));
+        assert_eq!(
+            event.context.get("reason"),
+            Some(&"invalid_password".to_string())
+        );
         assert_eq!(event.context.get("attempt_count"), Some(&"3".to_string()));
     }
 
@@ -947,7 +995,7 @@ mod tests {
         let event = SecurityAuditEvent::new(
             SecurityEventType::AuthenticationSuccess,
             SecuritySeverity::Info,
-            "Test event".to_string()
+            "Test event".to_string(),
         );
 
         // 记录事件
@@ -955,7 +1003,10 @@ mod tests {
 
         // 检查统计信息
         let stats = auditor.get_event_statistics();
-        assert_eq!(stats.get(&SecurityEventType::AuthenticationSuccess), Some(&1));
+        assert_eq!(
+            stats.get(&SecurityEventType::AuthenticationSuccess),
+            Some(&1)
+        );
     }
 
     #[test]
@@ -968,8 +1019,9 @@ mod tests {
             let event = SecurityAuditEvent::new(
                 SecurityEventType::AuthenticationFailure,
                 SecuritySeverity::Warning,
-                format!("Failed attempt {}", i)
-            ).with_client_info(Some(client_ip.to_string()), None);
+                format!("Failed attempt {}", i),
+            )
+            .with_client_info(Some(client_ip.to_string()), None);
 
             auditor.log_security_event(&event);
         }
@@ -988,8 +1040,9 @@ mod tests {
         let event = SecurityAuditEvent::new(
             SecurityEventType::AuthenticationFailure,
             SecuritySeverity::Warning,
-            "Failed attempt".to_string()
-        ).with_client_info(Some(client_ip.to_string()), None);
+            "Failed attempt".to_string(),
+        )
+        .with_client_info(Some(client_ip.to_string()), None);
 
         auditor.log_security_event(&event);
 
@@ -1010,7 +1063,7 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert(
             "x-forwarded-for",
-            HeaderValue::from_static("203.0.113.1, 198.51.100.1, 192.168.1.1")
+            HeaderValue::from_static("203.0.113.1, 198.51.100.1, 192.168.1.1"),
         );
 
         let client_ip = extract_client_ip(&headers);
@@ -1040,7 +1093,12 @@ mod tests {
         let status_code = StatusCode::UNAUTHORIZED;
         let processing_time = Duration::from_millis(100);
 
-        assert!(should_flag_as_suspicious(&method, &uri, status_code, &processing_time));
+        assert!(should_flag_as_suspicious(
+            &method,
+            &uri,
+            status_code,
+            &processing_time
+        ));
     }
 
     #[test]
@@ -1050,7 +1108,12 @@ mod tests {
         let status_code = StatusCode::OK;
         let processing_time = Duration::from_secs(6);
 
-        assert!(should_flag_as_suspicious(&method, &uri, status_code, &processing_time));
+        assert!(should_flag_as_suspicious(
+            &method,
+            &uri,
+            status_code,
+            &processing_time
+        ));
     }
 
     #[test]
@@ -1060,7 +1123,12 @@ mod tests {
         let status_code = StatusCode::OK;
         let processing_time = Duration::from_millis(100);
 
-        assert!(should_flag_as_suspicious(&method, &uri, status_code, &processing_time));
+        assert!(should_flag_as_suspicious(
+            &method,
+            &uri,
+            status_code,
+            &processing_time
+        ));
     }
 
     #[test]
@@ -1070,6 +1138,11 @@ mod tests {
         let status_code = StatusCode::OK;
         let processing_time = Duration::from_millis(100);
 
-        assert!(!should_flag_as_suspicious(&method, &uri, status_code, &processing_time));
+        assert!(!should_flag_as_suspicious(
+            &method,
+            &uri,
+            status_code,
+            &processing_time
+        ));
     }
 }

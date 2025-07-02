@@ -13,9 +13,9 @@
 //! - **单一职责**：专注于 JWT 相关操作
 //! - **可测试性**：便于单元测试
 
-use chrono::{ Utc, Duration };
-use jsonwebtoken::{ encode, decode, EncodingKey, DecodingKey, Header, Validation };
-use serde::{ Deserialize, Serialize };
+use chrono::{Duration, Utc};
+use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
+use serde::{Deserialize, Serialize};
 
 /// JWT 声明结构体
 ///
@@ -72,7 +72,7 @@ impl JwtUtils {
         &self,
         user_id: &str,
         username: &str,
-        expires_in_hours: i64
+        expires_in_hours: i64,
     ) -> Result<String, JwtError> {
         let now = Utc::now();
         let claims = Claims {
@@ -85,8 +85,9 @@ impl JwtUtils {
         encode(
             &Header::default(),
             &claims,
-            &EncodingKey::from_secret(self.secret.as_ref())
-        ).map_err(|e| JwtError::TokenCreationFailed(e.to_string()))
+            &EncodingKey::from_secret(self.secret.as_ref()),
+        )
+        .map_err(|e| JwtError::TokenCreationFailed(e.to_string()))
     }
 
     /// 验证 JWT token
@@ -101,21 +102,16 @@ impl JwtUtils {
             return Err(JwtError::TokenMissing);
         }
 
-        match
-            decode::<Claims>(
-                token,
-                &DecodingKey::from_secret(self.secret.as_ref()),
-                &Validation::default()
-            )
-        {
+        match decode::<Claims>(
+            token,
+            &DecodingKey::from_secret(self.secret.as_ref()),
+            &Validation::default(),
+        ) {
             Ok(token_data) => Ok(token_data.claims),
-            Err(err) =>
-                match err.kind() {
-                    jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
-                        Err(JwtError::TokenExpired)
-                    }
-                    _ => Err(JwtError::TokenInvalid),
-                }
+            Err(err) => match err.kind() {
+                jsonwebtoken::errors::ErrorKind::ExpiredSignature => Err(JwtError::TokenExpired),
+                _ => Err(JwtError::TokenInvalid),
+            },
         }
     }
 
@@ -127,7 +123,9 @@ impl JwtUtils {
     /// # 返回
     /// 成功时返回提取的 token，失败时返回 None
     pub fn extract_bearer_token(auth_header: &str) -> Option<String> {
-        auth_header.strip_prefix("Bearer ").map(|stripped| stripped.to_string())
+        auth_header
+            .strip_prefix("Bearer ")
+            .map(|stripped| stripped.to_string())
     }
 
     /// 创建测试用的 JWT token
@@ -141,7 +139,8 @@ impl JwtUtils {
     /// # 返回
     /// 测试用的 JWT token
     pub fn create_test_token(&self, user_id: &str, username: &str) -> String {
-        self.create_token(user_id, username, 1).expect("Failed to create test token")
+        self.create_token(user_id, username, 1)
+            .expect("Failed to create test token")
     }
 
     /// 创建过期的测试 token
@@ -163,9 +162,12 @@ impl JwtUtils {
             exp: (now - Duration::hours(1)).timestamp(), // 1小时前过期
         };
 
-        encode(&Header::default(), &claims, &EncodingKey::from_secret(self.secret.as_ref())).expect(
-            "Failed to create expired test token"
+        encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(self.secret.as_ref()),
         )
+        .expect("Failed to create expired test token")
     }
 
     /// 创建无效签名的测试 token
@@ -191,8 +193,9 @@ impl JwtUtils {
         encode(
             &Header::default(),
             &claims,
-            &EncodingKey::from_secret("wrong-secret-key".as_ref())
-        ).expect("Failed to create invalid test token")
+            &EncodingKey::from_secret("wrong-secret-key".as_ref()),
+        )
+        .expect("Failed to create invalid test token")
     }
 }
 
@@ -240,7 +243,10 @@ mod tests {
     fn test_extract_bearer_token() {
         let auth_header = "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9";
         let token = JwtUtils::extract_bearer_token(auth_header);
-        assert_eq!(token, Some("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9".to_string()));
+        assert_eq!(
+            token,
+            Some("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9".to_string())
+        );
 
         let invalid_header = "Basic dXNlcjpwYXNz";
         let token = JwtUtils::extract_bearer_token(invalid_header);

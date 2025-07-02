@@ -37,24 +37,23 @@
 
 // --- 导入依赖 ---
 // `tower_http::trace`: 包含 TraceLayer 中间件和相关的配置助手 (DefaultOnRequest, DefaultOnResponse 等)。
-use tower_http::trace::{ self, TraceLayer };
+use tower_http::trace::{self, TraceLayer};
 // `tracing::Level`: 定义不同的日志严重级别 (ERROR, WARN, INFO, DEBUG, TRACE)。
 use tracing::Level;
 // `tracing_subscriber`: 用于配置 `tracing` 日志系统的核心库。
 // `SubscriberExt`: 扩展 trait，提供 `.with()` 方法来组合不同的日志层 (Layer)。
 // `SubscriberInitExt`: 扩展 trait，提供 `.init()` 方法来设置全局日志订阅者。
 // `EnvFilter`: 一个日志层，根据环境变量 (通常是 `RUST_LOG`) 来过滤日志事件。
-use tracing_subscriber::{
-    layer::SubscriberExt,
-    util::SubscriberInitExt,
-    EnvFilter,
-    fmt,
-    fmt::format::FmtSpan,
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use tracing_appender::{
+    non_blocking::WorkerGuard,
+    rolling::{RollingFileAppender, Rotation},
 };
 use tracing_error::ErrorLayer;
-use tracing_appender::{ rolling::{ RollingFileAppender, Rotation }, non_blocking::WorkerGuard };
-use std::sync::atomic::{ AtomicBool, Ordering };
-use std::path::Path;
+use tracing_subscriber::{
+    EnvFilter, fmt, fmt::format::FmtSpan, layer::SubscriberExt, util::SubscriberInitExt,
+};
 
 // 静态标记，用于确保日志系统只初始化一次
 static LOGGER_INITIALIZED: AtomicBool = AtomicBool::new(false);
@@ -126,7 +125,7 @@ impl Default for LoggerConfig {
             rotation: LogRotation::Daily,
             file_name_prefix: "app".to_string(),
             non_blocking: true,
-            max_log_files: 30, // 保留30天的日志文件
+            max_log_files: 30,                // 保留30天的日志文件
             max_file_size: 100 * 1024 * 1024, // 100MB
         }
     }
@@ -155,17 +154,18 @@ impl Default for LoggerConfig {
 ///      一旦设置，应用程序中所有通过 `tracing` 宏 (如 `info!`, `debug!`, `error!`) 发出的日志事件都将被这个订阅者处理。
 pub fn setup_logger() {
     // 检查日志系统是否已经被初始化
-    if LOGGER_INITIALIZED.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+    if LOGGER_INITIALIZED
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_ok()
+    {
         // 只有在第一次调用时才执行初始化流程
 
         // 创建 EnvFilter，尝试从 RUST_LOG 环境变量读取配置，否则默认为 "info"
-        let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_|
-            EnvFilter::new("info")
-        );
+        let env_filter =
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
         // 构建并初始化全局日志订阅者
-        tracing_subscriber
-            ::registry()
+        tracing_subscriber::registry()
             .with(env_filter) // 应用环境过滤器
             .with(tracing_subscriber::fmt::layer()) // 添加标准格式化和输出层
             .init(); // 设置为全局默认
@@ -207,10 +207,13 @@ pub fn setup_logger() {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub fn setup_file_rotation_logger(
-    config: LoggerConfig
+    config: LoggerConfig,
 ) -> Result<Option<WorkerGuard>, Box<dyn std::error::Error>> {
     // 检查日志系统是否已经被初始化
-    if LOGGER_INITIALIZED.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+    if LOGGER_INITIALIZED
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_ok()
+    {
         // 创建环境过滤器
         let env_filter = if let Some(custom_filter) = config.custom_filter {
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(custom_filter))
@@ -228,7 +231,7 @@ pub fn setup_file_rotation_logger(
             let file_appender = RollingFileAppender::new(
                 config.rotation.clone().into(),
                 &config.log_directory,
-                format!("{}.log", config.file_name_prefix)
+                format!("{}.log", config.file_name_prefix),
             );
 
             if config.non_blocking {
@@ -238,15 +241,14 @@ pub fn setup_file_rotation_logger(
 
                 // 构建订阅者
                 let subscriber = tracing_subscriber::registry().with(env_filter).with(
-                    fmt
-                        ::layer()
+                    fmt::layer()
                         .with_writer(non_blocking_appender)
                         .with_ansi(false) // 文件输出不需要ANSI颜色
                         .with_target(true)
                         .with_thread_ids(true)
                         .with_thread_names(true)
                         .with_file(true)
-                        .with_line_number(true)
+                        .with_line_number(true),
                 );
 
                 // 根据配置决定是否添加错误跟踪层
@@ -258,15 +260,14 @@ pub fn setup_file_rotation_logger(
             } else {
                 // 使用阻塞写入
                 let subscriber = tracing_subscriber::registry().with(env_filter).with(
-                    fmt
-                        ::layer()
+                    fmt::layer()
                         .with_writer(file_appender)
                         .with_ansi(false) // 文件输出不需要ANSI颜色
                         .with_target(true)
                         .with_thread_ids(true)
                         .with_thread_names(true)
                         .with_file(true)
-                        .with_line_number(true)
+                        .with_line_number(true),
                 );
 
                 if config.error_tracing {
@@ -281,23 +282,19 @@ pub fn setup_file_rotation_logger(
                 cleanup_old_log_files(
                     &config.log_directory,
                     &config.file_name_prefix,
-                    config.max_log_files
+                    config.max_log_files,
                 )?;
             }
         } else {
             // 只输出到控制台
-            let subscriber = tracing_subscriber
-                ::registry()
-                .with(env_filter)
-                .with(
-                    fmt
-                        ::layer()
-                        .with_target(true)
-                        .with_thread_ids(true)
-                        .with_thread_names(true)
-                        .with_file(true)
-                        .with_line_number(true)
-                );
+            let subscriber = tracing_subscriber::registry().with(env_filter).with(
+                fmt::layer()
+                    .with_target(true)
+                    .with_thread_ids(true)
+                    .with_thread_names(true)
+                    .with_file(true)
+                    .with_line_number(true),
+            );
 
             if config.error_tracing {
                 subscriber.with(ErrorLayer::default()).init();
@@ -355,7 +352,10 @@ pub fn setup_file_rotation_logger(
 /// ```
 pub fn setup_enhanced_logger(config: LoggerConfig) -> Result<(), Box<dyn std::error::Error>> {
     // 检查日志系统是否已经被初始化
-    if LOGGER_INITIALIZED.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+    if LOGGER_INITIALIZED
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_ok()
+    {
         // 创建环境过滤器
         let env_filter = if let Some(custom_filter) = config.custom_filter {
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(custom_filter))
@@ -366,21 +366,17 @@ pub fn setup_enhanced_logger(config: LoggerConfig) -> Result<(), Box<dyn std::er
         // 简化实现：根据配置选择不同的初始化方式
         if config.json_format {
             // JSON格式输出
-            let subscriber = tracing_subscriber
-                ::registry()
-                .with(env_filter)
-                .with(
-                    fmt
-                        ::layer()
-                        .json()
-                        .with_current_span(true)
-                        .with_span_list(config.show_spans)
-                        .with_target(true)
-                        .with_thread_ids(true)
-                        .with_thread_names(true)
-                        .with_file(true)
-                        .with_line_number(true)
-                );
+            let subscriber = tracing_subscriber::registry().with(env_filter).with(
+                fmt::layer()
+                    .json()
+                    .with_current_span(true)
+                    .with_span_list(config.show_spans)
+                    .with_target(true)
+                    .with_thread_ids(true)
+                    .with_thread_names(true)
+                    .with_file(true)
+                    .with_line_number(true),
+            );
 
             if config.error_tracing {
                 subscriber.with(ErrorLayer::default()).init();
@@ -389,25 +385,19 @@ pub fn setup_enhanced_logger(config: LoggerConfig) -> Result<(), Box<dyn std::er
             }
         } else {
             // 人类可读格式
-            let subscriber = tracing_subscriber
-                ::registry()
-                .with(env_filter)
-                .with(
-                    fmt
-                        ::layer()
-                        .with_target(true)
-                        .with_thread_ids(true)
-                        .with_thread_names(true)
-                        .with_file(true)
-                        .with_line_number(true)
-                        .with_span_events(
-                            if config.show_spans {
-                                FmtSpan::NEW | FmtSpan::CLOSE
-                            } else {
-                                FmtSpan::NONE
-                            }
-                        )
-                );
+            let subscriber = tracing_subscriber::registry().with(env_filter).with(
+                fmt::layer()
+                    .with_target(true)
+                    .with_thread_ids(true)
+                    .with_thread_names(true)
+                    .with_file(true)
+                    .with_line_number(true)
+                    .with_span_events(if config.show_spans {
+                        FmtSpan::NEW | FmtSpan::CLOSE
+                    } else {
+                        FmtSpan::NONE
+                    }),
+            );
 
             if config.error_tracing {
                 subscriber.with(ErrorLayer::default()).init();
@@ -459,7 +449,7 @@ pub fn setup_enhanced_logger(config: LoggerConfig) -> Result<(), Box<dyn std::er
 pub fn cleanup_old_log_files(
     log_directory: &str,
     file_name_prefix: &str,
-    max_files: usize
+    max_files: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let log_dir = Path::new(log_directory);
 
@@ -480,9 +470,8 @@ pub fn cleanup_old_log_files(
             if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
                 // 检查文件名是否匹配前缀模式
                 // 支持两种格式：prefix.log 和 prefix.log.YYYY-MM-DD
-                if
-                    file_name.starts_with(file_name_prefix) &&
-                    (file_name.ends_with(".log") || file_name.contains(".log."))
+                if file_name.starts_with(file_name_prefix)
+                    && (file_name.ends_with(".log") || file_name.contains(".log."))
                 {
                     // 获取文件的修改时间
                     let metadata = entry.metadata()?;
@@ -532,7 +521,9 @@ pub fn cleanup_old_log_files(
 /// * `-> TraceLayer<...>`: 返回一个 `TraceLayer` 实例。
 ///   具体的泛型参数 `SharedClassifier<ServerErrorsAsFailures>` 是 `TraceLayer` 内部使用的请求分类器，
 ///   通常我们不需要关心它的具体类型，只需知道它是一个实现了 `Layer` trait 的中间件即可。
-pub fn trace_layer() -> TraceLayer<tower_http::classify::SharedClassifier<tower_http::classify::ServerErrorsAsFailures>> {
+pub fn trace_layer()
+-> TraceLayer<tower_http::classify::SharedClassifier<tower_http::classify::ServerErrorsAsFailures>>
+{
     // `TraceLayer::new_for_http()`: 创建一个针对 HTTP 优化的 TraceLayer。
     // 它使用一个默认的分类器，将 HTTP 状态码 4xx 和 5xx 视为失败。
     TraceLayer::new_for_http()

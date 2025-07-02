@@ -24,15 +24,15 @@
 // |                                                                                                      |
 // \------------------------------------------------------------------------------------------------------/
 
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
-use chrono::{ DateTime, Utc };
-use serde::{ Serialize, Deserialize };
 
-use crate::app::model::{ ServerMessage, UserInfo };
-use crate::app::service::{ ConnectionManager, MessageDistributor, MessagePriority };
+use crate::app::model::{ServerMessage, UserInfo};
+use crate::app::service::{ConnectionManager, MessageDistributor, MessagePriority};
 
 /// 通知类型枚举
 ///
@@ -176,7 +176,7 @@ impl NotificationEvent {
             notification_type: NotificationType::UserJoined,
             content: format!("用户 {} 加入了聊天大厅", user_info.username),
             user_info: Some(user_info.clone()),
-            target_users: None, // 广播给所有用户
+            target_users: None,                           // 广播给所有用户
             exclude_users: Some(vec![user_info.user_id]), // 排除加入的用户自己
             timestamp: Utc::now(),
             priority: MessagePriority::High,
@@ -196,7 +196,7 @@ impl NotificationEvent {
             notification_type: NotificationType::UserLeft,
             content: format!("用户 {} 离开了聊天大厅", user_info.username),
             user_info: Some(user_info),
-            target_users: None, // 广播给所有用户
+            target_users: None,  // 广播给所有用户
             exclude_users: None, // 不排除任何用户
             timestamp: Utc::now(),
             priority: MessagePriority::Normal,
@@ -291,7 +291,7 @@ impl NotificationService {
     /// 【返回值】: NotificationService 实例
     pub fn new(
         connection_manager: Arc<ConnectionManager>,
-        message_distributor: Arc<MessageDistributor>
+        message_distributor: Arc<MessageDistributor>,
     ) -> Self {
         Self {
             user_preferences: Arc::new(RwLock::new(HashMap::new())),
@@ -313,7 +313,7 @@ impl NotificationService {
     pub async fn set_user_preferences(
         &self,
         user_id: Uuid,
-        mut preferences: NotificationPreferences
+        mut preferences: NotificationPreferences,
     ) -> Result<(), String> {
         preferences.user_id = user_id;
         preferences.updated_at = Utc::now();
@@ -337,11 +337,9 @@ impl NotificationService {
         user_prefs
             .get(user_id)
             .cloned()
-            .unwrap_or_else(|| {
-                NotificationPreferences {
-                    user_id: *user_id,
-                    ..Default::default()
-                }
+            .unwrap_or_else(|| NotificationPreferences {
+                user_id: *user_id,
+                ..Default::default()
             })
     }
 
@@ -354,12 +352,11 @@ impl NotificationService {
     /// 【返回值】: Result<usize, String> - 成功返回发送的通知数量，失败返回错误信息
     pub async fn handle_notification_event(
         &self,
-        event: NotificationEvent
+        event: NotificationEvent,
     ) -> Result<usize, String> {
         println!(
             "NOTIFICATION_SERVICE: 处理通知事件 {} - {}",
-            event.notification_type,
-            event.content
+            event.notification_type, event.content
         );
 
         // 获取目标用户列表
@@ -368,7 +365,8 @@ impl NotificationService {
         } else {
             // 如果没有指定目标用户，则获取所有在线用户
             self.connection_manager
-                .get_online_users().await
+                .get_online_users()
+                .await
                 .into_iter()
                 .map(|user| user.user_id)
                 .collect()
@@ -385,10 +383,9 @@ impl NotificationService {
         };
 
         // 应用用户偏好过滤
-        let final_users = self.filter_by_user_preferences(
-            &filtered_users,
-            &event.notification_type
-        ).await;
+        let final_users = self
+            .filter_by_user_preferences(&filtered_users, &event.notification_type)
+            .await;
 
         if final_users.is_empty() {
             println!("NOTIFICATION_SERVICE: 没有用户需要接收此通知");
@@ -399,20 +396,22 @@ impl NotificationService {
         let server_message = self.create_server_message_from_event(&event);
 
         // 发送通知
-        let sent_count = self.send_notification_to_users(
-            server_message,
-            &final_users,
-            event.priority
-        ).await?;
+        let sent_count = self
+            .send_notification_to_users(server_message, &final_users, event.priority)
+            .await?;
 
         // 更新统计信息
         self.update_stats(
             &event.notification_type,
             sent_count,
-            filtered_users.len() - final_users.len()
-        ).await;
+            filtered_users.len() - final_users.len(),
+        )
+        .await;
 
-        println!("NOTIFICATION_SERVICE: 通知事件处理完成，发送给 {} 个用户", sent_count);
+        println!(
+            "NOTIFICATION_SERVICE: 通知事件处理完成，发送给 {} 个用户",
+            sent_count
+        );
 
         Ok(sent_count)
     }
@@ -428,24 +427,28 @@ impl NotificationService {
     async fn filter_by_user_preferences(
         &self,
         users: &[Uuid],
-        notification_type: &NotificationType
+        notification_type: &NotificationType,
     ) -> Vec<Uuid> {
         let user_prefs = self.user_preferences.read().await;
         let mut filtered_users = Vec::new();
 
         for user_id in users {
-            let preferences = user_prefs
-                .get(user_id)
-                .cloned()
-                .unwrap_or_else(|| {
-                    NotificationPreferences {
+            let preferences =
+                user_prefs
+                    .get(user_id)
+                    .cloned()
+                    .unwrap_or_else(|| NotificationPreferences {
                         user_id: *user_id,
                         ..Default::default()
-                    }
-                });
+                    });
 
             // 检查用户是否启用了此类型的通知
-            if preferences.enabled_types.get(notification_type).copied().unwrap_or(true) {
+            if preferences
+                .enabled_types
+                .get(notification_type)
+                .copied()
+                .unwrap_or(true)
+            {
                 filtered_users.push(*user_id);
             }
         }
@@ -498,14 +501,16 @@ impl NotificationService {
         &self,
         message: ServerMessage,
         users: &[Uuid],
-        priority: MessagePriority
+        priority: MessagePriority,
     ) -> Result<usize, String> {
         if users.is_empty() {
             return Ok(0);
         }
 
         // 使用消息分发器的批量发送功能
-        self.message_distributor.broadcast_to_users(message, users.to_vec(), Some(priority)).await
+        self.message_distributor
+            .broadcast_to_users(message, users.to_vec(), Some(priority))
+            .await
     }
 
     /// 更新统计信息
@@ -519,13 +524,16 @@ impl NotificationService {
         &self,
         notification_type: &NotificationType,
         sent_count: usize,
-        filtered_count: usize
+        filtered_count: usize,
     ) {
         let mut stats = self.stats.write().await;
         stats.total_sent += sent_count as u64;
         stats.filtered_count += filtered_count as u64;
 
-        *stats.sent_by_type.entry(notification_type.clone()).or_insert(0) += sent_count as u64;
+        *stats
+            .sent_by_type
+            .entry(notification_type.clone())
+            .or_insert(0) += sent_count as u64;
         stats.last_updated = Utc::now();
     }
 
@@ -541,9 +549,9 @@ impl NotificationService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::service::{ ConnectionManager, MessageDistributor };
-    use tokio::sync::mpsc;
+    use crate::app::service::{ConnectionManager, MessageDistributor};
     use axum::extract::ws::Message;
+    use tokio::sync::mpsc;
 
     /// 创建测试用的通知服务实例
     async fn create_test_notification_service() -> (
@@ -552,19 +560,19 @@ mod tests {
         Arc<MessageDistributor>,
     ) {
         let connection_manager = Arc::new(ConnectionManager::new());
-        let message_distributor = Arc::new(
-            MessageDistributor::new(
-                connection_manager.clone(),
-                Some(10), // 小批量用于测试
-                Some(1) // 单线程用于测试
-            )
-        );
-        let notification_service = NotificationService::new(
+        let message_distributor = Arc::new(MessageDistributor::new(
             connection_manager.clone(),
-            message_distributor.clone()
-        );
+            Some(10), // 小批量用于测试
+            Some(1),  // 单线程用于测试
+        ));
+        let notification_service =
+            NotificationService::new(connection_manager.clone(), message_distributor.clone());
 
-        (notification_service, connection_manager, message_distributor)
+        (
+            notification_service,
+            connection_manager,
+            message_distributor,
+        )
     }
 
     #[tokio::test]
@@ -588,28 +596,50 @@ mod tests {
         let default_prefs = notification_service.get_user_preferences(&user_id).await;
         assert_eq!(default_prefs.user_id, user_id);
         assert!(
-            default_prefs.enabled_types.get(&NotificationType::UserJoined).copied().unwrap_or(false)
+            default_prefs
+                .enabled_types
+                .get(&NotificationType::UserJoined)
+                .copied()
+                .unwrap_or(false)
         );
         assert!(
-            default_prefs.enabled_types.get(&NotificationType::UserLeft).copied().unwrap_or(false)
+            default_prefs
+                .enabled_types
+                .get(&NotificationType::UserLeft)
+                .copied()
+                .unwrap_or(false)
         );
 
         // 测试设置自定义偏好
         let mut custom_prefs = NotificationPreferences::default();
-        custom_prefs.enabled_types.insert(NotificationType::UserJoined, false);
-        custom_prefs.enabled_types.insert(NotificationType::UserLeft, true);
+        custom_prefs
+            .enabled_types
+            .insert(NotificationType::UserJoined, false);
+        custom_prefs
+            .enabled_types
+            .insert(NotificationType::UserLeft, true);
 
-        let result = notification_service.set_user_preferences(user_id, custom_prefs.clone()).await;
+        let result = notification_service
+            .set_user_preferences(user_id, custom_prefs.clone())
+            .await;
         assert!(result.is_ok());
 
         // 验证偏好已保存
         let saved_prefs = notification_service.get_user_preferences(&user_id).await;
         assert_eq!(saved_prefs.user_id, user_id);
         assert!(
-            !saved_prefs.enabled_types.get(&NotificationType::UserJoined).copied().unwrap_or(true)
+            !saved_prefs
+                .enabled_types
+                .get(&NotificationType::UserJoined)
+                .copied()
+                .unwrap_or(true)
         );
         assert!(
-            saved_prefs.enabled_types.get(&NotificationType::UserLeft).copied().unwrap_or(false)
+            saved_prefs
+                .enabled_types
+                .get(&NotificationType::UserLeft)
+                .copied()
+                .unwrap_or(false)
         );
     }
 
@@ -630,8 +660,9 @@ mod tests {
                 user_id,
                 username.clone(),
                 sender,
-                Some("127.0.0.1".to_string())
-            ).await
+                Some("127.0.0.1".to_string()),
+            )
+            .await
             .unwrap();
 
         // 创建用户加入事件
@@ -643,13 +674,22 @@ mod tests {
         let join_event = NotificationEvent::new_user_joined(user_info);
 
         // 处理通知事件
-        let result = notification_service.handle_notification_event(join_event).await;
+        let result = notification_service
+            .handle_notification_event(join_event)
+            .await;
         assert!(result.is_ok());
 
         // 验证统计信息已更新
         let stats = notification_service.get_stats().await;
         assert_eq!(stats.total_sent, 0); // 因为排除了发送者自己，所以发送数为0
-        assert_eq!(stats.sent_by_type.get(&NotificationType::UserJoined).copied().unwrap_or(0), 0);
+        assert_eq!(
+            stats
+                .sent_by_type
+                .get(&NotificationType::UserJoined)
+                .copied()
+                .unwrap_or(0),
+            0
+        );
     }
 
     #[tokio::test]
@@ -671,8 +711,9 @@ mod tests {
                 user_id1,
                 "user1".to_string(),
                 sender1,
-                Some("127.0.0.1".to_string())
-            ).await
+                Some("127.0.0.1".to_string()),
+            )
+            .await
             .unwrap();
 
         connection_manager
@@ -681,8 +722,9 @@ mod tests {
                 user_id2,
                 "user2".to_string(),
                 sender2,
-                Some("127.0.0.1".to_string())
-            ).await
+                Some("127.0.0.1".to_string()),
+            )
+            .await
             .unwrap();
 
         // 创建用户离开事件
@@ -694,7 +736,9 @@ mod tests {
         let leave_event = NotificationEvent::new_user_left(user_info);
 
         // 处理通知事件
-        let result = notification_service.handle_notification_event(leave_event).await;
+        let result = notification_service
+            .handle_notification_event(leave_event)
+            .await;
         assert!(result.is_ok());
 
         // 验证统计信息已更新
@@ -702,7 +746,14 @@ mod tests {
         // 用户离开通知会发送给所有在线用户（包括离开的用户，因为他们可能还在线）
         // 所以这里应该是2个用户
         assert_eq!(stats.total_sent, 2); // 发送给所有在线用户
-        assert_eq!(stats.sent_by_type.get(&NotificationType::UserLeft).copied().unwrap_or(0), 2);
+        assert_eq!(
+            stats
+                .sent_by_type
+                .get(&NotificationType::UserLeft)
+                .copied()
+                .unwrap_or(0),
+            2
+        );
     }
 
     #[tokio::test]
@@ -721,14 +772,20 @@ mod tests {
                 user_id,
                 "test_user".to_string(),
                 sender,
-                Some("127.0.0.1".to_string())
-            ).await
+                Some("127.0.0.1".to_string()),
+            )
+            .await
             .unwrap();
 
         // 设置用户偏好：禁用用户加入通知
         let mut prefs = NotificationPreferences::default();
-        prefs.enabled_types.insert(NotificationType::UserJoined, false);
-        notification_service.set_user_preferences(user_id, prefs).await.unwrap();
+        prefs
+            .enabled_types
+            .insert(NotificationType::UserJoined, false);
+        notification_service
+            .set_user_preferences(user_id, prefs)
+            .await
+            .unwrap();
 
         // 创建用户加入事件
         let user_info = UserInfo {
@@ -739,7 +796,9 @@ mod tests {
         let join_event = NotificationEvent::new_user_joined(user_info);
 
         // 处理通知事件
-        let result = notification_service.handle_notification_event(join_event).await;
+        let result = notification_service
+            .handle_notification_event(join_event)
+            .await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 0); // 应该被过滤，发送数为0
 
@@ -758,7 +817,10 @@ mod tests {
         let count_event = NotificationEvent::new_online_count_changed(5, 3);
 
         // 验证事件内容
-        assert_eq!(count_event.notification_type, NotificationType::OnlineCountChanged);
+        assert_eq!(
+            count_event.notification_type,
+            NotificationType::OnlineCountChanged
+        );
         assert!(count_event.content.contains("当前在线用户: 5 (+2)"));
         assert_eq!(count_event.priority, MessagePriority::Low);
         assert!(count_event.target_users.is_none()); // 应该广播给所有用户
@@ -781,17 +843,19 @@ mod tests {
                 user_id,
                 "test_user".to_string(),
                 sender,
-                Some("127.0.0.1".to_string())
-            ).await
+                Some("127.0.0.1".to_string()),
+            )
+            .await
             .unwrap();
 
         // 创建系统公告事件
-        let announcement_event = NotificationEvent::new_system_announcement(
-            "系统将在10分钟后进行维护".to_string()
-        );
+        let announcement_event =
+            NotificationEvent::new_system_announcement("系统将在10分钟后进行维护".to_string());
 
         // 处理通知事件
-        let result = notification_service.handle_notification_event(announcement_event).await;
+        let result = notification_service
+            .handle_notification_event(announcement_event)
+            .await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 1); // 应该发送给1个用户
 
@@ -799,7 +863,11 @@ mod tests {
         let stats = notification_service.get_stats().await;
         assert_eq!(stats.total_sent, 1);
         assert_eq!(
-            stats.sent_by_type.get(&NotificationType::SystemAnnouncement).copied().unwrap_or(0),
+            stats
+                .sent_by_type
+                .get(&NotificationType::SystemAnnouncement)
+                .copied()
+                .unwrap_or(0),
             1
         );
     }

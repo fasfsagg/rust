@@ -9,8 +9,8 @@
 //! 3.  **隔离数据库实体**: 不再直接暴露 `migration` crate 中的实体，
 //!     而是通过 `From` trait 进行转换，实现内外模型的隔离。
 
-use chrono::{ DateTime, Utc };
-use serde::{ Deserialize, Serialize };
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 // 将数据库实体模型重命名导入，以避免名称冲突。
@@ -80,10 +80,12 @@ pub struct UpdateTaskPayload {
 
 /// 自定义 serde 辅助模块，用于处理双层 Option，以区分 "未提供" 和 "null"。
 mod double_option {
-    use serde::{ Deserialize, Deserializer, Serialize, Serializer };
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
     pub fn deserialize<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
-        where T: Deserialize<'de>, D: Deserializer<'de>
+    where
+        T: Deserialize<'de>,
+        D: Deserializer<'de>,
     {
         Option::<Option<T>>::deserialize(deserializer).map(|opt| opt.flatten())
     }
@@ -99,7 +101,9 @@ mod double_option {
     /// - `None` (如果 `UpdateTaskPayload` 的字段本身是 `None`) 在 `#[serde(skip_serializing_if = "Option::is_none")]`
     ///   的作用下会被跳过。但在 `with` 模块中，我们直接处理内部 `Option` 即可。
     pub fn serialize<S, T>(value: &Option<Option<T>>, serializer: S) -> Result<S::Ok, S::Error>
-        where S: Serializer, T: Serialize
+    where
+        S: Serializer,
+        T: Serialize,
     {
         match value {
             Some(inner) => inner.serialize(serializer),

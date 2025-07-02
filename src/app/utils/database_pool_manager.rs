@@ -9,14 +9,14 @@
 //! 4. 连接生命周期管理
 //! 5. 故障转移和负载均衡
 
+use crate::config::{AppConfig, DatabasePoolConfig};
 use anyhow::Result;
-use sea_orm::{ Database, DatabaseConnection, ConnectOptions };
+use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use std::sync::Arc;
-use std::time::{ Duration, Instant };
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{ info, warn, error };
-use crate::config::{ DatabasePoolConfig, AppConfig };
-use std::sync::atomic::{ AtomicU64, AtomicBool, Ordering };
+use tracing::{error, info, warn};
 
 /// 数据库连接池统计信息
 ///
@@ -94,7 +94,8 @@ impl PoolMetrics {
 
         // 更新平均获取时间
         let duration_us = duration.as_micros() as u64;
-        self.avg_acquire_time_us.store(duration_us, Ordering::Relaxed);
+        self.avg_acquire_time_us
+            .store(duration_us, Ordering::Relaxed);
     }
 
     /// 记录连接获取失败
@@ -178,9 +179,8 @@ impl DatabasePoolManager {
         }
 
         // 【任务13.4】启用SQL日志记录（开发环境）
-        if
-            std::env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()) !=
-            "production"
+        if std::env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string())
+            != "production"
         {
             connect_options.sqlx_logging(true);
         }
@@ -194,11 +194,11 @@ impl DatabasePoolManager {
         // 初始化连接数统计
         metrics.total_connections.store(
             config.database_pool.max_connections as u64,
-            Ordering::Relaxed
+            Ordering::Relaxed,
         );
         metrics.idle_connections.store(
             config.database_pool.min_connections as u64,
-            Ordering::Relaxed
+            Ordering::Relaxed,
         );
 
         info!(

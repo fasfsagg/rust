@@ -9,12 +9,12 @@
 
 #![cfg(any(test, feature = "testing"))]
 
-use std::net::SocketAddr;
+use crate::test_config::TestConfig;
 use axum::Router;
-use tokio::net::TcpListener;
 use reqwest::Client;
 use sea_orm::DatabaseConnection;
-use crate::test_config::TestConfig;
+use std::net::SocketAddr;
+use tokio::net::TcpListener;
 
 /// 测试服务器结构体
 pub struct TestServer {
@@ -38,14 +38,8 @@ impl TestServer {
 
         // 创建简单的测试路由（避免完整的应用初始化）
         let app = Router::new()
-            .route(
-                "/health",
-                axum::routing::get(|| async { "OK" })
-            )
-            .route(
-                "/api/health",
-                axum::routing::get(|| async { "API OK" })
-            );
+            .route("/health", axum::routing::get(|| async { "OK" }))
+            .route("/api/health", axum::routing::get(|| async { "API OK" }));
 
         // 绑定到随机端口
         let listener = TcpListener::bind("127.0.0.1:0").await?;
@@ -54,9 +48,9 @@ impl TestServer {
 
         // 启动服务器
         tokio::spawn(async move {
-            axum::serve(listener, app.into_make_service()).await.expect(
-                "Failed to start test server"
-            );
+            axum::serve(listener, app.into_make_service())
+                .await
+                .expect("Failed to start test server");
         });
 
         // 等待服务器启动
@@ -92,7 +86,7 @@ impl TestServer {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(
             reqwest::header::AUTHORIZATION,
-            format!("Bearer {}", token).parse().unwrap()
+            format!("Bearer {}", token).parse().unwrap(),
         );
 
         Client::builder().default_headers(headers).build().unwrap()
@@ -102,14 +96,14 @@ impl TestServer {
 /// HTTP测试工具
 pub mod http {
     use super::*;
-    use serde::Serialize;
     use reqwest::Response;
+    use serde::Serialize;
 
     /// 发送POST请求
     pub async fn post<T: Serialize>(
         client: &Client,
         url: &str,
-        payload: &T
+        payload: &T,
     ) -> anyhow::Result<Response> {
         let response = client.post(url).json(payload).send().await?;
         Ok(response)
@@ -125,7 +119,7 @@ pub mod http {
     pub async fn put<T: Serialize>(
         client: &Client,
         url: &str,
-        payload: &T
+        payload: &T,
     ) -> anyhow::Result<Response> {
         let response = client.put(url).json(payload).send().await?;
         Ok(response)
@@ -163,8 +157,8 @@ pub mod http {
 
 /// WebSocket测试工具
 pub mod websocket {
-    use tokio_tungstenite::{ connect_async, tungstenite::Message };
     use futures_util::StreamExt;
+    use tokio_tungstenite::{connect_async, tungstenite::Message};
     use url::Url;
 
     /// WebSocket测试客户端
@@ -181,16 +175,20 @@ pub mod websocket {
 
         /// 连接WebSocket（无认证）
         pub async fn connect(
-            &self
-        ) -> anyhow::Result<
-            (
-                futures_util::stream::SplitSink<
-                    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
-                    Message
+            &self,
+        ) -> anyhow::Result<(
+            futures_util::stream::SplitSink<
+                tokio_tungstenite::WebSocketStream<
+                    tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
                 >,
-                futures_util::stream::SplitStream<tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>>,
-            )
-        > {
+                Message,
+            >,
+            futures_util::stream::SplitStream<
+                tokio_tungstenite::WebSocketStream<
+                    tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+                >,
+            >,
+        )> {
             let url = Url::parse(&self.url)?;
             let (ws_stream, _) = connect_async(url).await?;
             let (write, read) = ws_stream.split();
@@ -200,16 +198,20 @@ pub mod websocket {
         /// 连接WebSocket（带JWT认证）
         pub async fn connect_with_token(
             &self,
-            token: &str
-        ) -> anyhow::Result<
-            (
-                futures_util::stream::SplitSink<
-                    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
-                    Message
+            token: &str,
+        ) -> anyhow::Result<(
+            futures_util::stream::SplitSink<
+                tokio_tungstenite::WebSocketStream<
+                    tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
                 >,
-                futures_util::stream::SplitStream<tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>>,
-            )
-        > {
+                Message,
+            >,
+            futures_util::stream::SplitStream<
+                tokio_tungstenite::WebSocketStream<
+                    tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+                >,
+            >,
+        )> {
             let url = format!("{}?token={}", self.url, token);
             let url = Url::parse(&url)?;
             let (ws_stream, _) = connect_async(url).await?;
@@ -236,7 +238,7 @@ pub mod database {
     pub async fn create_test_user(
         _db: &DatabaseConnection,
         username: &str,
-        email: &str
+        email: &str,
     ) -> anyhow::Result<String> {
         // 注意：这是一个占位符实现
         // 在实际使用中，这里应该调用真实的用户服务
@@ -249,7 +251,7 @@ pub mod database {
         _db: &DatabaseConnection,
         _user_id: uuid::Uuid,
         title: &str,
-        description: &str
+        description: &str,
     ) -> anyhow::Result<String> {
         // 注意：这是一个占位符实现
         // 在实际使用中，这里应该调用真实的任务服务
@@ -281,8 +283,8 @@ mod tests {
         let server = TestServer::new().await.unwrap();
 
         // 测试GET请求
-        let response = http
-            ::get(&server.client, &format!("{}/health", server.api_url())).await
+        let response = http::get(&server.client, &format!("{}/health", server.api_url()))
+            .await
             .unwrap();
         http::assert_status(&response, reqwest::StatusCode::OK);
     }

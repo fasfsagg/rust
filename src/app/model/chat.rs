@@ -23,9 +23,9 @@
 // |                                                                                                      |
 // \------------------------------------------------------------------------------------------------------/
 
-use serde::{ Deserialize, Serialize };
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{ DateTime, Utc };
 
 /// 客户端发送的聊天消息
 ///
@@ -342,8 +342,8 @@ impl From<crate::app::service::OnlineUser> for UserInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uuid::Uuid;
     use chrono::Utc;
+    use uuid::Uuid;
 
     #[test]
     fn test_chat_message_creation() {
@@ -445,7 +445,7 @@ mod tests {
                 user_id: Uuid::new_v4(),
                 username: "user2".to_string(),
                 connected_at: Some(Utc::now()),
-            }
+            },
         ];
 
         let response = OnlineUsersResponse {
@@ -458,9 +458,8 @@ mod tests {
         assert_eq!(server_msg.message_type, MessageType::OnlineUsersList);
 
         // 验证内容可以反序列化
-        let parsed_response: OnlineUsersResponse = serde_json
-            ::from_str(&server_msg.content)
-            .unwrap();
+        let parsed_response: OnlineUsersResponse =
+            serde_json::from_str(&server_msg.content).unwrap();
         assert_eq!(parsed_response.total_count, 2);
         assert_eq!(parsed_response.users.len(), 2);
         assert_eq!(parsed_response.users[0].username, "user1");

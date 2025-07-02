@@ -11,7 +11,7 @@ use crate::error::{AppError, Result};
 /// * `min_len` - 最小长度
 /// * `max_len` - 最大长度
 /// * `field_name` - 字段名称（用于错误消息）
-/// 
+///
 /// # 返回值
 /// * `Ok(())` - 验证通过
 /// * `Err(AppError)` - 验证失败
@@ -42,7 +42,7 @@ pub fn validate_string_length(
 /// # 参数
 /// * `value` - 要验证的字符串
 /// * `field_name` - 字段名称（用于错误消息）
-/// 
+///
 /// # 返回值
 /// * `Ok(())` - 验证通过
 /// * `Err(AppError)` - 验证失败
@@ -85,14 +85,17 @@ pub fn validate_task_description(description: &Option<String>) -> Result<()> {
 pub fn validate_username(username: &str) -> Result<()> {
     validate_not_empty(username, "用户名")?;
     validate_string_length(username, 3, 50, "用户名")?;
-    
+
     // 检查字符是否合法
-    if !username.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+    if !username
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+    {
         return Err(AppError::BadRequest(
             "用户名只能包含字母、数字、下划线和连字符".to_string(),
         ));
     }
-    
+
     Ok(())
 }
 
@@ -108,22 +111,18 @@ pub fn validate_password_strength(password: &str) -> Result<()> {
             "密码长度不能少于 8 个字符".to_string(),
         ));
     }
-    
+
     let has_letter = password.chars().any(|c| c.is_alphabetic());
     let has_digit = password.chars().any(|c| c.is_numeric());
-    
+
     if !has_letter {
-        return Err(AppError::BadRequest(
-            "密码必须包含至少一个字母".to_string(),
-        ));
+        return Err(AppError::BadRequest("密码必须包含至少一个字母".to_string()));
     }
-    
+
     if !has_digit {
-        return Err(AppError::BadRequest(
-            "密码必须包含至少一个数字".to_string(),
-        ));
+        return Err(AppError::BadRequest("密码必须包含至少一个数字".to_string()));
     }
-    
+
     Ok(())
 }
 

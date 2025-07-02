@@ -4,7 +4,7 @@
 //! 支持多种消息类型，为企业级聊天应用提供丰富的消息功能。
 
 use sea_orm::entity::prelude::*;
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 
 /// 消息类型枚举
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]

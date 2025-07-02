@@ -29,7 +29,7 @@ impl MigratorTrait for Migrator {
             // 聊天室相关迁移
             Box::new(m20250624_120000_create_chat_rooms_table::Migration),
             Box::new(m20250624_120001_create_messages_table::Migration),
-            Box::new(m20250624_120002_create_user_sessions_table::Migration)
+            Box::new(m20250624_120002_create_user_sessions_table::Migration),
         ]
     }
 }

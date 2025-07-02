@@ -62,10 +62,10 @@
 // 【作用】: 声明存在一个名为 `task` 的公共子模块。
 // 【查找规则】: Rust 编译器会查找 `src/app/model/task.rs` 文件。
 // 【可见性】: `pub` 使得 `task` 模块本身可以被外部访问 (虽然我们通常通过重新导出的项来访问其内容)。[[关键语法要素: pub, mod]]
-pub mod task;
-pub mod user_entity;
 pub mod auth;
 pub mod chat;
+pub mod task;
+pub mod user_entity;
 
 // --- 重新导出公共项 ---
 // `pub use task::*;`
@@ -73,6 +73,6 @@ pub mod chat;
 // 【效果】: 简化外部模块的导入路径。
 // 【举例】: 如果 `task.rs` 中定义了 `pub struct Task { ... }`，那么其他文件现在可以通过 `use crate::app::model::Task;` 来使用它。
 // 【`*` 通配符】: 表示导出 `task` 模块内的所有公共项。有时为了更清晰，也会选择性地重新导出，例如 `pub use task::{Task, CreateTaskPayload};`。[[关键语法要素: pub, use, * (glob)]]
-pub use task::*;
 pub use auth::*;
 pub use chat::*;
+pub use task::*;

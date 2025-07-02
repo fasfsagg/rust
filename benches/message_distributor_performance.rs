@@ -4,16 +4,14 @@
 // 【目标】: 验证零拷贝、压缩和动态批处理的性能提升
 // 【基准】: 对比优化前后的吞吐量和延迟
 
-use criterion::{ criterion_group, criterion_main, Criterion, BenchmarkId };
-use std::hint::black_box;
-use tokio::runtime::Runtime;
-use std::sync::Arc;
-use axum_tutorial::app::service::{ MessageDistributor, ConnectionManager };
 use axum_tutorial::app::service::message_distributor::{
-    CompressionConfig,
-    CompressionType,
-    DynamicBatchConfig,
+    CompressionConfig, CompressionType, DynamicBatchConfig,
 };
+use axum_tutorial::app::service::{ConnectionManager, MessageDistributor};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use std::hint::black_box;
+use std::sync::Arc;
+use tokio::runtime::Runtime;
 
 /// 创建测试用的消息分发器（未优化版本）
 async fn create_basic_distributor() -> MessageDistributor {
@@ -44,13 +42,15 @@ async fn create_optimized_distributor() -> MessageDistributor {
         connection_manager,
         compression_config,
         dynamic_batch_config,
-        8 // 更多工作线程
+        8, // 更多工作线程
     )
 }
 
 /// 生成测试消息
 fn generate_test_messages(count: usize, size: usize) -> Vec<String> {
-    (0..count).map(|i| format!("Test message {} - {}", i, "A".repeat(size))).collect()
+    (0..count)
+        .map(|i| format!("Test message {} - {}", i, "A".repeat(size)))
+        .collect()
 }
 
 /// 基准测试：零拷贝消息优化
@@ -60,15 +60,19 @@ fn bench_zero_copy_optimization(c: &mut Criterion) {
     let mut group = c.benchmark_group("zero_copy_optimization");
 
     for message_size in [100, 500, 1000, 2000].iter() {
-        group.bench_with_input(BenchmarkId::new("basic", message_size), message_size, |b, &size| {
-            let _distributor = rt.block_on(create_basic_distributor());
-            let message = "A".repeat(size);
+        group.bench_with_input(
+            BenchmarkId::new("basic", message_size),
+            message_size,
+            |b, &size| {
+                let _distributor = rt.block_on(create_basic_distributor());
+                let message = "A".repeat(size);
 
-            b.iter(|| {
-                // 模拟基础消息处理
-                black_box(message.as_bytes().to_vec())
-            });
-        });
+                b.iter(|| {
+                    // 模拟基础消息处理
+                    black_box(message.as_bytes().to_vec())
+                });
+            },
+        );
 
         group.bench_with_input(
             BenchmarkId::new("optimized", message_size),
@@ -81,7 +85,7 @@ fn bench_zero_copy_optimization(c: &mut Criterion) {
                     // 使用零拷贝优化
                     black_box(distributor.optimize_message(&message).unwrap())
                 });
-            }
+            },
         );
     }
 
@@ -105,7 +109,7 @@ fn bench_dynamic_batch_sizing(c: &mut Criterion) {
                     // 静态批处理大小
                     black_box(std::cmp::min(100, length))
                 });
-            }
+            },
         );
 
         group.bench_with_input(
@@ -118,7 +122,7 @@ fn bench_dynamic_batch_sizing(c: &mut Criterion) {
                     // 动态批处理大小调整
                     black_box(distributor.adjust_batch_size(length))
                 });
-            }
+            },
         );
     }
 
@@ -142,7 +146,7 @@ fn bench_message_compression(c: &mut Criterion) {
                     // 无压缩处理
                     black_box(msg.as_bytes().to_vec())
                 });
-            }
+            },
         );
 
         group.bench_with_input(
@@ -155,7 +159,7 @@ fn bench_message_compression(c: &mut Criterion) {
                     // 带压缩的优化处理
                     black_box(distributor.optimize_message(msg).unwrap())
                 });
-            }
+            },
         );
     }
 
@@ -184,7 +188,7 @@ fn bench_batch_processing_throughput(c: &mut Criterion) {
                         black_box(msg.as_bytes().to_vec());
                     }
                 });
-            }
+            },
         );
 
         group.bench_with_input(
@@ -199,7 +203,7 @@ fn bench_batch_processing_throughput(c: &mut Criterion) {
                         black_box(distributor.optimize_message(msg).unwrap());
                     }
                 });
-            }
+            },
         );
     }
 

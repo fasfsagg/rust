@@ -24,21 +24,21 @@
 // |                                                                                                      |
 // \------------------------------------------------------------------------------------------------------/
 
-use std::collections::VecDeque;
-use std::sync::Arc;
-use std::sync::atomic::AtomicUsize;
-use tokio::sync::{ RwLock, Mutex };
-use uuid::Uuid;
-use chrono::{ DateTime, Utc };
-use serde::{ Serialize, Deserialize };
 use axum::extract::ws::Message;
 use bytes::Bytes;
+use chrono::{DateTime, Utc};
 use flate2::Compression;
 use flate2::write::GzEncoder;
+use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::io::Write;
+use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
+use tokio::sync::{Mutex, RwLock};
+use uuid::Uuid;
 
 use crate::app::model::chat::ServerMessage;
-use crate::app::service::{ ConnectionManager, ConnectionId };
+use crate::app::service::{ConnectionId, ConnectionManager};
 
 /// 消息分发策略枚举
 ///
@@ -47,21 +47,13 @@ use crate::app::service::{ ConnectionManager, ConnectionId };
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum BroadcastStrategy {
     /// 广播给所有连接（排除发送者）
-    BroadcastAll {
-        exclude_sender: bool,
-    },
+    BroadcastAll { exclude_sender: bool },
     /// 广播给指定用户列表
-    BroadcastToUsers {
-        user_ids: Vec<Uuid>,
-    },
+    BroadcastToUsers { user_ids: Vec<Uuid> },
     /// 私聊消息（点对点）
-    DirectMessage {
-        target_user_id: Uuid,
-    },
+    DirectMessage { target_user_id: Uuid },
     /// 广播给指定连接列表
-    BroadcastToConnections {
-        connection_ids: Vec<ConnectionId>,
-    },
+    BroadcastToConnections { connection_ids: Vec<ConnectionId> },
     /// 系统消息（广播给所有人，包括发送者）
     SystemMessage,
 }
@@ -235,7 +227,7 @@ impl DistributionTask {
         message: ServerMessage,
         strategy: BroadcastStrategy,
         priority: MessagePriority,
-        sender_connection_id: Option<ConnectionId>
+        sender_connection_id: Option<ConnectionId>,
     ) -> Self {
         Self {
             task_id: Uuid::new_v4(),
@@ -296,7 +288,7 @@ impl Default for CompressionConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            level: 6, // 平衡压缩率和速度
+            level: 6,                 // 平衡压缩率和速度
             min_size_threshold: 1024, // 1KB以下不压缩
             compression_type: CompressionType::Gzip,
         }
@@ -344,7 +336,7 @@ impl MessageDistributor {
     pub fn new(
         connection_manager: Arc<ConnectionManager>,
         batch_size: Option<usize>,
-        worker_count: Option<usize>
+        worker_count: Option<usize>,
     ) -> Self {
         let initial_batch_size = batch_size.unwrap_or(100);
         let dynamic_batch_config = Arc::new(DynamicBatchConfig {
@@ -377,7 +369,7 @@ impl MessageDistributor {
         connection_manager: Arc<ConnectionManager>,
         compression_config: CompressionConfig,
         dynamic_batch_config: DynamicBatchConfig,
-        worker_count: usize
+        worker_count: usize,
     ) -> Self {
         Self {
             connection_manager,
@@ -416,7 +408,10 @@ impl MessageDistributor {
             stats.last_updated = Utc::now();
         }
 
-        println!("MESSAGE_DISTRIBUTOR: 任务已提交到队列，当前队列长度: {}", queue.len());
+        println!(
+            "MESSAGE_DISTRIBUTOR: 任务已提交到队列，当前队列长度: {}",
+            queue.len()
+        );
 
         Ok(())
     }
@@ -436,13 +431,13 @@ impl MessageDistributor {
         message: ServerMessage,
         exclude_sender: bool,
         sender_connection_id: Option<ConnectionId>,
-        priority: Option<MessagePriority>
+        priority: Option<MessagePriority>,
     ) -> Result<(), String> {
         let task = DistributionTask::new(
             message,
             BroadcastStrategy::BroadcastAll { exclude_sender },
             priority.unwrap_or_default(),
-            sender_connection_id
+            sender_connection_id,
         );
 
         self.submit_task(task).await
@@ -461,13 +456,13 @@ impl MessageDistributor {
         &self,
         message: ServerMessage,
         target_user_id: Uuid,
-        priority: Option<MessagePriority>
+        priority: Option<MessagePriority>,
     ) -> Result<(), String> {
         let task = DistributionTask::new(
             message,
             BroadcastStrategy::DirectMessage { target_user_id },
             priority.unwrap_or_default(),
-            None
+            None,
         );
 
         self.submit_task(task).await
@@ -486,7 +481,7 @@ impl MessageDistributor {
         &self,
         message: ServerMessage,
         user_ids: Vec<Uuid>,
-        priority: Option<MessagePriority>
+        priority: Option<MessagePriority>,
     ) -> Result<usize, String> {
         if user_ids.is_empty() {
             return Ok(0);
@@ -494,9 +489,11 @@ impl MessageDistributor {
 
         let task = DistributionTask::new(
             message,
-            BroadcastStrategy::BroadcastToUsers { user_ids: user_ids.clone() },
+            BroadcastStrategy::BroadcastToUsers {
+                user_ids: user_ids.clone(),
+            },
             priority.unwrap_or(MessagePriority::Normal),
-            None
+            None,
         );
 
         self.submit_task(task).await?;
@@ -515,7 +512,7 @@ impl MessageDistributor {
             message,
             BroadcastStrategy::SystemMessage,
             MessagePriority::High,
-            None
+            None,
         );
 
         self.submit_task(task).await
@@ -533,10 +530,9 @@ impl MessageDistributor {
 
         // 将ServerMessage转换为WebSocket Message
         let ws_message = Message::Text(
-            serde_json
-                ::to_string(&task.message)
+            serde_json::to_string(&task.message)
                 .map_err(|e| format!("序列化消息失败: {}", e))?
-                .into()
+                .into(),
         );
 
         let result = match &task.strategy {
@@ -547,13 +543,19 @@ impl MessageDistributor {
                     None
                 };
 
-                self.connection_manager.broadcast_message(ws_message, exclude_connection).await
+                self.connection_manager
+                    .broadcast_message(ws_message, exclude_connection)
+                    .await
             }
 
             BroadcastStrategy::BroadcastToUsers { user_ids } => {
                 let mut total_sent = 0;
                 for user_id in user_ids {
-                    match self.connection_manager.send_to_user(user_id, ws_message.clone()).await {
+                    match self
+                        .connection_manager
+                        .send_to_user(user_id, ws_message.clone())
+                        .await
+                    {
                         Ok(sent_count) => {
                             total_sent += sent_count;
                         }
@@ -566,17 +568,18 @@ impl MessageDistributor {
             }
 
             BroadcastStrategy::DirectMessage { target_user_id } => {
-                self.connection_manager.send_to_user(target_user_id, ws_message).await
+                self.connection_manager
+                    .send_to_user(target_user_id, ws_message)
+                    .await
             }
 
             BroadcastStrategy::BroadcastToConnections { connection_ids } => {
                 let mut total_sent = 0;
                 for connection_id in connection_ids {
-                    match
-                        self.connection_manager.send_to_connection(
-                            connection_id,
-                            ws_message.clone()
-                        ).await
+                    match self
+                        .connection_manager
+                        .send_to_connection(connection_id, ws_message.clone())
+                        .await
                     {
                         Ok(_) => {
                             total_sent += 1;
@@ -584,8 +587,7 @@ impl MessageDistributor {
                         Err(e) => {
                             println!(
                                 "MESSAGE_DISTRIBUTOR: 发送给连接 {} 失败: {}",
-                                connection_id,
-                                e
+                                connection_id, e
                             );
                         }
                     }
@@ -594,7 +596,9 @@ impl MessageDistributor {
             }
 
             BroadcastStrategy::SystemMessage => {
-                self.connection_manager.broadcast_message(ws_message, None).await
+                self.connection_manager
+                    .broadcast_message(ws_message, None)
+                    .await
             }
         };
 
@@ -644,8 +648,7 @@ impl MessageDistributor {
                     successful_count += 1;
                     println!(
                         "MESSAGE_DISTRIBUTOR: 任务 {} 成功分发给 {} 个连接",
-                        task.task_id,
-                        sent_count
+                        task.task_id, sent_count
                     );
                 }
                 Err(e) => {
@@ -702,16 +705,14 @@ impl MessageDistributor {
                             if processed_count > 0 {
                                 println!(
                                     "MESSAGE_DISTRIBUTOR: 工作线程 {} 处理了 {} 个任务",
-                                    worker_id,
-                                    processed_count
+                                    worker_id, processed_count
                                 );
                             }
                         }
                         Err(e) => {
                             println!(
                                 "MESSAGE_DISTRIBUTOR: 工作线程 {} 处理批次失败: {}",
-                                worker_id,
-                                e
+                                worker_id, e
                             );
                         }
                     }
@@ -721,7 +722,10 @@ impl MessageDistributor {
             handles.push(handle);
         }
 
-        println!("MESSAGE_DISTRIBUTOR: 已启动 {} 个工作线程", self.worker_count);
+        println!(
+            "MESSAGE_DISTRIBUTOR: 已启动 {} 个工作线程",
+            self.worker_count
+        );
 
         handles
     }
@@ -735,22 +739,30 @@ impl MessageDistributor {
 
         // 【性能优化】更新实时性能指标
         let counters = &self.performance_counters;
-        stats.zero_copy_messages = counters.zero_copy_count.load(
-            std::sync::atomic::Ordering::Relaxed
-        ) as u64;
-        stats.compressed_messages = counters.compressed_count.load(
-            std::sync::atomic::Ordering::Relaxed
-        ) as u64;
+        stats.zero_copy_messages = counters
+            .zero_copy_count
+            .load(std::sync::atomic::Ordering::Relaxed) as u64;
+        stats.compressed_messages = counters
+            .compressed_count
+            .load(std::sync::atomic::Ordering::Relaxed) as u64;
 
-        let total_bytes = counters.total_bytes.load(std::sync::atomic::Ordering::Relaxed);
-        let compressed_bytes = counters.compressed_bytes.load(std::sync::atomic::Ordering::Relaxed);
+        let total_bytes = counters
+            .total_bytes
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let compressed_bytes = counters
+            .compressed_bytes
+            .load(std::sync::atomic::Ordering::Relaxed);
 
         if total_bytes > 0 {
             stats.compression_ratio = (compressed_bytes as f64) / (total_bytes as f64);
         }
 
-        let batch_count = counters.batch_count.load(std::sync::atomic::Ordering::Relaxed);
-        let batched_messages = counters.batched_messages.load(std::sync::atomic::Ordering::Relaxed);
+        let batch_count = counters
+            .batch_count
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let batched_messages = counters
+            .batched_messages
+            .load(std::sync::atomic::Ordering::Relaxed);
 
         if batch_count > 0 {
             stats.batch_efficiency = (batched_messages as f64) / (batch_count as f64);
@@ -784,7 +796,10 @@ impl MessageDistributor {
             stats.last_updated = Utc::now();
         }
 
-        println!("MESSAGE_DISTRIBUTOR: 已清空队列，清除了 {} 个任务", cleared_count);
+        println!(
+            "MESSAGE_DISTRIBUTOR: 已清空队列，清除了 {} 个任务",
+            cleared_count
+        );
 
         cleared_count
     }
@@ -798,12 +813,24 @@ impl MessageDistributor {
 
         // 【性能优化】重置性能计数器
         let counters = &self.performance_counters;
-        counters.zero_copy_count.store(0, std::sync::atomic::Ordering::Relaxed);
-        counters.compressed_count.store(0, std::sync::atomic::Ordering::Relaxed);
-        counters.total_bytes.store(0, std::sync::atomic::Ordering::Relaxed);
-        counters.compressed_bytes.store(0, std::sync::atomic::Ordering::Relaxed);
-        counters.batch_count.store(0, std::sync::atomic::Ordering::Relaxed);
-        counters.batched_messages.store(0, std::sync::atomic::Ordering::Relaxed);
+        counters
+            .zero_copy_count
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+        counters
+            .compressed_count
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+        counters
+            .total_bytes
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+        counters
+            .compressed_bytes
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+        counters
+            .batch_count
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+        counters
+            .batched_messages
+            .store(0, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// 【性能优化新增】零拷贝消息压缩
@@ -816,58 +843,50 @@ impl MessageDistributor {
     /// 【性能特性】: 零拷贝 + 可选压缩
     pub fn optimize_message(
         &self,
-        message: &str
+        message: &str,
     ) -> Result<Bytes, Box<dyn std::error::Error + Send + Sync>> {
         let message_bytes = message.as_bytes();
         let original_size = message_bytes.len();
 
         // 更新总字节数计数器
-        self.performance_counters.total_bytes.fetch_add(
-            original_size,
-            std::sync::atomic::Ordering::Relaxed
-        );
+        self.performance_counters
+            .total_bytes
+            .fetch_add(original_size, std::sync::atomic::Ordering::Relaxed);
 
         // 判断是否需要压缩
-        if
-            self.compression_config.enabled &&
-            original_size >= self.compression_config.min_size_threshold &&
-            self.compression_config.compression_type == CompressionType::Gzip
+        if self.compression_config.enabled
+            && original_size >= self.compression_config.min_size_threshold
+            && self.compression_config.compression_type == CompressionType::Gzip
         {
             // 执行Gzip压缩
-            let mut encoder = GzEncoder::new(
-                Vec::new(),
-                Compression::new(self.compression_config.level)
-            );
+            let mut encoder =
+                GzEncoder::new(Vec::new(), Compression::new(self.compression_config.level));
             encoder.write_all(message_bytes)?;
             let compressed_data = encoder.finish()?;
 
             // 只有在压缩效果明显时才使用压缩版本（至少节省10%）
             if compressed_data.len() < (original_size * 9) / 10 {
-                self.performance_counters.compressed_count.fetch_add(
-                    1,
-                    std::sync::atomic::Ordering::Relaxed
-                );
-                self.performance_counters.compressed_bytes.fetch_add(
-                    compressed_data.len(),
-                    std::sync::atomic::Ordering::Relaxed
-                );
+                self.performance_counters
+                    .compressed_count
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                self.performance_counters
+                    .compressed_bytes
+                    .fetch_add(compressed_data.len(), std::sync::atomic::Ordering::Relaxed);
 
                 // 使用零拷贝Bytes
                 Ok(Bytes::from(compressed_data))
             } else {
                 // 压缩效果不佳，使用原始数据
-                self.performance_counters.zero_copy_count.fetch_add(
-                    1,
-                    std::sync::atomic::Ordering::Relaxed
-                );
+                self.performance_counters
+                    .zero_copy_count
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 Ok(Bytes::copy_from_slice(message_bytes))
             }
         } else {
             // 不压缩，直接使用零拷贝
-            self.performance_counters.zero_copy_count.fetch_add(
-                1,
-                std::sync::atomic::Ordering::Relaxed
-            );
+            self.performance_counters
+                .zero_copy_count
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             Ok(Bytes::copy_from_slice(message_bytes))
         }
     }
@@ -881,7 +900,9 @@ impl MessageDistributor {
     /// 【返回值】: 调整后的批处理大小
     pub fn adjust_batch_size(&self, current_queue_length: usize) -> usize {
         let config = &self.dynamic_batch_config;
-        let current_size = config.current_batch_size.load(std::sync::atomic::Ordering::Relaxed);
+        let current_size = config
+            .current_batch_size
+            .load(std::sync::atomic::Ordering::Relaxed);
 
         let new_size = if current_queue_length > config.load_threshold {
             // 队列积压，增加批处理大小
@@ -896,7 +917,9 @@ impl MessageDistributor {
         };
 
         // 更新当前批处理大小
-        config.current_batch_size.store(new_size, std::sync::atomic::Ordering::Relaxed);
+        config
+            .current_batch_size
+            .store(new_size, std::sync::atomic::Ordering::Relaxed);
         new_size
     }
 
@@ -907,17 +930,28 @@ impl MessageDistributor {
     pub fn get_performance_metrics(&self) -> PerformanceMetrics {
         let counters = &self.performance_counters;
         PerformanceMetrics {
-            zero_copy_messages: counters.zero_copy_count.load(std::sync::atomic::Ordering::Relaxed),
-            compressed_messages: counters.compressed_count.load(
-                std::sync::atomic::Ordering::Relaxed
-            ),
-            total_bytes_processed: counters.total_bytes.load(std::sync::atomic::Ordering::Relaxed),
-            compressed_bytes: counters.compressed_bytes.load(std::sync::atomic::Ordering::Relaxed),
-            batch_count: counters.batch_count.load(std::sync::atomic::Ordering::Relaxed),
-            batched_messages: counters.batched_messages.load(std::sync::atomic::Ordering::Relaxed),
-            current_batch_size: self.dynamic_batch_config.current_batch_size.load(
-                std::sync::atomic::Ordering::Relaxed
-            ),
+            zero_copy_messages: counters
+                .zero_copy_count
+                .load(std::sync::atomic::Ordering::Relaxed),
+            compressed_messages: counters
+                .compressed_count
+                .load(std::sync::atomic::Ordering::Relaxed),
+            total_bytes_processed: counters
+                .total_bytes
+                .load(std::sync::atomic::Ordering::Relaxed),
+            compressed_bytes: counters
+                .compressed_bytes
+                .load(std::sync::atomic::Ordering::Relaxed),
+            batch_count: counters
+                .batch_count
+                .load(std::sync::atomic::Ordering::Relaxed),
+            batched_messages: counters
+                .batched_messages
+                .load(std::sync::atomic::Ordering::Relaxed),
+            current_batch_size: self
+                .dynamic_batch_config
+                .current_batch_size
+                .load(std::sync::atomic::Ordering::Relaxed),
             compression_enabled: self.compression_config.enabled,
         }
     }
@@ -949,9 +983,9 @@ pub struct PerformanceMetrics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::sync::mpsc;
-    use crate::app::model::chat::{ ServerMessage, UserInfo };
+    use crate::app::model::chat::{ServerMessage, UserInfo};
     use crate::app::service::ConnectionManager;
+    use tokio::sync::mpsc;
 
     /// 创建测试用的连接管理器
     async fn create_test_connection_manager() -> (Arc<ConnectionManager>, mpsc::Receiver<String>) {
@@ -966,7 +1000,7 @@ mod tests {
         let distributor = MessageDistributor::new(
             connection_manager.clone(),
             Some(10), // 小批量用于测试
-            Some(2) // 2个工作线程
+            Some(2),  // 2个工作线程
         );
         (distributor, connection_manager)
     }
@@ -1001,9 +1035,11 @@ mod tests {
         let message = create_test_message("Test message");
         let task = DistributionTask::new(
             message,
-            BroadcastStrategy::BroadcastAll { exclude_sender: false },
+            BroadcastStrategy::BroadcastAll {
+                exclude_sender: false,
+            },
             MessagePriority::Normal,
-            None
+            None,
         );
 
         // 提交任务
@@ -1028,27 +1064,30 @@ mod tests {
             create_test_message("Low priority"),
             BroadcastStrategy::SystemMessage,
             MessagePriority::Low,
-            None
+            None,
         );
 
         let high_priority_task = DistributionTask::new(
             create_test_message("High priority"),
             BroadcastStrategy::SystemMessage,
             MessagePriority::High,
-            None
+            None,
         );
 
         let critical_priority_task = DistributionTask::new(
             create_test_message("Critical priority"),
             BroadcastStrategy::SystemMessage,
             MessagePriority::Critical,
-            None
+            None,
         );
 
         // 按低->高->紧急的顺序提交
         distributor.submit_task(low_priority_task).await.unwrap();
         distributor.submit_task(high_priority_task).await.unwrap();
-        distributor.submit_task(critical_priority_task).await.unwrap();
+        distributor
+            .submit_task(critical_priority_task)
+            .await
+            .unwrap();
 
         // 验证队列长度
         assert_eq!(distributor.get_queue_length().await, 3);
@@ -1071,18 +1110,22 @@ mod tests {
         let user_id = Uuid::new_v4();
 
         connection_manager
-            .add_connection(connection_id, user_id, "test_user".to_string(), sender, None).await
+            .add_connection(
+                connection_id,
+                user_id,
+                "test_user".to_string(),
+                sender,
+                None,
+            )
+            .await
             .unwrap();
 
         let message = create_test_message("Broadcast test");
 
         // 使用便捷方法广播消息
-        let result = distributor.broadcast_to_all(
-            message,
-            false,
-            None,
-            Some(MessagePriority::Normal)
-        ).await;
+        let result = distributor
+            .broadcast_to_all(message, false, None, Some(MessagePriority::Normal))
+            .await;
 
         assert!(result.is_ok());
         assert_eq!(distributor.get_queue_length().await, 1);
@@ -1096,11 +1139,9 @@ mod tests {
         let target_user_id = Uuid::new_v4();
 
         // 使用便捷方法发送私聊消息
-        let result = distributor.send_direct_message(
-            message,
-            target_user_id,
-            Some(MessagePriority::High)
-        ).await;
+        let result = distributor
+            .send_direct_message(message, target_user_id, Some(MessagePriority::High))
+            .await;
 
         assert!(result.is_ok());
         assert_eq!(distributor.get_queue_length().await, 1);
@@ -1130,7 +1171,7 @@ mod tests {
                 message,
                 BroadcastStrategy::SystemMessage,
                 MessagePriority::Normal,
-                None
+                None,
             );
             distributor.submit_task(task).await.unwrap();
         }
@@ -1148,9 +1189,11 @@ mod tests {
         let message = create_test_message("Test task");
         let task = DistributionTask::new(
             message.clone(),
-            BroadcastStrategy::BroadcastAll { exclude_sender: true },
+            BroadcastStrategy::BroadcastAll {
+                exclude_sender: true,
+            },
             MessagePriority::High,
-            Some(Uuid::new_v4())
+            Some(Uuid::new_v4()),
         );
 
         assert_eq!(task.message.content, message.content);
@@ -1167,7 +1210,7 @@ mod tests {
             message,
             BroadcastStrategy::SystemMessage,
             MessagePriority::Normal,
-            None
+            None,
         );
 
         // 初始状态可以重试
@@ -1192,7 +1235,7 @@ mod tests {
             MessagePriority::Low,
             MessagePriority::Critical,
             MessagePriority::Normal,
-            MessagePriority::High
+            MessagePriority::High,
         ];
 
         priorities.sort();
@@ -1212,11 +1255,19 @@ mod tests {
     fn test_broadcast_strategy_variants() {
         // 测试不同的广播策略
         let strategies = vec![
-            BroadcastStrategy::BroadcastAll { exclude_sender: true },
-            BroadcastStrategy::BroadcastToUsers { user_ids: vec![Uuid::new_v4()] },
-            BroadcastStrategy::DirectMessage { target_user_id: Uuid::new_v4() },
-            BroadcastStrategy::BroadcastToConnections { connection_ids: vec![Uuid::new_v4()] },
-            BroadcastStrategy::SystemMessage
+            BroadcastStrategy::BroadcastAll {
+                exclude_sender: true,
+            },
+            BroadcastStrategy::BroadcastToUsers {
+                user_ids: vec![Uuid::new_v4()],
+            },
+            BroadcastStrategy::DirectMessage {
+                target_user_id: Uuid::new_v4(),
+            },
+            BroadcastStrategy::BroadcastToConnections {
+                connection_ids: vec![Uuid::new_v4()],
+            },
+            BroadcastStrategy::SystemMessage,
         ];
 
         // 验证所有策略都可以正常创建
@@ -1252,9 +1303,10 @@ mod tests {
         let distributor = MessageDistributor::new(connection_manager, Some(100), Some(2));
 
         // 测试动态批处理大小调整
-        let initial_size = distributor.dynamic_batch_config.current_batch_size.load(
-            std::sync::atomic::Ordering::Relaxed
-        );
+        let initial_size = distributor
+            .dynamic_batch_config
+            .current_batch_size
+            .load(std::sync::atomic::Ordering::Relaxed);
 
         // 模拟高负载情况（队列长度超过阈值）
         let high_load_size = distributor.adjust_batch_size(600); // 超过默认阈值500
@@ -1284,7 +1336,7 @@ mod tests {
             connection_manager,
             compression_config,
             dynamic_batch_config,
-            4
+            4,
         );
 
         // 测试大消息压缩

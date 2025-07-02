@@ -8,9 +8,9 @@
 
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
     use serde_json;
     use uuid::Uuid;
-    use chrono::Utc;
 
     /// 测试聊天室类型枚举的序列化和反序列化
     #[test]
@@ -82,7 +82,7 @@ mod tests {
             (MessageType::File, "\"File\""),
             (MessageType::System, "\"System\""),
             (MessageType::Voice, "\"Voice\""),
-            (MessageType::Video, "\"Video\"")
+            (MessageType::Video, "\"Video\""),
         ];
 
         for (msg_type, expected_json) in types {
@@ -106,7 +106,7 @@ mod tests {
             (MessageStatus::Delivered, "\"Delivered\""),
             (MessageStatus::Read, "\"Read\""),
             (MessageStatus::Deleted, "\"Deleted\""),
-            (MessageStatus::Edited, "\"Edited\"")
+            (MessageStatus::Edited, "\"Edited\""),
         ];
 
         for (status, expected_json) in statuses {
@@ -130,7 +130,7 @@ mod tests {
             (SessionStatus::Offline, "\"Offline\""),
             (SessionStatus::Busy, "\"Busy\""),
             (SessionStatus::Away, "\"Away\""),
-            (SessionStatus::Invisible, "\"Invisible\"")
+            (SessionStatus::Invisible, "\"Invisible\""),
         ];
 
         for (status, expected_json) in statuses {
@@ -153,7 +153,7 @@ mod tests {
             (DeviceType::Desktop, "\"Desktop\""),
             (DeviceType::Mobile, "\"Mobile\""),
             (DeviceType::Tablet, "\"Tablet\""),
-            (DeviceType::Web, "\"Web\"")
+            (DeviceType::Web, "\"Web\""),
         ];
 
         for (device_type, expected_json) in device_types {
@@ -170,7 +170,7 @@ mod tests {
     /// 测试聊天室模型的创建和序列化
     #[test]
     fn test_chat_room_model_creation() {
-        use crate::chat_room_entity::{ Model as ChatRoom, ChatRoomType, ChatRoomStatus };
+        use crate::chat_room_entity::{ChatRoomStatus, ChatRoomType, Model as ChatRoom};
 
         let chat_room = ChatRoom {
             id: Uuid::new_v4(),
@@ -202,7 +202,7 @@ mod tests {
     /// 测试消息模型的创建和序列化
     #[test]
     fn test_message_model_creation() {
-        use crate::message_entity::{ Model as Message, MessageType, MessageStatus };
+        use crate::message_entity::{MessageStatus, MessageType, Model as Message};
 
         let message = Message {
             id: Uuid::new_v4(),
@@ -238,7 +238,7 @@ mod tests {
     /// 测试用户会话模型的创建和序列化
     #[test]
     fn test_user_session_model_creation() {
-        use crate::user_session_entity::{ Model as UserSession, SessionStatus, DeviceType };
+        use crate::user_session_entity::{DeviceType, Model as UserSession, SessionStatus};
 
         let session = UserSession {
             id: Uuid::new_v4(),
@@ -334,10 +334,10 @@ mod tests {
     /// 测试实体模型的默认值和约束
     #[test]
     fn test_entity_defaults() {
-        use crate::task_entity::Entity as TaskEntity;
-        use crate::user_entity::Entity as UserEntity;
         use crate::chat_room_entity::Entity as ChatRoomEntity;
         use crate::message_entity::Entity as MessageEntity;
+        use crate::task_entity::Entity as TaskEntity;
+        use crate::user_entity::Entity as UserEntity;
         use crate::user_session_entity::Entity as UserSessionEntity;
 
         // 验证实体类型存在且可以被引用
@@ -352,9 +352,9 @@ mod tests {
     /// 测试枚举的默认值
     #[test]
     fn test_enum_defaults() {
-        use crate::chat_room_entity::{ ChatRoomType, ChatRoomStatus };
-        use crate::message_entity::{ MessageType, MessageStatus };
-        use crate::user_session_entity::{ SessionStatus, DeviceType };
+        use crate::chat_room_entity::{ChatRoomStatus, ChatRoomType};
+        use crate::message_entity::{MessageStatus, MessageType};
+        use crate::user_session_entity::{DeviceType, SessionStatus};
 
         // 测试枚举的默认实现
         let default_room_type = ChatRoomType::Public;
@@ -376,7 +376,7 @@ mod tests {
     /// 测试模型字段的边界值
     #[test]
     fn test_model_field_boundaries() {
-        use crate::message_entity::{ Model as Message, MessageType, MessageStatus };
+        use crate::message_entity::{MessageStatus, MessageType, Model as Message};
 
         // 测试消息优先级的边界值
         let high_priority_message = Message {
@@ -420,7 +420,7 @@ mod tests {
     /// 测试聊天室成员数量的边界值
     #[test]
     fn test_chat_room_member_limits() {
-        use crate::chat_room_entity::{ Model as ChatRoom, ChatRoomType, ChatRoomStatus };
+        use crate::chat_room_entity::{ChatRoomStatus, ChatRoomType, Model as ChatRoom};
 
         // 测试大型聊天室
         let large_room = ChatRoom {
@@ -433,7 +433,7 @@ mod tests {
             max_members: 10000, // 大型聊天室
             current_members: 5000,
             settings: Some(
-                "{\"allow_file_upload\": true, \"max_file_size\": \"100MB\"}".to_string()
+                "{\"allow_file_upload\": true, \"max_file_size\": \"100MB\"}".to_string(),
             ),
             created_at: Utc::now(),
             updated_at: Utc::now(),

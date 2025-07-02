@@ -4,23 +4,19 @@
 //! 【目标】: 降低状态克隆开销，提升请求处理性能
 //! 【特性】: 智能状态分离、按需克隆、状态缓存
 
-use std::sync::Arc;
-use serde::{ Deserialize, Serialize };
 use sea_orm::DatabaseConnection;
-use tracing::{ debug, info, warn, instrument };
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tracing::{debug, info, instrument, warn};
 
 use crate::app::{
+    middleware::{
+        error_recovery_middleware::ErrorRecoveryState, performance_monitor::PerformanceMetrics,
+    },
     repository::TaskRepository,
     service::{
-        ConnectionManager,
-        MessageDistributor,
-        NotificationService,
+        AsyncPerformanceOptimizer, ConnectionManager, MessageDistributor, NotificationService,
         StatusSyncService,
-        AsyncPerformanceOptimizer,
-    },
-    middleware::{
-        performance_monitor::PerformanceMetrics,
-        error_recovery_middleware::ErrorRecoveryState,
     },
     utils::memory_manager::MemoryManager,
 };
@@ -125,7 +121,7 @@ impl OptimizedAppState {
         error_recovery_state: Arc<ErrorRecoveryState>,
         async_performance_optimizer: Arc<AsyncPerformanceOptimizer>,
         memory_manager: Arc<MemoryManager>,
-        config: OptimizedStateConfig
+        config: OptimizedStateConfig,
     ) -> Self {
         let core = Arc::new(CoreState {
             db: Arc::new(db),

@@ -87,7 +87,7 @@
         "dependencies": [
           6
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
@@ -102,11 +102,25 @@
         ],
         "status": "pending",
         "subtasks": []
+      },
+      {
+        "id": 9,
+        "title": "修复前端WebSocket连接状态显示问题",
+        "description": "修复前端WebSocket连接状态显示问题：E2E测试期望#wsStatus元素显示连接状态，但当前HTML只有#connectionStatus元素，需要添加缺失的WebSocket测试区域元素并修复状态更新逻辑。",
+        "details": "1. 在HTML文件中添加#wsStatus元素。\n2. 更新index.js中的WebSocket连接逻辑，确保连接状态变化时更新#wsStatus元素的内容。\n3. 确保WebSocket连接、断开、重连等状态都能正确反映在#wsStatus元素上。\n4. 添加必要的CSS样式以美化#wsStatus元素的显示效果。",
+        "testStrategy": "1. 使用Playwright编写E2E测试，模拟WebSocket连接、断开、重连等场景。\n2. 验证#wsStatus元素是否正确显示连接状态。\n3. 手动测试以确认UI更新逻辑无误。",
+        "status": "done",
+        "dependencies": [
+          4,
+          7
+        ],
+        "priority": "medium",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-07-02T15:01:16.751Z",
-      "updated": "2025-07-02T15:19:21.578Z",
+      "updated": "2025-07-02T15:44:49.154Z",
       "description": "Tasks for master context"
     }
   }

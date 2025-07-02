@@ -25,14 +25,21 @@
 // |                                                                                                      |
 // \------------------------------------------------------------------------------------------------------/
 
+use serde::{Deserialize, Serialize};
 use std::{
-    collections::{ HashMap, VecDeque },
-    sync::{ atomic::{ AtomicU64, AtomicUsize, Ordering }, Arc },
-    time::{ Duration, Instant },
+    collections::{HashMap, VecDeque},
+    sync::{
+        Arc,
+        atomic::{AtomicU64, AtomicUsize, Ordering},
+    },
+    time::{Duration, Instant},
 };
-use tokio::{ sync::{ Mutex, RwLock, Semaphore }, task::JoinHandle, time::interval };
-use tracing::{ debug, error, info, instrument, warn };
-use serde::{ Deserialize, Serialize };
+use tokio::{
+    sync::{Mutex, RwLock, Semaphore},
+    task::JoinHandle,
+    time::interval,
+};
+use tracing::{debug, error, info, instrument, warn};
 
 /// 异步性能优化配置
 ///
@@ -317,7 +324,10 @@ impl IoMultiplexingOptimizer {
                 IoOperationType::FileWrite(_) => "file_write".to_string(),
                 IoOperationType::NetworkRequest(_) => "network".to_string(),
             };
-            grouped_operations.entry(group_key).or_default().push(operation);
+            grouped_operations
+                .entry(group_key)
+                .or_default()
+                .push(operation);
         }
 
         // 并发处理各组操作
@@ -343,7 +353,8 @@ impl IoMultiplexingOptimizer {
 
         // 更新批处理统计
         let batch_duration = batch_start.elapsed();
-        self.update_batch_stats(operation_count, batch_duration).await;
+        self.update_batch_stats(operation_count, batch_duration)
+            .await;
 
         info!(
             "I/O批处理完成: 处理{}个操作，耗时{:?}ms",
@@ -357,7 +368,7 @@ impl IoMultiplexingOptimizer {
     /// 处理特定类型的操作组
     async fn process_operation_group(
         group_type: String,
-        operations: Vec<IoOperation>
+        operations: Vec<IoOperation>,
     ) -> Result<usize, String> {
         debug!("处理{}类型的{}个操作", group_type, operations.len());
 
@@ -627,14 +638,20 @@ impl TaskScheduler {
         // 更新队列长度信息
         stats.queue_lengths.insert(
             "critical".to_string(),
-            self.critical_priority_queue.lock().await.len()
+            self.critical_priority_queue.lock().await.len(),
         );
-        stats.queue_lengths.insert("high".to_string(), self.high_priority_queue.lock().await.len());
+        stats.queue_lengths.insert(
+            "high".to_string(),
+            self.high_priority_queue.lock().await.len(),
+        );
         stats.queue_lengths.insert(
             "normal".to_string(),
-            self.normal_priority_queue.lock().await.len()
+            self.normal_priority_queue.lock().await.len(),
         );
-        stats.queue_lengths.insert("low".to_string(), self.low_priority_queue.lock().await.len());
+        stats.queue_lengths.insert(
+            "low".to_string(),
+            self.low_priority_queue.lock().await.len(),
+        );
 
         stats
     }
@@ -654,9 +671,9 @@ impl TaskScheduler {
         if total_completed > 0 {
             let current_avg = stats.average_execution_time_ms;
             let new_time_ms = execution_time.as_millis() as f64;
-            stats.average_execution_time_ms =
-                (current_avg * ((total_completed - 1) as f64) + new_time_ms) /
-                (total_completed as f64);
+            stats.average_execution_time_ms = (current_avg * ((total_completed - 1) as f64)
+                + new_time_ms)
+                / (total_completed as f64);
         }
     }
 
@@ -730,9 +747,10 @@ impl AsyncPerformanceOptimizer {
     pub fn new(config: AsyncPerformanceConfig) -> Self {
         let task_scheduler = Arc::new(TaskScheduler::new(config.clone()));
         let io_optimizer = Arc::new(IoMultiplexingOptimizer::new(config.io_batch_size));
-        let backpressure_controller = Arc::new(
-            BackpressureController::new(config.backpressure_threshold, config.max_concurrent_tasks)
-        );
+        let backpressure_controller = Arc::new(BackpressureController::new(
+            config.backpressure_threshold,
+            config.max_concurrent_tasks,
+        ));
 
         Self {
             config,
@@ -801,10 +819,9 @@ impl AsyncPerformanceOptimizer {
         timeout: Duration,
         description: String,
         _task_fn: impl std::future::Future<
-            Output = Result<(), Box<dyn std::error::Error + Send + Sync>>
-        > +
-            Send +
-            'static
+            Output = Result<(), Box<dyn std::error::Error + Send + Sync>>,
+        > + Send
+        + 'static,
     ) -> Result<(), String> {
         // 检查背压
         let _permit = self.backpressure_controller.try_acquire().await?;
@@ -850,10 +867,9 @@ impl AsyncPerformanceOptimizer {
 
         // 计算调度器效率
         if scheduler_stats.total_tasks_scheduled > 0 {
-            stats.scheduler_efficiency =
-                ((scheduler_stats.completed_tasks as f64) /
-                    (scheduler_stats.total_tasks_scheduled as f64)) *
-                100.0;
+            stats.scheduler_efficiency = ((scheduler_stats.completed_tasks as f64)
+                / (scheduler_stats.total_tasks_scheduled as f64))
+                * 100.0;
         }
 
         stats.last_updated = std::time::SystemTime::now();
@@ -863,8 +879,7 @@ impl AsyncPerformanceOptimizer {
     /// 启动任务调度工作线程
     async fn start_task_scheduler_workers(&self) -> Result<(), String> {
         let worker_count = self.config.worker_threads.unwrap_or_else(|| {
-            std::thread
-                ::available_parallelism()
+            std::thread::available_parallelism()
                 .map(|n| n.get())
                 .unwrap_or(4)
         });
@@ -885,10 +900,8 @@ impl AsyncPerformanceOptimizer {
                         let start_time = Instant::now();
 
                         // 模拟任务执行（在实际应用中，这里会执行真实的任务）
-                        let execution_result = Self::execute_mock_task(
-                            &task,
-                            config.task_timeout_seconds
-                        ).await;
+                        let execution_result =
+                            Self::execute_mock_task(&task, config.task_timeout_seconds).await;
 
                         let execution_time = start_time.elapsed();
 
@@ -902,7 +915,9 @@ impl AsyncPerformanceOptimizer {
                                     scheduler.update_task_timeout().await;
                                     warn!("任务 {} 执行超时", task.task_id);
                                 } else {
-                                    scheduler.update_task_completion(false, execution_time).await;
+                                    scheduler
+                                        .update_task_completion(false, execution_time)
+                                        .await;
                                     warn!("任务 {} 执行失败: {}", task.task_id, e);
                                 }
                             }
@@ -1010,7 +1025,7 @@ impl AsyncPerformanceOptimizer {
                 debug!("模拟任务 {} 执行完成", task.task_id);
                 Ok(())
             }
-            Err(_) => { Err(format!("任务 {} 执行超时", task.task_id)) }
+            Err(_) => Err(format!("任务 {} 执行超时", task.task_id)),
         }
     }
 
@@ -1188,7 +1203,7 @@ mod tests {
             TaskPriority::Low,
             TaskPriority::Critical,
             TaskPriority::Normal,
-            TaskPriority::High
+            TaskPriority::High,
         ];
 
         let mut sorted_priorities = priorities.clone();

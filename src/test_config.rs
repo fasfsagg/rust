@@ -9,12 +9,12 @@
 
 #![cfg(any(test, feature = "testing"))]
 
+use sea_orm::{Database, DatabaseConnection};
 use std::sync::Once;
-use sea_orm::{ Database, DatabaseConnection };
 
-use tracing_subscriber::{ EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt };
 use crate::config::AppConfig;
-use migration::{ Migrator, MigratorTrait };
+use migration::{Migrator, MigratorTrait};
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 static INIT: Once = Once::new();
 
@@ -35,7 +35,7 @@ impl Default for TestConfig {
     fn default() -> Self {
         Self {
             database_url: "sqlite::memory:".to_string(), // 使用SQLite内存数据库进行测试
-            server_port: 0, // 使用随机端口
+            server_port: 0,                              // 使用随机端口
             jwt_secret: "test_jwt_secret_key_for_testing_only".to_string(),
             temp_dir_path: None,
         }
@@ -62,7 +62,7 @@ impl TestConfig {
 
     /// 创建测试用的应用配置
     pub fn to_app_config(&self) -> AppConfig {
-        use crate::config::{ DatabasePoolConfig, WebSocketPoolConfig };
+        use crate::config::{DatabasePoolConfig, WebSocketPoolConfig};
         use std::net::SocketAddr;
 
         let addr: SocketAddr = if self.server_port == 0 {
@@ -97,8 +97,7 @@ pub fn init_test_logging() {
         let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("debug"));
 
         // 尝试设置全局默认订阅者，如果已经设置则忽略错误
-        let _ = tracing_subscriber
-            ::registry()
+        let _ = tracing_subscriber::registry()
             .with(fmt::layer().with_test_writer())
             .with(filter)
             .try_init();
@@ -107,9 +106,9 @@ pub fn init_test_logging() {
 
 /// 测试数据工厂
 pub mod test_data {
-    use uuid::Uuid;
+    use crate::app::model::task::{CreateTaskPayload, UpdateTaskPayload};
     use chrono::Utc;
-    use crate::app::model::task::{ CreateTaskPayload, UpdateTaskPayload };
+    use uuid::Uuid;
     // 注意：用户模型暂时不可用，使用占位符结构体
     #[derive(Debug)]
     pub struct CreateUserPayload {
@@ -137,7 +136,7 @@ pub mod test_data {
     pub fn update_test_task(
         title: Option<&str>,
         description: Option<&str>,
-        completed: Option<bool>
+        completed: Option<bool>,
     ) -> UpdateTaskPayload {
         UpdateTaskPayload {
             title: title.map(|s| s.to_string()),
@@ -150,8 +149,12 @@ pub mod test_data {
     pub fn create_test_user(username: Option<&str>, email: Option<&str>) -> CreateUserPayload {
         let timestamp = Utc::now().timestamp();
         CreateUserPayload {
-            username: username.unwrap_or(&format!("testuser_{}", timestamp)).to_string(),
-            email: email.unwrap_or(&format!("test_{}@example.com", timestamp)).to_string(),
+            username: username
+                .unwrap_or(&format!("testuser_{}", timestamp))
+                .to_string(),
+            email: email
+                .unwrap_or(&format!("test_{}@example.com", timestamp))
+                .to_string(),
             password: "test_password_123".to_string(),
         }
     }

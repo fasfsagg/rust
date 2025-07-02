@@ -6,8 +6,8 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::{ DatabasePoolManager, WebSocketPoolManager };
-    use crate::config::{ AppConfig, DatabasePoolConfig, WebSocketPoolConfig };
+    use super::super::{DatabasePoolManager, WebSocketPoolManager};
+    use crate::config::{AppConfig, DatabasePoolConfig, WebSocketPoolConfig};
     use axum::extract::ws::Message;
     use tokio::sync::mpsc;
     use uuid::Uuid;
@@ -36,7 +36,12 @@ mod tests {
 
         // 验证初始指标
         assert!(metrics.is_healthy(), "连接池应该是健康的");
-        assert_eq!(metrics.total_connections.load(std::sync::atomic::Ordering::Relaxed), 20);
+        assert_eq!(
+            metrics
+                .total_connections
+                .load(std::sync::atomic::Ordering::Relaxed),
+            20
+        );
     }
 
     #[tokio::test]
@@ -53,7 +58,12 @@ mod tests {
 
         // 验证指标更新
         let metrics = pool_manager.get_metrics();
-        assert!(metrics.total_acquires.load(std::sync::atomic::Ordering::Relaxed) > 0);
+        assert!(
+            metrics
+                .total_acquires
+                .load(std::sync::atomic::Ordering::Relaxed)
+                > 0
+        );
     }
 
     #[tokio::test]
@@ -79,7 +89,12 @@ mod tests {
 
         // 验证初始状态
         assert!(metrics.is_healthy(), "WebSocket连接池应该是健康的");
-        assert_eq!(metrics.active_connections.load(std::sync::atomic::Ordering::Relaxed), 0);
+        assert_eq!(
+            metrics
+                .active_connections
+                .load(std::sync::atomic::Ordering::Relaxed),
+            0
+        );
     }
 
     #[tokio::test]
@@ -94,13 +109,20 @@ mod tests {
         let (sender, _receiver) = mpsc::unbounded_channel();
 
         // 添加连接
-        let result = pool_manager.add_connection(connection_id, user_id, sender).await;
+        let result = pool_manager
+            .add_connection(connection_id, user_id, sender)
+            .await;
 
         assert!(result.is_ok(), "添加连接应该成功");
 
         // 验证指标更新
         let metrics = pool_manager.get_metrics();
-        assert_eq!(metrics.active_connections.load(std::sync::atomic::Ordering::Relaxed), 1);
+        assert_eq!(
+            metrics
+                .active_connections
+                .load(std::sync::atomic::Ordering::Relaxed),
+            1
+        );
     }
 
     #[tokio::test]
@@ -114,7 +136,10 @@ mod tests {
         let user_id = Uuid::new_v4();
         let (sender, _receiver) = mpsc::unbounded_channel();
 
-        pool_manager.add_connection(connection_id, user_id, sender).await.unwrap();
+        pool_manager
+            .add_connection(connection_id, user_id, sender)
+            .await
+            .unwrap();
 
         // 移除连接
         let removed = pool_manager.remove_connection(&connection_id).await;
@@ -123,7 +148,12 @@ mod tests {
 
         // 验证指标更新
         let metrics = pool_manager.get_metrics();
-        assert_eq!(metrics.active_connections.load(std::sync::atomic::Ordering::Relaxed), 0);
+        assert_eq!(
+            metrics
+                .active_connections
+                .load(std::sync::atomic::Ordering::Relaxed),
+            0
+        );
     }
 
     #[tokio::test]
@@ -137,11 +167,16 @@ mod tests {
         let user_id = Uuid::new_v4();
         let (sender, mut receiver) = mpsc::unbounded_channel();
 
-        pool_manager.add_connection(connection_id, user_id, sender).await.unwrap();
+        pool_manager
+            .add_connection(connection_id, user_id, sender)
+            .await
+            .unwrap();
 
         // 发送消息
         let test_message = Message::Text("Hello, World!".to_string().into());
-        let result = pool_manager.send_to_connection(&connection_id, test_message.clone()).await;
+        let result = pool_manager
+            .send_to_connection(&connection_id, test_message.clone())
+            .await;
 
         assert!(result.is_ok(), "消息发送应该成功");
 
@@ -151,7 +186,12 @@ mod tests {
 
         // 验证指标更新
         let metrics = pool_manager.get_metrics();
-        assert!(metrics.total_messages_sent.load(std::sync::atomic::Ordering::Relaxed) > 0);
+        assert!(
+            metrics
+                .total_messages_sent
+                .load(std::sync::atomic::Ordering::Relaxed)
+                > 0
+        );
     }
 
     #[tokio::test]
@@ -168,8 +208,14 @@ mod tests {
         let (sender1, mut receiver1) = mpsc::unbounded_channel();
         let (sender2, mut receiver2) = mpsc::unbounded_channel();
 
-        pool_manager.add_connection(connection_id1, user_id, sender1).await.unwrap();
-        pool_manager.add_connection(connection_id2, user_id, sender2).await.unwrap();
+        pool_manager
+            .add_connection(connection_id1, user_id, sender1)
+            .await
+            .unwrap();
+        pool_manager
+            .add_connection(connection_id2, user_id, sender2)
+            .await
+            .unwrap();
 
         // 广播消息
         let test_message = Message::Text("Broadcast message".to_string().into());
@@ -210,7 +256,9 @@ mod tests {
             let user_id = Uuid::new_v4();
             let (sender, _receiver) = mpsc::unbounded_channel();
 
-            let result = pool_manager.add_connection(connection_id, user_id, sender).await;
+            let result = pool_manager
+                .add_connection(connection_id, user_id, sender)
+                .await;
             assert!(result.is_ok(), "前2个连接应该成功添加");
         }
 
@@ -219,9 +267,14 @@ mod tests {
         let user_id = Uuid::new_v4();
         let (sender, _receiver) = mpsc::unbounded_channel();
 
-        let result = pool_manager.add_connection(connection_id, user_id, sender).await;
+        let result = pool_manager
+            .add_connection(connection_id, user_id, sender)
+            .await;
         assert!(result.is_err(), "第3个连接应该被拒绝");
-        assert!(result.unwrap_err().contains("连接池已满"), "错误消息应该指示连接池已满");
+        assert!(
+            result.unwrap_err().contains("连接池已满"),
+            "错误消息应该指示连接池已满"
+        );
     }
 
     #[tokio::test]
@@ -238,7 +291,12 @@ mod tests {
 
         // 获取一个连接来更新指标
         let _connection = db_pool_manager.get_connection();
-        assert!(db_metrics.total_acquires.load(std::sync::atomic::Ordering::Relaxed) > 0);
+        assert!(
+            db_metrics
+                .total_acquires
+                .load(std::sync::atomic::Ordering::Relaxed)
+                > 0
+        );
 
         // 测试WebSocket连接池指标
         let ws_metrics = ws_pool_manager.get_metrics();
@@ -250,7 +308,15 @@ mod tests {
         let user_id = Uuid::new_v4();
         let (sender, _receiver) = mpsc::unbounded_channel();
 
-        ws_pool_manager.add_connection(connection_id, user_id, sender).await.unwrap();
-        assert!(ws_metrics.active_connections.load(std::sync::atomic::Ordering::Relaxed) > 0);
+        ws_pool_manager
+            .add_connection(connection_id, user_id, sender)
+            .await
+            .unwrap();
+        assert!(
+            ws_metrics
+                .active_connections
+                .load(std::sync::atomic::Ordering::Relaxed)
+                > 0
+        );
     }
 }

@@ -14,20 +14,20 @@
 // \-----------------------------------------------------------------------------/
 
 use axum::{
-    extract::Request,
-    http::{ StatusCode, Method, Uri },
-    response::{ IntoResponse, Response },
     BoxError,
+    extract::Request,
+    http::{Method, StatusCode, Uri},
+    response::{IntoResponse, Response},
 };
 use serde_json::json;
 use std::time::Duration;
 use tower::timeout::TimeoutLayer;
-use tracing::{ error, warn, info, instrument };
+use tracing::{error, info, instrument, warn};
 use tracing_error::SpanTrace;
 
 // 定义类型别名以简化复杂类型
 type ErrorHandlerFuture = std::pin::Pin<
-    Box<dyn std::future::Future<Output = Result<Response, std::convert::Infallible>> + Send>
+    Box<dyn std::future::Future<Output = Result<Response, std::convert::Infallible>> + Send>,
 >;
 type ErrorHandlerFn = fn(BoxError) -> ErrorHandlerFuture;
 type EnhancedErrorLayer = axum::error_handling::HandleErrorLayer<ErrorHandlerFn, Request>;
@@ -59,9 +59,9 @@ pub fn timeout_layer() -> TimeoutLayer {
 /// * `Response` - 格式化的错误响应
 #[instrument(skip(error), fields(error_type = %error))]
 fn handle_error(
-    error: BoxError
+    error: BoxError,
 ) -> std::pin::Pin<
-    Box<dyn std::future::Future<Output = Result<Response, std::convert::Infallible>> + Send>
+    Box<dyn std::future::Future<Output = Result<Response, std::convert::Infallible>> + Send>,
 > {
     Box::pin(async move {
         // 捕获当前span的跟踪信息
@@ -70,7 +70,11 @@ fn handle_error(
         let (status, error_message, error_code) = if error.is::<tower::timeout::error::Elapsed>() {
             // 处理超时错误
             warn!("Request timeout occurred");
-            (StatusCode::REQUEST_TIMEOUT, "请求超时，请稍后重试".to_string(), "REQUEST_TIMEOUT")
+            (
+                StatusCode::REQUEST_TIMEOUT,
+                "请求超时，请稍后重试".to_string(),
+                "REQUEST_TIMEOUT",
+            )
         } else if let Some(source) = error.source() {
             // 处理有源错误的情况
             if source.to_string().contains("connection") {
@@ -82,7 +86,11 @@ fn handle_error(
                 )
             } else if source.to_string().contains("timeout") {
                 warn!(error = %error, "Service timeout occurred");
-                (StatusCode::GATEWAY_TIMEOUT, "服务响应超时".to_string(), "GATEWAY_TIMEOUT")
+                (
+                    StatusCode::GATEWAY_TIMEOUT,
+                    "服务响应超时".to_string(),
+                    "GATEWAY_TIMEOUT",
+                )
             } else {
                 error!(error = %error, span_trace = %span_trace, "Unhandled error with source");
                 (
@@ -102,16 +110,15 @@ fn handle_error(
         };
 
         // 构建结构化错误响应
-        let error_response =
-            json!({
-        "error": {
-            "code": error_code,
-            "message": error_message,
-            "status": status.as_u16(),
-            "timestamp": chrono::Utc::now().to_rfc3339(),
-            "trace_id": generate_trace_id()
-        }
-    });
+        let error_response = json!({
+            "error": {
+                "code": error_code,
+                "message": error_message,
+                "status": status.as_u16(),
+                "timestamp": chrono::Utc::now().to_rfc3339(),
+                "trace_id": generate_trace_id()
+            }
+        });
 
         // 记录错误处理完成
         info!(
@@ -146,7 +153,7 @@ fn generate_trace_id() -> String {
 pub async fn handle_validation_error(
     method: Method,
     uri: Uri,
-    error: BoxError
+    error: BoxError,
 ) -> Result<Response, std::convert::Infallible> {
     warn!(
         method = %method,
@@ -155,8 +162,7 @@ pub async fn handle_validation_error(
         "Validation error occurred"
     );
 
-    let error_response =
-        json!({
+    let error_response = json!({
         "error": {
             "code": "VALIDATION_ERROR",
             "message": "请求验证失败",
@@ -187,8 +193,7 @@ pub async fn handle_validation_error(
 pub async fn handle_auth_error(error: BoxError) -> Result<Response, std::convert::Infallible> {
     warn!(error = %error, "Authentication error occurred");
 
-    let error_response =
-        json!({
+    let error_response = json!({
         "error": {
             "code": "AUTHENTICATION_ERROR",
             "message": "认证失败",

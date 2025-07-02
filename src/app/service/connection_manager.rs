@@ -23,14 +23,14 @@
 // |                                                                                                      |
 // \------------------------------------------------------------------------------------------------------/
 
+use axum::extract::ws::Message;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{ AtomicU64, Ordering };
-use tokio::sync::{ RwLock, mpsc };
+use std::sync::atomic::{AtomicU64, Ordering};
+use tokio::sync::{RwLock, mpsc};
 use uuid::Uuid;
-use chrono::{ DateTime, Utc };
-use serde::{ Serialize, Deserialize };
-use axum::extract::ws::Message;
 
 /// 连接唯一标识符
 pub type ConnectionId = Uuid;
@@ -197,7 +197,7 @@ impl ConnectionManager {
         user_id: Uuid,
         username: String,
         sender: mpsc::UnboundedSender<Message>,
-        ip_address: Option<String>
+        ip_address: Option<String>,
     ) -> Result<(), String> {
         let now = Utc::now();
 
@@ -225,7 +225,10 @@ impl ConnectionManager {
         // 更新用户连接映射
         {
             let mut user_connections = self.user_connections.write().await;
-            user_connections.entry(user_id).or_insert_with(Vec::new).push(connection_id);
+            user_connections
+                .entry(user_id)
+                .or_insert_with(Vec::new)
+                .push(connection_id);
         }
 
         // 更新全局统计
@@ -234,9 +237,7 @@ impl ConnectionManager {
 
         println!(
             "CONNECTION_MANAGER: 用户 {} (ID: {}) 已连接，连接ID: {}",
-            username,
-            user_id,
-            connection_id
+            username, user_id, connection_id
         );
 
         Ok(())
@@ -270,9 +271,7 @@ impl ConnectionManager {
 
             println!(
                 "CONNECTION_MANAGER: 用户 {} (ID: {}) 已断开连接，连接ID: {}",
-                connection.username,
-                connection.user_id,
-                connection_id
+                connection.username, connection.user_id, connection_id
             );
         }
 
@@ -308,12 +307,15 @@ impl ConnectionManager {
     pub async fn send_to_connection(
         &self,
         connection_id: &ConnectionId,
-        message: Message
+        message: Message,
     ) -> Result<(), String> {
         let connections = self.connections.read().await;
 
         if let Some(connection) = connections.get(connection_id) {
-            connection.sender.send(message).map_err(|e| format!("发送消息失败: {}", e))?;
+            connection
+                .sender
+                .send(message)
+                .map_err(|e| format!("发送消息失败: {}", e))?;
             Ok(())
         } else {
             Err(format!("连接 {} 不存在", connection_id))
@@ -360,7 +362,7 @@ impl ConnectionManager {
     pub async fn broadcast_message(
         &self,
         message: Message,
-        exclude_connection: Option<&ConnectionId>
+        exclude_connection: Option<&ConnectionId>,
     ) -> Result<usize, String> {
         let connections = self.connections.read().await;
         let mut success_count = 0;
@@ -391,12 +393,15 @@ impl ConnectionManager {
 
         // 收集唯一用户信息
         for connection in connections.values() {
-            users.entry(connection.user_id).or_insert_with(|| OnlineUser {
-                user_id: connection.user_id,
-                username: connection.username.clone(),
-                connected_at: connection.connected_at,
-                connection_count: 0,
-            }).connection_count += 1;
+            users
+                .entry(connection.user_id)
+                .or_insert_with(|| OnlineUser {
+                    user_id: connection.user_id,
+                    username: connection.username.clone(),
+                    connected_at: connection.connected_at,
+                    connection_count: 0,
+                })
+                .connection_count += 1;
         }
 
         users.into_values().collect()
@@ -431,15 +436,18 @@ impl ConnectionManager {
     pub async fn record_message_sent(
         &self,
         connection_id: &ConnectionId,
-        message_size: u64
+        message_size: u64,
     ) -> Result<(), String> {
         let connections = self.connections.read().await;
 
         if let Some(connection) = connections.get(connection_id) {
             connection.messages_sent.fetch_add(1, Ordering::Relaxed);
-            connection.bytes_transferred.fetch_add(message_size, Ordering::Relaxed);
+            connection
+                .bytes_transferred
+                .fetch_add(message_size, Ordering::Relaxed);
             self.total_messages_sent.fetch_add(1, Ordering::Relaxed);
-            self.total_bytes_transferred.fetch_add(message_size, Ordering::Relaxed);
+            self.total_bytes_transferred
+                .fetch_add(message_size, Ordering::Relaxed);
             Ok(())
         } else {
             Err(format!("连接 {} 不存在", connection_id))
@@ -457,15 +465,18 @@ impl ConnectionManager {
     pub async fn record_message_received(
         &self,
         connection_id: &ConnectionId,
-        message_size: u64
+        message_size: u64,
     ) -> Result<(), String> {
         let connections = self.connections.read().await;
 
         if let Some(connection) = connections.get(connection_id) {
             connection.messages_received.fetch_add(1, Ordering::Relaxed);
-            connection.bytes_transferred.fetch_add(message_size, Ordering::Relaxed);
+            connection
+                .bytes_transferred
+                .fetch_add(message_size, Ordering::Relaxed);
             self.total_messages_received.fetch_add(1, Ordering::Relaxed);
-            self.total_bytes_transferred.fetch_add(message_size, Ordering::Relaxed);
+            self.total_bytes_transferred
+                .fetch_add(message_size, Ordering::Relaxed);
             Ok(())
         } else {
             Err(format!("连接 {} 不存在", connection_id))
@@ -483,7 +494,9 @@ impl ConnectionManager {
         let connections = self.connections.read().await;
 
         if let Some(connection) = connections.get(connection_id) {
-            connection.reconnection_count.fetch_add(1, Ordering::Relaxed);
+            connection
+                .reconnection_count
+                .fetch_add(1, Ordering::Relaxed);
             self.total_reconnections.fetch_add(1, Ordering::Relaxed);
             Ok(())
         } else {
@@ -555,8 +568,8 @@ impl ConnectionManager {
 
         // 简化的消息吞吐量计算（实际应用中应该基于时间窗口）
         let messages_per_minute = if active_connections > 0 {
-            ((total_messages_sent + total_messages_received) as f64) /
-                ((total_connections as f64) / 60.0).max(1.0)
+            ((total_messages_sent + total_messages_received) as f64)
+                / ((total_connections as f64) / 60.0).max(1.0)
         } else {
             0.0
         };
@@ -622,7 +635,7 @@ impl ConnectionManager {
         ConnectionQuality {
             stability_score: average_stability_score,
             average_response_time: 50.0, // 简化实现，实际应该测量真实响应时间
-            error_rate: 2.0, // 简化实现，实际应该基于错误统计
+            error_rate: 2.0,             // 简化实现，实际应该基于错误统计
             heartbeat_loss_rate,
         }
     }
@@ -666,14 +679,14 @@ impl Clone for ConnectionManager {
             total_connections: AtomicU64::new(self.total_connections.load(Ordering::Relaxed)),
             total_messages_sent: AtomicU64::new(self.total_messages_sent.load(Ordering::Relaxed)),
             total_messages_received: AtomicU64::new(
-                self.total_messages_received.load(Ordering::Relaxed)
+                self.total_messages_received.load(Ordering::Relaxed),
             ),
             total_reconnections: AtomicU64::new(self.total_reconnections.load(Ordering::Relaxed)),
             total_bytes_transferred: AtomicU64::new(
-                self.total_bytes_transferred.load(Ordering::Relaxed)
+                self.total_bytes_transferred.load(Ordering::Relaxed),
             ),
             successful_connections: AtomicU64::new(
-                self.successful_connections.load(Ordering::Relaxed)
+                self.successful_connections.load(Ordering::Relaxed),
             ),
             failed_connections: AtomicU64::new(self.failed_connections.load(Ordering::Relaxed)),
         }
@@ -705,8 +718,8 @@ impl Default for ConnectionManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::sync::mpsc;
     use axum::extract::ws::Message;
+    use tokio::sync::mpsc;
 
     #[tokio::test]
     async fn test_connection_manager_basic_operations() {
@@ -718,13 +731,15 @@ mod tests {
         let username = "test_user".to_string();
 
         // 测试添加连接
-        let result = manager.add_connection(
-            connection_id,
-            user_id,
-            username.clone(),
-            sender,
-            Some("127.0.0.1".to_string())
-        ).await;
+        let result = manager
+            .add_connection(
+                connection_id,
+                user_id,
+                username.clone(),
+                sender,
+                Some("127.0.0.1".to_string()),
+            )
+            .await;
 
         assert!(result.is_ok());
         assert_eq!(manager.get_connection_count().await, 1);
@@ -756,8 +771,9 @@ mod tests {
                 user_id,
                 username.clone(),
                 sender1,
-                Some("192.168.1.1".to_string())
-            ).await
+                Some("192.168.1.1".to_string()),
+            )
+            .await
             .unwrap();
 
         manager
@@ -766,8 +782,9 @@ mod tests {
                 user_id,
                 username.clone(),
                 sender2,
-                Some("192.168.1.2".to_string())
-            ).await
+                Some("192.168.1.2".to_string()),
+            )
+            .await
             .unwrap();
 
         // 验证连接数和用户数
@@ -795,11 +812,16 @@ mod tests {
         let username = "test_user".to_string();
 
         // 添加连接
-        manager.add_connection(connection_id, user_id, username, sender, None).await.unwrap();
+        manager
+            .add_connection(connection_id, user_id, username, sender, None)
+            .await
+            .unwrap();
 
         // 发送消息
         let test_message = Message::Text("Hello, World!".into());
-        let result = manager.send_to_connection(&connection_id, test_message).await;
+        let result = manager
+            .send_to_connection(&connection_id, test_message)
+            .await;
         assert!(result.is_ok());
 
         // 验证消息被接收
@@ -808,10 +830,9 @@ mod tests {
 
         // 测试发送到不存在的连接
         let non_existent_id = Uuid::new_v4();
-        let result = manager.send_to_connection(
-            &non_existent_id,
-            Message::Text("Test".into())
-        ).await;
+        let result = manager
+            .send_to_connection(&non_existent_id, Message::Text("Test".into()))
+            .await;
         assert!(result.is_err());
     }
 
@@ -834,18 +855,23 @@ mod tests {
 
         // 添加连接
         manager
-            .add_connection(connection_id1, user_id1, "user1".to_string(), sender1, None).await
+            .add_connection(connection_id1, user_id1, "user1".to_string(), sender1, None)
+            .await
             .unwrap();
         manager
-            .add_connection(connection_id2, user_id2, "user2".to_string(), sender2, None).await
+            .add_connection(connection_id2, user_id2, "user2".to_string(), sender2, None)
+            .await
             .unwrap();
         manager
-            .add_connection(connection_id3, user_id3, "user3".to_string(), sender3, None).await
+            .add_connection(connection_id3, user_id3, "user3".to_string(), sender3, None)
+            .await
             .unwrap();
 
         // 广播消息，排除第一个连接
         let broadcast_msg = Message::Text("Broadcast message".into());
-        let result = manager.broadcast_message(broadcast_msg, Some(&connection_id1)).await;
+        let result = manager
+            .broadcast_message(broadcast_msg, Some(&connection_id1))
+            .await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 2); // 应该发送给2个连接
 
@@ -869,13 +895,28 @@ mod tests {
         let (sender2, _) = mpsc::unbounded_channel();
 
         manager
-            .add_connection(Uuid::new_v4(), user_id1, "user1".to_string(), sender1a, None).await
+            .add_connection(
+                Uuid::new_v4(),
+                user_id1,
+                "user1".to_string(),
+                sender1a,
+                None,
+            )
+            .await
             .unwrap();
         manager
-            .add_connection(Uuid::new_v4(), user_id1, "user1".to_string(), sender1b, None).await
+            .add_connection(
+                Uuid::new_v4(),
+                user_id1,
+                "user1".to_string(),
+                sender1b,
+                None,
+            )
+            .await
             .unwrap();
         manager
-            .add_connection(Uuid::new_v4(), user_id2, "user2".to_string(), sender2, None).await
+            .add_connection(Uuid::new_v4(), user_id2, "user2".to_string(), sender2, None)
+            .await
             .unwrap();
 
         let online_users = manager.get_online_users().await;
@@ -902,7 +943,14 @@ mod tests {
 
         // 添加连接
         manager
-            .add_connection(connection_id, user_id, "test_user".to_string(), sender, None).await
+            .add_connection(
+                connection_id,
+                user_id,
+                "test_user".to_string(),
+                sender,
+                None,
+            )
+            .await
             .unwrap();
 
         // 更新活跃时间
@@ -945,8 +993,9 @@ mod tests {
                 user_id1,
                 "user1".to_string(),
                 sender1,
-                Some("192.168.1.1".to_string())
-            ).await
+                Some("192.168.1.1".to_string()),
+            )
+            .await
             .unwrap();
 
         manager
@@ -955,8 +1004,9 @@ mod tests {
                 user_id2,
                 "user2".to_string(),
                 sender2,
-                Some("192.168.1.2".to_string())
-            ).await
+                Some("192.168.1.2".to_string()),
+            )
+            .await
             .unwrap();
 
         // 测试连接后的统计
@@ -967,9 +1017,18 @@ mod tests {
         assert_eq!(stats.connection_success_rate, 100.0);
 
         // 测试消息统计
-        manager.record_message_sent(&connection_id1, 100).await.unwrap();
-        manager.record_message_received(&connection_id1, 150).await.unwrap();
-        manager.record_message_sent(&connection_id2, 200).await.unwrap();
+        manager
+            .record_message_sent(&connection_id1, 100)
+            .await
+            .unwrap();
+        manager
+            .record_message_received(&connection_id1, 150)
+            .await
+            .unwrap();
+        manager
+            .record_message_sent(&connection_id2, 200)
+            .await
+            .unwrap();
 
         let stats = manager.get_websocket_stats().await;
         assert_eq!(stats.total_messages_sent, 2);
@@ -992,7 +1051,14 @@ mod tests {
         let user_id = Uuid::new_v4();
 
         manager
-            .add_connection(connection_id, user_id, "test_user".to_string(), sender, None).await
+            .add_connection(
+                connection_id,
+                user_id,
+                "test_user".to_string(),
+                sender,
+                None,
+            )
+            .await
             .unwrap();
 
         // 获取连接质量指标
@@ -1010,11 +1076,17 @@ mod tests {
         manager.record_reconnection(&connection_id).await.unwrap();
         let quality_after_reconnect = manager.get_connection_quality().await;
 
-        println!("重连后稳定性评分: {}", quality_after_reconnect.stability_score);
+        println!(
+            "重连后稳定性评分: {}",
+            quality_after_reconnect.stability_score
+        );
 
         // 重连后稳定性评分应该降低（基于算法：100.0 - reconnections * 10.0）
         // 1次重连应该使评分降低10分
-        assert_eq!(quality_after_reconnect.stability_score, quality.stability_score - 10.0);
+        assert_eq!(
+            quality_after_reconnect.stability_score,
+            quality.stability_score - 10.0
+        );
     }
 
     /// 【任务12.7测试】测试消息吞吐量统计
@@ -1035,13 +1107,29 @@ mod tests {
         let user_id = Uuid::new_v4();
 
         manager
-            .add_connection(connection_id, user_id, "test_user".to_string(), sender, None).await
+            .add_connection(
+                connection_id,
+                user_id,
+                "test_user".to_string(),
+                sender,
+                None,
+            )
+            .await
             .unwrap();
 
         // 记录一些消息
-        manager.record_message_sent(&connection_id, 100).await.unwrap();
-        manager.record_message_sent(&connection_id, 200).await.unwrap();
-        manager.record_message_received(&connection_id, 150).await.unwrap();
+        manager
+            .record_message_sent(&connection_id, 100)
+            .await
+            .unwrap();
+        manager
+            .record_message_sent(&connection_id, 200)
+            .await
+            .unwrap();
+        manager
+            .record_message_received(&connection_id, 150)
+            .await
+            .unwrap();
 
         let throughput = manager.get_message_throughput().await;
         assert!(throughput.messages_per_second > 0.0);
@@ -1061,7 +1149,14 @@ mod tests {
         let user_id = Uuid::new_v4();
 
         manager
-            .add_connection(connection_id, user_id, "test_user".to_string(), sender, None).await
+            .add_connection(
+                connection_id,
+                user_id,
+                "test_user".to_string(),
+                sender,
+                None,
+            )
+            .await
             .unwrap();
 
         // 更新心跳
@@ -1085,7 +1180,14 @@ mod tests {
         let user_id = Uuid::new_v4();
 
         manager
-            .add_connection(connection_id, user_id, "test_user".to_string(), sender, None).await
+            .add_connection(
+                connection_id,
+                user_id,
+                "test_user".to_string(),
+                sender,
+                None,
+            )
+            .await
             .unwrap();
 
         // 测试消息发送记录

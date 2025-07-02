@@ -6,13 +6,13 @@
 //! - 批量处理和工作线程
 //! - 统计信息监控
 
+use chrono::Utc;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use uuid::Uuid;
-use chrono::Utc;
 
-use axum_tutorial::app::service::{ ConnectionManager, MessageDistributor, MessagePriority };
-use axum_tutorial::app::model::chat::{ ServerMessage, UserInfo };
+use axum_tutorial::app::model::chat::{ServerMessage, UserInfo};
+use axum_tutorial::app::service::{ConnectionManager, MessageDistributor, MessagePriority};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -21,13 +21,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 创建连接管理器和消息分发器
     let connection_manager = Arc::new(ConnectionManager::new());
-    let message_distributor = Arc::new(
-        MessageDistributor::new(
-            connection_manager.clone(),
-            Some(5), // 批量处理大小
-            Some(2) // 工作线程数量
-        )
-    );
+    let message_distributor = Arc::new(MessageDistributor::new(
+        connection_manager.clone(),
+        Some(5), // 批量处理大小
+        Some(2), // 工作线程数量
+    ));
 
     println!("✅ 连接管理器和消息分发器已创建");
 
@@ -39,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let users = vec![
         ("Alice", "alice@example.com"),
         ("Bob", "bob@example.com"),
-        ("Charlie", "charlie@example.com")
+        ("Charlie", "charlie@example.com"),
     ];
 
     let mut user_connections = Vec::new();
@@ -49,21 +47,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let user_id = Uuid::new_v4();
         let (sender, receiver) = mpsc::unbounded_channel();
 
-        connection_manager.add_connection(
-            connection_id,
-            user_id,
-            username.to_string(),
-            sender,
-            Some("127.0.0.1".to_string())
-        ).await?;
+        connection_manager
+            .add_connection(
+                connection_id,
+                user_id,
+                username.to_string(),
+                sender,
+                Some("127.0.0.1".to_string()),
+            )
+            .await?;
 
         user_connections.push((connection_id, user_id, username.to_string(), receiver));
         println!("👤 用户 {} 已连接 (ID: {})", username, user_id);
     }
 
     println!("\n📊 当前连接状态:");
-    println!("   总连接数: {}", connection_manager.get_connection_count().await);
-    println!("   唯一用户数: {}", connection_manager.get_unique_user_count().await);
+    println!(
+        "   总连接数: {}",
+        connection_manager.get_connection_count().await
+    );
+    println!(
+        "   唯一用户数: {}",
+        connection_manager.get_unique_user_count().await
+    );
 
     // 演示1: 全员广播消息
     println!("\n🔊 演示1: 全员广播消息");
@@ -77,15 +83,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let broadcast_message = ServerMessage::new_text(
         "大家好！这是一条全员广播消息！".to_string(),
-        alice_user_info
+        alice_user_info,
     );
 
-    message_distributor.broadcast_to_all(
-        broadcast_message,
-        true, // 排除发送者
-        Some(user_connections[0].0), // Alice的连接ID
-        Some(MessagePriority::Normal)
-    ).await?;
+    message_distributor
+        .broadcast_to_all(
+            broadcast_message,
+            true,                        // 排除发送者
+            Some(user_connections[0].0), // Alice的连接ID
+            Some(MessagePriority::Normal),
+        )
+        .await?;
 
     // 等待消息处理
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -102,16 +110,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         connected_at: Some(Utc::now()),
     };
 
-    let direct_message = ServerMessage::new_text(
-        "嗨 Charlie，这是一条私聊消息！".to_string(),
-        bob_user_info
-    );
+    let direct_message =
+        ServerMessage::new_text("嗨 Charlie，这是一条私聊消息！".to_string(), bob_user_info);
 
-    message_distributor.send_direct_message(
-        direct_message,
-        user_connections[2].1, // Charlie的用户ID
-        Some(MessagePriority::High)
-    ).await?;
+    message_distributor
+        .send_direct_message(
+            direct_message,
+            user_connections[2].1, // Charlie的用户ID
+            Some(MessagePriority::High),
+        )
+        .await?;
 
     // 等待消息处理
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -122,11 +130,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📢 演示3: 系统消息");
     println!("{}", "-".repeat(30));
 
-    let system_message = ServerMessage::new_system(
-        "系统维护通知：服务器将在10分钟后重启".to_string()
-    );
+    let system_message =
+        ServerMessage::new_system("系统维护通知：服务器将在10分钟后重启".to_string());
 
-    message_distributor.send_system_message(system_message).await?;
+    message_distributor
+        .send_system_message(system_message)
+        .await?;
 
     // 等待消息处理
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -142,16 +151,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         (MessagePriority::Low, "低优先级消息"),
         (MessagePriority::Critical, "紧急消息！"),
         (MessagePriority::Normal, "普通消息"),
-        (MessagePriority::High, "高优先级消息")
+        (MessagePriority::High, "高优先级消息"),
     ];
 
     for (priority, content) in priorities {
         let message = ServerMessage::new_system(content.to_string());
-        message_distributor.send_direct_message(
-            message,
-            user_connections[0].1, // 发送给Alice
-            Some(priority)
-        ).await?;
+        message_distributor
+            .send_direct_message(
+                message,
+                user_connections[0].1, // 发送给Alice
+                Some(priority),
+            )
+            .await?;
         println!("📤 已提交 {:?} 优先级消息: {}", priority, content);
     }
 
@@ -181,9 +192,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for user in online_users {
         println!(
             "   - {} (ID: {}, 连接数: {})",
-            user.username,
-            user.user_id,
-            user.connection_count
+            user.username, user.user_id, user.connection_count
         );
     }
 

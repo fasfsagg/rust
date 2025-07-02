@@ -17,16 +17,10 @@
 //! - `update`: 更新一个现有任务。
 //! - `delete`: 删除一个任务。
 
-use migration::task_entity::{ ActiveModel, Entity, Model };
+use migration::task_entity::{ActiveModel, Entity, Model};
 use sea_orm::{
-    prelude::Uuid,
-    ActiveModelTrait,
-    ColumnTrait,
-    DatabaseConnection,
-    DbErr,
-    DeleteResult,
-    EntityTrait,
-    QueryFilter,
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, DbErr, DeleteResult, EntityTrait,
+    QueryFilter, prelude::Uuid,
 };
 use std::sync::Arc;
 
@@ -112,7 +106,8 @@ impl TaskRepositoryContract for TaskRepository {
     async fn find_all_by_user(&self, user_id: Uuid) -> Result<Vec<Model>, DbErr> {
         Entity::find()
             .filter(migration::task_entity::Column::UserId.eq(user_id))
-            .all(self.db.as_ref()).await
+            .all(self.db.as_ref())
+            .await
     }
 
     /// 根据 ID 查询单个任务。
@@ -139,7 +134,8 @@ impl TaskRepositoryContract for TaskRepository {
     async fn find_by_id_and_user(&self, id: Uuid, user_id: Uuid) -> Result<Option<Model>, DbErr> {
         Entity::find_by_id(id)
             .filter(migration::task_entity::Column::UserId.eq(user_id))
-            .one(self.db.as_ref()).await
+            .one(self.db.as_ref())
+            .await
     }
 
     /// 创建一个新任务。
@@ -198,6 +194,7 @@ impl TaskRepositoryContract for TaskRepository {
         Entity::delete_many()
             .filter(migration::task_entity::Column::Id.eq(id))
             .filter(migration::task_entity::Column::UserId.eq(user_id))
-            .exec(self.db.as_ref()).await
+            .exec(self.db.as_ref())
+            .await
     }
 }

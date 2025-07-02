@@ -41,7 +41,10 @@
 // --- 导入依赖 ---
 // `axum::routing::{...}`: 导入 Axum 用于定义路由和 HTTP 方法处理器的函数。
 // `Router`: Axum 的核心路由构建器类型。
-use axum::{ routing::{ get, post, put, delete }, Router };
+use axum::{
+    Router,
+    routing::{delete, get, post, put},
+};
 // `tower_http::services::ServeDir`: 导入 Tower HTTP 库提供的服务，用于从目录提供静态文件。
 use tower_http::services::ServeDir;
 
@@ -49,36 +52,36 @@ use tower_http::services::ServeDir;
 // 导入在 `src/app/controller/` 模块中定义的处理函数。
 // 这是路由层与控制器层的连接点。
 use crate::app::controller::{
-    create_task, // 处理 POST /api/tasks
-    delete_task, // 处理 DELETE /api/tasks/:id
-    get_all_tasks, // 处理 GET /api/tasks
-    get_task_by_id, // 处理 GET /api/tasks/:id
-    update_task, // 处理 PUT /api/tasks/:id
-    get_online_users, // 【任务7实现】处理 GET /api/online-users
-    ws_handler, // 处理 GET /ws
+    create_task,       // 处理 POST /api/tasks
+    deep_health_check, // 处理 GET /api/health/deep
+    delete_task,       // 处理 DELETE /api/tasks/:id
+    // Favicon处理函数
+    favicon_handler,             // 处理 GET /favicon.ico
+    get_all_tasks,               // 处理 GET /api/tasks
+    get_async_performance_stats, // 【任务13.2新增】处理 GET /api/performance/async-stats
+    get_chat_room_messages,      // 处理 GET /api/messages/chat-room/:id
+    get_detailed_metrics,        // 处理 GET /api/performance/metrics
+    get_online_users,            // 【任务7实现】处理 GET /api/online-users
+    // 性能监控相关处理函数
+    get_performance_stats,  // 处理 GET /api/performance/stats
+    get_prometheus_metrics, // 处理 GET /api/performance/prometheus
+    // 【任务12.8实现】系统资源监控和告警阈值检查处理函数
+    get_system_alerts,         // 处理 GET /api/monitoring/alerts
+    get_task_by_id,            // 处理 GET /api/tasks/:id
+    get_websocket_connections, // 处理 GET /api/websocket/connections
+    get_websocket_metrics,     // 处理 GET /api/websocket/metrics
+    // 【任务12.7实现】WebSocket监控相关处理函数
+    get_websocket_stats, // 处理 GET /api/websocket/stats
+    health_check,        // 处理 GET /api/performance/health
+    liveness_check,      // 处理 GET /api/performance/live
     // 认证相关处理函数
-    login_handler, // 处理 POST /api/auth/login
+    login_handler,    // 处理 POST /api/auth/login
+    readiness_check,  // 处理 GET /api/performance/ready
     register_handler, // 处理 POST /api/auth/register
     // 消息相关处理函数
     search_messages, // 处理 GET /api/messages/search
-    get_chat_room_messages, // 处理 GET /api/messages/chat-room/:id
-    // 性能监控相关处理函数
-    get_performance_stats, // 处理 GET /api/performance/stats
-    get_async_performance_stats, // 【任务13.2新增】处理 GET /api/performance/async-stats
-    health_check, // 处理 GET /api/performance/health
-    get_detailed_metrics, // 处理 GET /api/performance/metrics
-    get_prometheus_metrics, // 处理 GET /api/performance/prometheus
-    readiness_check, // 处理 GET /api/performance/ready
-    liveness_check, // 处理 GET /api/performance/live
-    deep_health_check, // 处理 GET /api/health/deep
-    // Favicon处理函数
-    favicon_handler, // 处理 GET /favicon.ico
-    // 【任务12.7实现】WebSocket监控相关处理函数
-    get_websocket_stats, // 处理 GET /api/websocket/stats
-    get_websocket_connections, // 处理 GET /api/websocket/connections
-    get_websocket_metrics, // 处理 GET /api/websocket/metrics
-    // 【任务12.8实现】系统资源监控和告警阈值检查处理函数
-    get_system_alerts, // 处理 GET /api/monitoring/alerts
+    update_task,     // 处理 PUT /api/tasks/:id
+    ws_handler,      // 处理 GET /ws
 };
 // 导入在 `src/startup.rs` 中定义的唯一的共享应用状态 `AppState`。
 use crate::startup::AppState;
@@ -153,7 +156,9 @@ pub fn create_routes(app_state: AppState) -> Router {
         // --- 应用JWT认证中间件到任务路由 ---
         // 使用 `.route_layer()` 将JWT认证中间件应用到所有上述任务路由
         // 这确保了只有携带有效JWT令牌的请求才能访问任务相关的API端点
-        .route_layer(middleware::from_fn(create_jwt_auth_middleware(app_state.jwt_secret.clone())))
+        .route_layer(middleware::from_fn(create_jwt_auth_middleware(
+            app_state.jwt_secret.clone(),
+        )))
         // --- 注入共享状态 ---
         // `.with_state(app_state.clone())`: 将 `app_state` 注入到上面定义的所有 API 路由的处理函数中。
         // **重要**: 因为 `AppState` 通常包含 `Arc<...>` 类型（如我们的 `Db`），所以克隆 `app_state` 是一个廉价的操作
@@ -222,7 +227,7 @@ pub fn create_routes(app_state: AppState) -> Router {
         // 获取当前的错误恢复状态，包括重试统计、断路器状态、降级状态等。
         .route(
             "/error-recovery/status",
-            get(crate::app::middleware::error_recovery_middleware::error_recovery_status_handler)
+            get(crate::app::middleware::error_recovery_middleware::error_recovery_status_handler),
         )
         // 注入应用状态，使处理函数可以访问错误恢复管理器等资源
         .with_state(app_state.clone());

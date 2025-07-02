@@ -5,7 +5,7 @@
 //! 同时也可以被主应用 `axum-tutorial` 导入，实现代码的复用和单向依赖。
 
 use sea_orm::entity::prelude::*;
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 
 /// `Model` 结构体代表了 `tasks` 表中的一行数据。
 ///

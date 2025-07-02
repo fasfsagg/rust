@@ -6,10 +6,13 @@
 #[cfg(test)]
 mod tests {
     use super::super::message_repository::*;
-    use migration::{ message_entity::{ MessageStatus, MessageType }, MigratorTrait };
-    use sea_orm::{ Database, DatabaseConnection, DbErr };
-    use uuid::Uuid;
     use chrono::Utc;
+    use migration::{
+        MigratorTrait,
+        message_entity::{MessageStatus, MessageType},
+    };
+    use sea_orm::{Database, DatabaseConnection, DbErr};
+    use uuid::Uuid;
 
     /// 创建内存数据库连接用于测试
     async fn setup_test_db() -> Result<DatabaseConnection, DbErr> {
@@ -47,8 +50,12 @@ mod tests {
 
         // 插入用户
         use sea_orm::EntityTrait;
-        migration::user_entity::Entity::insert(user1_active).exec(repo.db()).await?;
-        migration::user_entity::Entity::insert(user2_active).exec(repo.db()).await?;
+        migration::user_entity::Entity::insert(user1_active)
+            .exec(repo.db())
+            .await?;
+        migration::user_entity::Entity::insert(user2_active)
+            .exec(repo.db())
+            .await?;
 
         // 创建聊天室数据
         let chat_room_active = migration::chat_room_entity::ActiveModel {
@@ -66,7 +73,9 @@ mod tests {
         };
 
         // 插入聊天室
-        migration::chat_room_entity::Entity::insert(chat_room_active).exec(repo.db()).await?;
+        migration::chat_room_entity::Entity::insert(chat_room_active)
+            .exec(repo.db())
+            .await?;
 
         let mut message_ids = Vec::new();
 
@@ -111,7 +120,7 @@ mod tests {
                 user1_id,
                 chat_room_id,
                 now - chrono::Duration::minutes(5),
-            )
+            ),
         ];
 
         for (content, msg_type, status, sender_id, room_id, created_at) in messages {
@@ -141,11 +150,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_messages_by_keyword() {
-        let db = setup_test_db().await.expect("Failed to setup test database");
+        let db = setup_test_db()
+            .await
+            .expect("Failed to setup test database");
         let repo = MessageRepository::new(db);
 
         // 创建测试数据
-        create_test_messages(&repo).await.expect("Failed to create test messages");
+        create_test_messages(&repo)
+            .await
+            .expect("Failed to create test messages");
 
         // 测试关键词搜索
         let params = MessagePaginationParams {
@@ -155,7 +168,8 @@ mod tests {
         };
 
         let result = repo
-            .search_messages("Hello".to_string(), params, None).await
+            .search_messages("Hello".to_string(), params, None)
+            .await
             .expect("Failed to search messages");
 
         assert_eq!(result.messages.len(), 1);
@@ -165,11 +179,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_messages_with_filter() {
-        let db = setup_test_db().await.expect("Failed to setup test database");
+        let db = setup_test_db()
+            .await
+            .expect("Failed to setup test database");
         let repo = MessageRepository::new(db);
 
         // 创建测试数据
-        create_test_messages(&repo).await.expect("Failed to create test messages");
+        create_test_messages(&repo)
+            .await
+            .expect("Failed to create test messages");
 
         // 测试带过滤器的搜索
         let filter = MessageFilter {
@@ -185,7 +203,8 @@ mod tests {
         };
 
         let result = repo
-            .search_messages("Hello".to_string(), params, Some(filter)).await
+            .search_messages("Hello".to_string(), params, Some(filter))
+            .await
             .expect("Failed to search messages with filter");
 
         assert_eq!(result.messages.len(), 1);
@@ -195,17 +214,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_find_by_chat_room_with_keyword_filter() {
-        let db = setup_test_db().await.expect("Failed to setup test database");
+        let db = setup_test_db()
+            .await
+            .expect("Failed to setup test database");
         let repo = MessageRepository::new(db);
 
         // 创建测试数据
-        let message_ids = create_test_messages(&repo).await.expect(
-            "Failed to create test messages"
-        );
+        let message_ids = create_test_messages(&repo)
+            .await
+            .expect("Failed to create test messages");
 
         // 获取第一条消息的聊天室ID
         let first_message = repo
-            .find_by_id(message_ids[0]).await
+            .find_by_id(message_ids[0])
+            .await
             .expect("Failed to find message")
             .expect("Message not found");
         let chat_room_id = first_message.chat_room_id;
@@ -223,7 +245,8 @@ mod tests {
         };
 
         let result = repo
-            .find_by_chat_room(chat_room_id, params, Some(filter)).await
+            .find_by_chat_room(chat_room_id, params, Some(filter))
+            .await
             .expect("Failed to find messages by chat room");
 
         assert_eq!(result.messages.len(), 1);
@@ -232,11 +255,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_pagination() {
-        let db = setup_test_db().await.expect("Failed to setup test database");
+        let db = setup_test_db()
+            .await
+            .expect("Failed to setup test database");
         let repo = MessageRepository::new(db);
 
         // 创建测试数据
-        create_test_messages(&repo).await.expect("Failed to create test messages");
+        create_test_messages(&repo)
+            .await
+            .expect("Failed to create test messages");
 
         // 测试分页
         let params = MessagePaginationParams {
@@ -270,11 +297,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_date_range_filter() {
-        let db = setup_test_db().await.expect("Failed to setup test database");
+        let db = setup_test_db()
+            .await
+            .expect("Failed to setup test database");
         let repo = MessageRepository::new(db);
 
         // 创建测试数据
-        create_test_messages(&repo).await.expect("Failed to create test messages");
+        create_test_messages(&repo)
+            .await
+            .expect("Failed to create test messages");
 
         let now = Utc::now();
         let filter = MessageFilter {
@@ -290,7 +321,8 @@ mod tests {
         };
 
         let result = repo
-            .search_messages("e".to_string(), params, Some(filter)).await
+            .search_messages("e".to_string(), params, Some(filter))
+            .await
             .expect("Failed to search with date filter");
 
         // 应该只返回最近1小时内的消息
@@ -303,11 +335,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_message_type_filter() {
-        let db = setup_test_db().await.expect("Failed to setup test database");
+        let db = setup_test_db()
+            .await
+            .expect("Failed to setup test database");
         let repo = MessageRepository::new(db);
 
         // 创建测试数据
-        create_test_messages(&repo).await.expect("Failed to create test messages");
+        create_test_messages(&repo)
+            .await
+            .expect("Failed to create test messages");
 
         let filter = MessageFilter {
             message_type: Some(MessageType::Image),
@@ -321,7 +357,8 @@ mod tests {
         };
 
         let result = repo
-            .search_messages("image".to_string(), params, Some(filter)).await
+            .search_messages("image".to_string(), params, Some(filter))
+            .await
             .expect("Failed to search with message type filter");
 
         assert_eq!(result.messages.len(), 1);

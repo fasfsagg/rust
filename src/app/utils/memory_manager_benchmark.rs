@@ -3,11 +3,11 @@
 //! 【功能】: 验证内存管理器的性能优化效果
 //! 【目标】: 测量缓存命中率、内存使用量、响应时间等关键指标
 
-use std::time::{ Duration, Instant };
+use std::time::{Duration, Instant};
 use tokio::time::sleep;
-use tracing::{ info, warn };
+use tracing::{info, warn};
 
-use super::memory_manager::{ MemoryManager, MemoryManagerConfig, L1MemoryCache };
+use super::memory_manager::{L1MemoryCache, MemoryManager, MemoryManagerConfig};
 
 /// 内存管理器性能基准测试
 pub struct MemoryManagerBenchmark {
@@ -33,9 +33,7 @@ impl MemoryManagerBenchmark {
 
         let memory_manager = MemoryManager::new(config);
 
-        Self {
-            memory_manager,
-        }
+        Self { memory_manager }
     }
 
     /// 运行L1缓存性能测试
@@ -303,12 +301,24 @@ mod tests {
         let result = benchmark.run_comprehensive_benchmark().await;
 
         // 验证性能指标
-        assert!(result.cache_benchmark.hit_rate > 50.0, "缓存命中率应该大于50%");
-        assert!(result.object_pool_benchmark.hit_rate > 30.0, "对象池命中率应该大于30%");
-        assert!(result.memory_pool_benchmark.hit_rate > 20.0, "内存池命中率应该大于20%");
+        assert!(
+            result.cache_benchmark.hit_rate > 50.0,
+            "缓存命中率应该大于50%"
+        );
+        assert!(
+            result.object_pool_benchmark.hit_rate > 30.0,
+            "对象池命中率应该大于30%"
+        );
+        assert!(
+            result.memory_pool_benchmark.hit_rate > 20.0,
+            "内存池命中率应该大于20%"
+        );
 
         // 验证操作性能
-        assert!(result.cache_benchmark.operations_per_second > 100.0, "缓存操作应该大于100 ops/s");
+        assert!(
+            result.cache_benchmark.operations_per_second > 100.0,
+            "缓存操作应该大于100 ops/s"
+        );
         assert!(
             result.object_pool_benchmark.operations_per_second > 50.0,
             "对象池操作应该大于50 ops/s"
@@ -320,8 +330,14 @@ mod tests {
 
         println!("基准测试结果:");
         println!("缓存命中率: {:.2}%", result.cache_benchmark.hit_rate);
-        println!("对象池命中率: {:.2}%", result.object_pool_benchmark.hit_rate);
-        println!("内存池命中率: {:.2}%", result.memory_pool_benchmark.hit_rate);
+        println!(
+            "对象池命中率: {:.2}%",
+            result.object_pool_benchmark.hit_rate
+        );
+        println!(
+            "内存池命中率: {:.2}%",
+            result.memory_pool_benchmark.hit_rate
+        );
         println!("总体健康状态: {}", result.health_status.is_healthy);
     }
 }

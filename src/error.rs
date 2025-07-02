@@ -46,15 +46,16 @@
 //                  翻译成外部用户和客户端能理解的 HTTP 错误（如"404 Not Found"和一个 JSON 说明）。
 
 // --- 导入依赖 ---
-use axum::{ // 导入 Axum 框架相关的类型
-    http::StatusCode, // 用于表示 HTTP 状态码 (e.g., 404, 500)
-    response::{ IntoResponse, Response }, // `IntoResponse` 是将类型转换为 HTTP 响应的核心 trait；`Response` 是 HTTP 响应类型
+use axum::{
     Json, // 用于将数据序列化为 JSON 响应体
+    // 导入 Axum 框架相关的类型
+    http::StatusCode,                   // 用于表示 HTTP 状态码 (e.g., 404, 500)
+    response::{IntoResponse, Response}, // `IntoResponse` 是将类型转换为 HTTP 响应的核心 trait；`Response` 是 HTTP 响应类型
 };
-use serde_json::{ json, Value }; // 导入 `serde_json` 用于创建 JSON 值 (`Value`)
-use uuid::Uuid; // 导入 UUID 类型，用于错误消息
 use sea_orm::DbErr; // 导入 SeaORM 的数据库错误类型
-use tracing_error::{ SpanTrace, ExtractSpanTrace }; // 导入 tracing-error 用于错误上下文跟踪
+use serde_json::{Value, json}; // 导入 `serde_json` 用于创建 JSON 值 (`Value`)
+use tracing_error::{ExtractSpanTrace, SpanTrace};
+use uuid::Uuid; // 导入 UUID 类型，用于错误消息 // 导入 tracing-error 用于错误上下文跟踪
 
 // --- 自定义错误枚举 ---
 
@@ -157,37 +158,56 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
             // 如果是任务未找到错误，返回 404 和标准化的消息。
-            AppError::TaskNotFound(id) =>
-                (StatusCode::NOT_FOUND, format!("未找到ID为 {} 的任务", id)),
+            AppError::TaskNotFound(id) => {
+                (StatusCode::NOT_FOUND, format!("未找到ID为 {} 的任务", id))
+            }
             // 如果是数据库错误，记录到日志（重要！），并返回通用的 500 错误。
             // 注意：为了安全，不应将原始的 `db_err` 细节暴露给客户端。
             AppError::DbErr(db_err) => {
                 // 在服务器端打印详细的错误日志以供调试。
                 eprintln!("[DB_ERROR] 数据库操作失败: {:?}", db_err);
-                (StatusCode::INTERNAL_SERVER_ERROR, "服务器内部错误".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "服务器内部错误".to_string(),
+                )
             }
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
 
             // --- 认证相关错误处理 ---
-            AppError::UserAlreadyExists(username) =>
-                (StatusCode::CONFLICT, format!("用户名 '{}' 已存在", username)),
-            AppError::InvalidCredentials =>
-                (StatusCode::UNAUTHORIZED, "用户名或密码错误".to_string()),
+            AppError::UserAlreadyExists(username) => (
+                StatusCode::CONFLICT,
+                format!("用户名 '{}' 已存在", username),
+            ),
+            AppError::InvalidCredentials => {
+                (StatusCode::UNAUTHORIZED, "用户名或密码错误".to_string())
+            }
             AppError::PasswordHashError(msg) => {
                 eprintln!("[PASSWORD_HASH_ERROR] 密码哈希处理失败: {}", msg);
-                (StatusCode::INTERNAL_SERVER_ERROR, "服务器内部错误".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "服务器内部错误".to_string(),
+                )
             }
             AppError::TokenGenerationError(msg) => {
                 eprintln!("[TOKEN_ERROR] JWT令牌生成失败: {}", msg);
-                (StatusCode::INTERNAL_SERVER_ERROR, "服务器内部错误".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "服务器内部错误".to_string(),
+                )
             }
-            AppError::InvalidToken(msg) =>
-                (StatusCode::UNAUTHORIZED, format!("无效的令牌: {}", msg)),
-            AppError::ValidationError(msg) =>
-                (StatusCode::BAD_REQUEST, format!("输入验证错误: {}", msg)),
+            AppError::InvalidToken(msg) => {
+                (StatusCode::UNAUTHORIZED, format!("无效的令牌: {}", msg))
+            }
+            AppError::ValidationError(msg) => {
+                (StatusCode::BAD_REQUEST, format!("输入验证错误: {}", msg))
+            }
 
             // 处理带有 SpanTrace 的错误
-            AppError::TracedError { message, span_trace, status_code } => {
+            AppError::TracedError {
+                message,
+                span_trace,
+                status_code,
+            } => {
                 // 记录详细的错误信息，包括 span 跟踪
                 tracing::error!(
                     error_message = %message,
@@ -199,8 +219,7 @@ impl IntoResponse for AppError {
             }
         };
 
-        let body: Value =
-            json!({
+        let body: Value = json!({
             "error": {
                 "message": message,
                 "code": status.as_u16()
@@ -367,13 +386,15 @@ mod tests {
 
     #[test]
     fn test_app_error_with_span_trace() {
-        let error = AppError::with_span_trace(
-            "测试错误".to_string(),
-            StatusCode::INTERNAL_SERVER_ERROR
-        );
+        let error =
+            AppError::with_span_trace("测试错误".to_string(), StatusCode::INTERNAL_SERVER_ERROR);
 
         match error {
-            AppError::TracedError { message, status_code, .. } => {
+            AppError::TracedError {
+                message,
+                status_code,
+                ..
+            } => {
                 assert_eq!(message, "测试错误");
                 assert_eq!(status_code, StatusCode::INTERNAL_SERVER_ERROR);
             }
@@ -387,7 +408,11 @@ mod tests {
         let app_error = AppError::wrap_with_span_trace(io_error, StatusCode::NOT_FOUND);
 
         match app_error {
-            AppError::TracedError { message, status_code, .. } => {
+            AppError::TracedError {
+                message,
+                status_code,
+                ..
+            } => {
                 assert!(message.contains("文件未找到"));
                 assert_eq!(status_code, StatusCode::NOT_FOUND);
             }
@@ -397,10 +422,8 @@ mod tests {
 
     #[test]
     fn test_extract_span_trace() {
-        let traced_error = AppError::with_span_trace(
-            "测试错误".to_string(),
-            StatusCode::INTERNAL_SERVER_ERROR
-        );
+        let traced_error =
+            AppError::with_span_trace("测试错误".to_string(), StatusCode::INTERNAL_SERVER_ERROR);
 
         // 测试 ExtractSpanTrace trait
         assert!(traced_error.span_trace().is_some());
@@ -421,14 +444,19 @@ mod tests {
 
     #[test]
     fn test_instrument_result_error() {
-        let error_result: std::result::Result<String, io::Error> = Err(
-            io::Error::new(io::ErrorKind::PermissionDenied, "权限被拒绝")
-        );
+        let error_result: std::result::Result<String, io::Error> = Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "权限被拒绝",
+        ));
         let instrumented = error_result.in_current_span(StatusCode::FORBIDDEN);
 
         assert!(instrumented.is_err());
         match instrumented.unwrap_err() {
-            AppError::TracedError { message, status_code, .. } => {
+            AppError::TracedError {
+                message,
+                status_code,
+                ..
+            } => {
                 assert!(message.contains("权限被拒绝"));
                 assert_eq!(status_code, StatusCode::FORBIDDEN);
             }

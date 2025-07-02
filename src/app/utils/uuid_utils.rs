@@ -2,7 +2,7 @@
 //!
 //! 提供统一的 UUID 解析和验证功能，避免在控制器中重复相同的逻辑。
 
-use crate::error::{ AppError, Result };
+use crate::error::{AppError, Result};
 use sea_orm::prelude::Uuid;
 
 /// 解析字符串为 UUID

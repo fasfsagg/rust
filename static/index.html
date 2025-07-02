@@ -715,8 +715,27 @@
                 </div>
             </div>
 
-            <!-- 保留原有的 WebSocket 消息记录区域作为备用 -->
-            <div id="webSocketMessages" style="display: none;"></div>
+            <!-- WebSocket 测试区域 - 用于E2E测试 -->
+            <div class="websocket-test-area" style="margin-top: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 4px; background-color: #f9f9f9;">
+                <h3>WebSocket 连接测试</h3>
+
+                <!-- WebSocket 连接状态显示 -->
+                <div style="margin-bottom: 10px;">
+                    <span>连接状态: </span>
+                    <span id="wsStatus" class="disconnected">未连接</span>
+                </div>
+
+                <!-- WebSocket 消息发送表单 -->
+                <form id="wsSendForm" style="margin-bottom: 10px;">
+                    <input type="text" id="wsMessage" placeholder="输入WebSocket消息..." style="width: 70%; padding: 5px;" disabled>
+                    <button type="submit" style="padding: 5px 10px;" disabled>发送</button>
+                </form>
+
+                <!-- WebSocket 消息记录区域 -->
+                <div id="webSocketMessages" style="height: 150px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background-color: white; font-family: monospace; font-size: 0.9em;">
+                    等待WebSocket消息...
+                </div>
+            </div>
         </div>
     </div>
     
@@ -1497,9 +1516,14 @@
                 return;
             }
 
+            // 尝试获取WebSocket测试区域的输入框
             const messageInput = document.getElementById('wsMessage');
-            const message = messageInput.value.trim();
+            if (!messageInput) {
+                logWebSocketMessage('错误: 找不到消息输入框');
+                return;
+            }
 
+            const message = messageInput.value.trim();
             if (!message) return;
 
             // 发送消息到服务器
@@ -1531,21 +1555,41 @@
             const statusElem = document.getElementById('wsStatus');
             const connectBtn = document.getElementById('wsConnectBtn');
             const disconnectBtn = document.getElementById('wsDisconnectBtn');
-            const sendBtn = document.getElementById('wsSendForm').querySelector('button');
+            const wsSendForm = document.getElementById('wsSendForm');
+            const wsMessageInput = document.getElementById('wsMessage');
 
-            if (connected) {
-                statusElem.textContent = '已连接';
-                statusElem.className = 'connected';
-                connectBtn.disabled = true;
-                disconnectBtn.disabled = false;
-                sendBtn.disabled = false;
-            } else {
-                statusElem.textContent = '未连接';
-                statusElem.className = 'disconnected';
-                // 只有在用户已登录时才启用连接按钮
-                connectBtn.disabled = !authToken;
-                disconnectBtn.disabled = true;
-                sendBtn.disabled = true;
+            // 安全地获取发送按钮
+            const sendBtn = wsSendForm ? wsSendForm.querySelector('button') : null;
+
+            if (statusElem) {
+                if (connected) {
+                    statusElem.textContent = '已连接';
+                    statusElem.className = 'connected';
+                } else {
+                    statusElem.textContent = '未连接';
+                    statusElem.className = 'disconnected';
+                }
+            }
+
+            if (connectBtn) {
+                if (connected) {
+                    connectBtn.disabled = true;
+                } else {
+                    // 只有在用户已登录时才启用连接按钮
+                    connectBtn.disabled = !authToken;
+                }
+            }
+
+            if (disconnectBtn) {
+                disconnectBtn.disabled = !connected;
+            }
+
+            if (sendBtn) {
+                sendBtn.disabled = !connected;
+            }
+
+            if (wsMessageInput) {
+                wsMessageInput.disabled = !connected;
             }
         }
 

@@ -23,15 +23,21 @@
 
 use axum::{
     extract::Request,
-    http::{ HeaderMap, StatusCode },
+    http::{HeaderMap, StatusCode},
     middleware::Next,
     response::Response,
 };
-use metrics::{ counter, gauge, histogram };
-use std::{ sync::{ atomic::{ AtomicU64, Ordering }, Arc, Mutex }, time::{ Duration, Instant } };
+use metrics::{counter, gauge, histogram};
+use std::{
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::{Duration, Instant},
+};
 use sysinfo::System;
 use tokio::time::interval;
-use tracing::{ info, warn, error, instrument };
+use tracing::{error, info, instrument, warn};
 
 /// 性能监控配置
 ///
@@ -262,9 +268,8 @@ impl PerformanceMetrics {
         // 更新 Prometheus 指标
         if self.config.enable_prometheus_metrics {
             counter!("http_requests_total").increment(1);
-            gauge!("http_active_connections").set(
-                self.active_connections.load(Ordering::Relaxed) as f64
-            );
+            gauge!("http_active_connections")
+                .set(self.active_connections.load(Ordering::Relaxed) as f64);
         }
     }
 
@@ -280,9 +285,8 @@ impl PerformanceMetrics {
 
         let duration_ms = metrics.duration.as_millis() as u64;
         // 修正成功判断逻辑：2xx状态码 + 101 WebSocket升级都视为成功
-        let is_success =
-            metrics.status_code.is_success() ||
-            metrics.status_code == StatusCode::SWITCHING_PROTOCOLS;
+        let is_success = metrics.status_code.is_success()
+            || metrics.status_code == StatusCode::SWITCHING_PROTOCOLS;
 
         if is_success {
             self.successful_requests.fetch_add(1, Ordering::Relaxed);
@@ -292,10 +296,12 @@ impl PerformanceMetrics {
 
         // 更新请求/响应大小统计
         if let Some(req_size) = metrics.request_size {
-            self.total_request_size.fetch_add(req_size, Ordering::Relaxed);
+            self.total_request_size
+                .fetch_add(req_size, Ordering::Relaxed);
         }
         if let Some(resp_size) = metrics.response_size {
-            self.total_response_size.fetch_add(resp_size, Ordering::Relaxed);
+            self.total_response_size
+                .fetch_add(resp_size, Ordering::Relaxed);
         }
 
         // 更新错误分类统计
@@ -326,9 +332,8 @@ impl PerformanceMetrics {
             }
 
             histogram!("http_request_duration_seconds").record(metrics.duration.as_secs_f64());
-            gauge!("http_active_connections").set(
-                self.active_connections.load(Ordering::Relaxed) as f64
-            );
+            gauge!("http_active_connections")
+                .set(self.active_connections.load(Ordering::Relaxed) as f64);
 
             // 新增：请求/响应大小指标
             if self.config.enable_size_monitoring {
@@ -338,12 +343,10 @@ impl PerformanceMetrics {
                 if let Some(resp_size) = metrics.response_size {
                     histogram!("http_response_size_bytes").record(resp_size as f64);
                 }
-                gauge!("http_total_request_size_bytes").set(
-                    self.total_request_size.load(Ordering::Relaxed) as f64
-                );
-                gauge!("http_total_response_size_bytes").set(
-                    self.total_response_size.load(Ordering::Relaxed) as f64
-                );
+                gauge!("http_total_request_size_bytes")
+                    .set(self.total_request_size.load(Ordering::Relaxed) as f64);
+                gauge!("http_total_response_size_bytes")
+                    .set(self.total_response_size.load(Ordering::Relaxed) as f64);
             }
 
             // 新增：用户代理统计指标
@@ -516,10 +519,7 @@ impl PerformanceMetrics {
 
         // 获取当前进程信息
         let current_pid = sysinfo::get_current_pid().unwrap_or(sysinfo::Pid::from(0));
-        let process_memory = system
-            .process(current_pid)
-            .map(|p| p.memory())
-            .unwrap_or(0);
+        let process_memory = system.process(current_pid).map(|p| p.memory()).unwrap_or(0);
         let process_cpu = system
             .process(current_pid)
             .map(|p| p.cpu_usage())
@@ -562,30 +562,40 @@ impl PerformanceMetrics {
         match status_u16 {
             // 4xx客户端错误
             400..=499 => {
-                self.error_classification.client_errors_4xx.fetch_add(1, Ordering::Relaxed);
+                self.error_classification
+                    .client_errors_4xx
+                    .fetch_add(1, Ordering::Relaxed);
 
                 // 细分特定错误类型
                 match status_code {
                     StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
-                        self.error_classification.auth_errors.fetch_add(1, Ordering::Relaxed);
+                        self.error_classification
+                            .auth_errors
+                            .fetch_add(1, Ordering::Relaxed);
                         if self.config.enable_prometheus_metrics {
                             counter!("http_auth_errors_total").increment(1);
                         }
                     }
                     StatusCode::BAD_REQUEST | StatusCode::UNPROCESSABLE_ENTITY => {
-                        self.error_classification.validation_errors.fetch_add(1, Ordering::Relaxed);
+                        self.error_classification
+                            .validation_errors
+                            .fetch_add(1, Ordering::Relaxed);
                         if self.config.enable_prometheus_metrics {
                             counter!("http_validation_errors_total").increment(1);
                         }
                     }
                     StatusCode::NOT_FOUND => {
-                        self.error_classification.not_found_errors.fetch_add(1, Ordering::Relaxed);
+                        self.error_classification
+                            .not_found_errors
+                            .fetch_add(1, Ordering::Relaxed);
                         if self.config.enable_prometheus_metrics {
                             counter!("http_not_found_errors_total").increment(1);
                         }
                     }
                     StatusCode::REQUEST_TIMEOUT => {
-                        self.error_classification.timeout_errors.fetch_add(1, Ordering::Relaxed);
+                        self.error_classification
+                            .timeout_errors
+                            .fetch_add(1, Ordering::Relaxed);
                         if self.config.enable_prometheus_metrics {
                             counter!("http_timeout_errors_total").increment(1);
                         }
@@ -599,7 +609,9 @@ impl PerformanceMetrics {
             }
             // 5xx服务器错误
             500..=599 => {
-                self.error_classification.server_errors_5xx.fetch_add(1, Ordering::Relaxed);
+                self.error_classification
+                    .server_errors_5xx
+                    .fetch_add(1, Ordering::Relaxed);
                 if self.config.enable_prometheus_metrics {
                     counter!("http_server_errors_5xx_total").increment(1);
                 }
@@ -624,11 +636,10 @@ impl PerformanceMetrics {
                     // 检查缓存大小限制
                     if stats.len() >= self.config.max_user_agent_cache_size {
                         // 移除最旧的条目
-                        if
-                            let Some(oldest_key) = stats
-                                .iter()
-                                .min_by_key(|(_, v)| v.last_seen)
-                                .map(|(k, _)| k.clone())
+                        if let Some(oldest_key) = stats
+                            .iter()
+                            .min_by_key(|(_, v)| v.last_seen)
+                            .map(|(k, _)| k.clone())
                         {
                             stats.remove(&oldest_key);
                         }
@@ -693,11 +704,10 @@ impl PerformanceMetrics {
                 // 检查缓存大小限制
                 if stats.len() >= self.config.max_geo_cache_size {
                     // 移除最旧的条目
-                    if
-                        let Some(oldest_key) = stats
-                            .iter()
-                            .min_by_key(|(_, v)| v.last_seen)
-                            .map(|(k, _)| k.clone())
+                    if let Some(oldest_key) = stats
+                        .iter()
+                        .min_by_key(|(_, v)| v.last_seen)
+                        .map(|(k, _)| k.clone())
                     {
                         stats.remove(&oldest_key);
                     }
@@ -764,19 +774,16 @@ impl PerformanceMetrics {
     fn simple_geo_lookup(&self, ip: &str) -> GeoStats {
         // 简化的地理位置检测逻辑
         // 实际应用中应使用专业的IP地理位置服务如MaxMind GeoIP2
-        let (country, city) = if
-            ip.starts_with("127.") ||
-            ip.starts_with("192.168.") ||
-            ip.starts_with("10.")
-        {
-            ("Local".to_string(), Some("Localhost".to_string()))
-        } else if ip == "unknown" {
-            ("Unknown".to_string(), None)
-        } else {
-            // 这里可以集成真实的地理位置服务
-            // 目前返回默认值
-            ("Unknown".to_string(), None)
-        };
+        let (country, city) =
+            if ip.starts_with("127.") || ip.starts_with("192.168.") || ip.starts_with("10.") {
+                ("Local".to_string(), Some("Localhost".to_string()))
+            } else if ip == "unknown" {
+                ("Unknown".to_string(), None)
+            } else {
+                // 这里可以集成真实的地理位置服务
+                // 目前返回默认值
+                ("Unknown".to_string(), None)
+            };
 
         GeoStats {
             count: 0,
@@ -793,15 +800,13 @@ impl PerformanceMetrics {
     /// # 返回值
     /// * `PerformanceStats` - 当前的性能统计信息
     pub fn get_stats(&self) -> PerformanceStats {
-        let unique_user_agents = self.user_agent_stats
+        let unique_user_agents = self
+            .user_agent_stats
             .lock()
             .map(|stats| stats.len())
             .unwrap_or(0);
 
-        let unique_geo_locations = self.geo_stats
-            .lock()
-            .map(|stats| stats.len())
-            .unwrap_or(0);
+        let unique_geo_locations = self.geo_stats.lock().map(|stats| stats.len()).unwrap_or(0);
 
         PerformanceStats {
             active_connections: self.active_connections.load(Ordering::Relaxed),
@@ -811,8 +816,8 @@ impl PerformanceMetrics {
             success_rate: {
                 let total = self.total_requests.load(Ordering::Relaxed);
                 if total > 0 {
-                    ((self.successful_requests.load(Ordering::Relaxed) as f64) / (total as f64)) *
-                        100.0
+                    ((self.successful_requests.load(Ordering::Relaxed) as f64) / (total as f64))
+                        * 100.0
                 } else {
                     0.0
                 }
@@ -821,12 +826,30 @@ impl PerformanceMetrics {
             total_response_size: self.total_response_size.load(Ordering::Relaxed),
             unique_user_agents,
             unique_geo_locations,
-            client_errors_4xx: self.error_classification.client_errors_4xx.load(Ordering::Relaxed),
-            server_errors_5xx: self.error_classification.server_errors_5xx.load(Ordering::Relaxed),
-            auth_errors: self.error_classification.auth_errors.load(Ordering::Relaxed),
-            validation_errors: self.error_classification.validation_errors.load(Ordering::Relaxed),
-            not_found_errors: self.error_classification.not_found_errors.load(Ordering::Relaxed),
-            timeout_errors: self.error_classification.timeout_errors.load(Ordering::Relaxed),
+            client_errors_4xx: self
+                .error_classification
+                .client_errors_4xx
+                .load(Ordering::Relaxed),
+            server_errors_5xx: self
+                .error_classification
+                .server_errors_5xx
+                .load(Ordering::Relaxed),
+            auth_errors: self
+                .error_classification
+                .auth_errors
+                .load(Ordering::Relaxed),
+            validation_errors: self
+                .error_classification
+                .validation_errors
+                .load(Ordering::Relaxed),
+            not_found_errors: self
+                .error_classification
+                .not_found_errors
+                .load(Ordering::Relaxed),
+            timeout_errors: self
+                .error_classification
+                .timeout_errors
+                .load(Ordering::Relaxed),
         }
     }
 }
@@ -871,7 +894,7 @@ pub struct PerformanceStats {
 pub async fn performance_monitoring_middleware(
     axum::extract::State(metrics): axum::extract::State<Arc<PerformanceMetrics>>,
     request: Request,
-    next: Next
+    next: Next,
 ) -> Response {
     let start_time = Instant::now();
     let method = request.method().to_string();
@@ -938,12 +961,14 @@ pub async fn performance_monitoring_middleware(
         method: &method,
         path: &path,
         headers: headers.as_ref(),
-        request_size: None, // 可以从request body获取
+        request_size: None,  // 可以从request body获取
         response_size: None, // 可以从response body获取
     });
 
     // 标记为已完成，避免 Drop 时重复记录
-    deferred.completed.store(true, std::sync::atomic::Ordering::Relaxed);
+    deferred
+        .completed
+        .store(true, std::sync::atomic::Ordering::Relaxed);
 
     response
 }
@@ -1231,7 +1256,7 @@ mod tests {
         metrics.record_request_start();
         metrics.record_request_end(RequestEndMetrics {
             duration: Duration::from_millis(1000), // 超过阈值的请求
-            status_code: StatusCode::OK, // 成功状态码
+            status_code: StatusCode::OK,           // 成功状态码
             method: "GET",
             path: "/api/tasks",
             headers: None,
@@ -1303,7 +1328,7 @@ mod tests {
             (StatusCode::UNAUTHORIZED, "auth_error"),
             (StatusCode::NOT_FOUND, "not_found_error"),
             (StatusCode::REQUEST_TIMEOUT, "timeout_error"),
-            (StatusCode::INTERNAL_SERVER_ERROR, "server_error")
+            (StatusCode::INTERNAL_SERVER_ERROR, "server_error"),
         ];
 
         for (status_code, _error_type) in error_cases {
@@ -1348,7 +1373,7 @@ mod tests {
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0",
             "curl/7.68.0",
-            "PostmanRuntime/7.28.0"
+            "PostmanRuntime/7.28.0",
         ];
 
         for ua in user_agents {

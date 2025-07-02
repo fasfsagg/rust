@@ -9,16 +9,16 @@
 //! 4. 性能监控和指标收集
 //! 5. 自动重连和健康检查
 
+use crate::config::WebSocketPoolConfig;
+use axum::extract::ws::Message;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{ Duration, Instant };
-use tokio::sync::{ RwLock, mpsc };
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
+use tokio::sync::{RwLock, mpsc};
 use tokio::time::interval;
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
-use axum::extract::ws::Message;
-use tracing::{ info, warn, error, debug };
-use crate::config::WebSocketPoolConfig;
-use std::sync::atomic::{ AtomicU64, AtomicBool, AtomicUsize, Ordering };
 
 /// WebSocket连接池统计指标
 ///
@@ -182,7 +182,8 @@ impl WebSocketPoolMetrics {
     pub fn record_message_sent(&self, latency: Duration) {
         self.total_messages_sent.fetch_add(1, Ordering::Relaxed);
         let latency_us = latency.as_micros() as u64;
-        self.avg_message_latency_us.store(latency_us, Ordering::Relaxed);
+        self.avg_message_latency_us
+            .store(latency_us, Ordering::Relaxed);
     }
 
     /// 记录消息接收
@@ -257,9 +258,8 @@ impl LoadBalancer {
 
         match self.strategy {
             LoadBalancingStrategy::RoundRobin => {
-                let index =
-                    self.round_robin_index.fetch_add(1, Ordering::Relaxed) %
-                    available_connections.len();
+                let index = self.round_robin_index.fetch_add(1, Ordering::Relaxed)
+                    % available_connections.len();
                 Some(index)
             }
             LoadBalancingStrategy::LeastConnections => {
@@ -269,8 +269,11 @@ impl LoadBalancer {
             }
             LoadBalancingStrategy::Random => {
                 // 使用简单的伪随机数生成器（基于时间戳）
-                use std::time::{ SystemTime, UNIX_EPOCH };
-                let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+                use std::time::{SystemTime, UNIX_EPOCH};
+                let timestamp = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos();
                 let index = (timestamp as usize) % available_connections.len();
                 Some(index)
             }
@@ -361,25 +364,24 @@ impl WebSocketPoolManager {
         let metrics = Arc::new(WebSocketPoolMetrics::new());
 
         // 创建负载均衡器
-        let load_balancer = Arc::new(
-            RwLock::new(
-                LoadBalancer::new(LoadBalancingStrategy::RoundRobin, config.enable_load_balancing)
-            )
-        );
+        let load_balancer = Arc::new(RwLock::new(LoadBalancer::new(
+            LoadBalancingStrategy::RoundRobin,
+            config.enable_load_balancing,
+        )));
 
         // 创建故障转移管理器
-        let failover_manager = Arc::new(
-            RwLock::new(
-                FailoverManager::new(
-                    5, // 故障阈值
-                    Duration::from_secs(30) // 恢复间隔
-                )
-            )
-        );
+        let failover_manager = Arc::new(RwLock::new(FailoverManager::new(
+            5,                       // 故障阈值
+            Duration::from_secs(30), // 恢复间隔
+        )));
 
         // 更新指标状态
-        metrics.load_balancer_active.store(config.enable_load_balancing, Ordering::Relaxed);
-        metrics.failover_active.store(config.enable_failover, Ordering::Relaxed);
+        metrics
+            .load_balancer_active
+            .store(config.enable_load_balancing, Ordering::Relaxed);
+        metrics
+            .failover_active
+            .store(config.enable_failover, Ordering::Relaxed);
 
         info!(
             "WEBSOCKET_POOL: 连接池管理器创建成功 - 最大连接数: {}, 池大小: {}, 负载均衡: {}, 故障转移: {}",
@@ -425,7 +427,10 @@ impl WebSocketPoolManager {
                 // 如果内存使用过高，触发清理
                 if memory_usage > 80.0 {
                     // 80%阈值
-                    warn!("WEBSOCKET_POOL: 内存使用率过高: {:.1}%, 开始清理", memory_usage);
+                    warn!(
+                        "WEBSOCKET_POOL: 内存使用率过高: {:.1}%, 开始清理",
+                        memory_usage
+                    );
                     Self::cleanup_idle_connections(&connections, &metrics, &config).await;
                 }
 
@@ -454,7 +459,7 @@ impl WebSocketPoolManager {
     /// 【返回值】: f64 - 内存使用率百分比
     async fn check_memory_usage(
         connections: &Arc<RwLock<HashMap<Uuid, WebSocketConnectionInfo>>>,
-        metrics: &Arc<WebSocketPoolMetrics>
+        metrics: &Arc<WebSocketPoolMetrics>,
     ) -> f64 {
         let connections_guard = connections.read().await;
         let connection_count = connections_guard.len();
@@ -473,7 +478,7 @@ impl WebSocketPoolManager {
     async fn cleanup_idle_connections(
         connections: &Arc<RwLock<HashMap<Uuid, WebSocketConnectionInfo>>>,
         metrics: &Arc<WebSocketPoolMetrics>,
-        config: &WebSocketPoolConfig
+        config: &WebSocketPoolConfig,
     ) {
         let mut connections_guard = connections.write().await;
         let mut to_remove = Vec::new();
@@ -512,7 +517,7 @@ impl WebSocketPoolManager {
         &self,
         connection_id: Uuid,
         user_id: Uuid,
-        sender: mpsc::UnboundedSender<Message>
+        sender: mpsc::UnboundedSender<Message>,
     ) -> Result<(), String> {
         let now = Instant::now();
 
@@ -520,13 +525,10 @@ impl WebSocketPoolManager {
         let current_connections = self.metrics.active_connections.load(Ordering::Relaxed);
         if current_connections >= (self.config.max_connections as u64) {
             self.metrics.record_connection_failure();
-            return Err(
-                format!(
-                    "连接池已满，当前连接数: {}, 最大连接数: {}",
-                    current_connections,
-                    self.config.max_connections
-                )
-            );
+            return Err(format!(
+                "连接池已满，当前连接数: {}, 最大连接数: {}",
+                current_connections, self.config.max_connections
+            ));
         }
 
         // 创建连接信息
@@ -552,7 +554,10 @@ impl WebSocketPoolManager {
         // 更新用户连接映射
         {
             let mut user_connections = self.user_connections.write().await;
-            user_connections.entry(user_id).or_insert_with(Vec::new).push(connection_id);
+            user_connections
+                .entry(user_id)
+                .or_insert_with(Vec::new)
+                .push(connection_id);
         }
 
         // 更新指标
@@ -627,7 +632,7 @@ impl WebSocketPoolManager {
     pub async fn send_to_connection(
         &self,
         connection_id: &Uuid,
-        message: Message
+        message: Message,
     ) -> Result<(), String> {
         let start_time = Instant::now();
 
@@ -645,7 +650,10 @@ impl WebSocketPoolManager {
                     Ok(())
                 }
                 Err(e) => {
-                    error!("WEBSOCKET_POOL: 消息发送失败 - 连接ID: {}, 错误: {}", connection_id, e);
+                    error!(
+                        "WEBSOCKET_POOL: 消息发送失败 - 连接ID: {}, 错误: {}",
+                        connection_id, e
+                    );
 
                     // 记录故障
                     let failover_manager = self.failover_manager.read().await;
@@ -674,14 +682,17 @@ impl WebSocketPoolManager {
     pub async fn broadcast_to_user(
         &self,
         user_id: &Uuid,
-        message: Message
+        message: Message,
     ) -> Result<usize, String> {
         let connection_ids = self.get_user_connections(user_id).await;
         let mut successful_sends = 0;
         let mut errors = Vec::new();
 
         for connection_id in connection_ids {
-            match self.send_to_connection(&connection_id, message.clone()).await {
+            match self
+                .send_to_connection(&connection_id, message.clone())
+                .await
+            {
                 Ok(_) => {
                     successful_sends += 1;
                 }
@@ -727,8 +738,7 @@ impl WebSocketPoolManager {
                     } else {
                         warn!(
                             "WEBSOCKET_POOL: 连接超时 - 连接ID: {}, 非活跃时间: {:?}",
-                            connection_id,
-                            inactive_duration
+                            connection_id, inactive_duration
                         );
                     }
                 }
@@ -748,10 +758,7 @@ impl WebSocketPoolManager {
         let duration = start_time.elapsed();
         info!(
             "WEBSOCKET_POOL: 健康检查完成 - 健康连接: {}/{}, 健康率: {:.1}%, 检查耗时: {:?}",
-            healthy_connections,
-            total_connections,
-            health_rate,
-            duration
+            healthy_connections, total_connections, health_rate, duration
         );
 
         Ok(is_healthy)

@@ -15,15 +15,10 @@
 //! - `create`: 创建一个新用户（用于注册）。
 
 use async_trait::async_trait;
-use migration::user_entity::{ ActiveModel, Entity, Model };
+use migration::user_entity::{ActiveModel, Entity, Model};
 use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter,
     prelude::Uuid,
-    ActiveModelTrait,
-    ColumnTrait,
-    DatabaseConnection,
-    DbErr,
-    EntityTrait,
-    QueryFilter,
 };
 use std::sync::Arc;
 
@@ -85,7 +80,8 @@ impl UserRepositoryContract for UserRepository {
     async fn find_by_username(&self, username: &str) -> Result<Option<Model>, DbErr> {
         Entity::find()
             .filter(migration::user_entity::Column::Username.eq(username))
-            .one(self.db.as_ref()).await
+            .one(self.db.as_ref())
+            .await
     }
 
     /// 创建一个新用户。

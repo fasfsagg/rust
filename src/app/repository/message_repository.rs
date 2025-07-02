@@ -17,19 +17,10 @@
 //! - `count_by_chat_room`: 统计聊天室消息数量
 
 use async_trait::async_trait;
-use migration::message_entity::{ ActiveModel, Column, Entity, Model, MessageStatus, MessageType };
+use migration::message_entity::{ActiveModel, Column, Entity, MessageStatus, MessageType, Model};
 use sea_orm::{
-    prelude::Uuid,
-    ActiveModelTrait,
-    ColumnTrait,
-    DatabaseConnection,
-    DbErr,
-    EntityTrait,
-    Order,
-    PaginatorTrait,
-    QueryFilter,
-    QueryOrder,
-    Set,
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, Order, PaginatorTrait,
+    QueryFilter, QueryOrder, Set, prelude::Uuid,
 };
 use std::sync::Arc;
 
@@ -162,7 +153,7 @@ pub trait MessageRepositoryContract: Send + Sync {
         &self,
         chat_room_id: Uuid,
         params: MessagePaginationParams,
-        filter: Option<MessageFilter>
+        filter: Option<MessageFilter>,
     ) -> Result<MessagePaginationResult, DbErr>;
 
     /// 更新消息状态
@@ -186,7 +177,7 @@ pub trait MessageRepositoryContract: Send + Sync {
     async fn count_by_chat_room(
         &self,
         chat_room_id: Uuid,
-        filter: Option<MessageFilter>
+        filter: Option<MessageFilter>,
     ) -> Result<u64, DbErr>;
 
     /// 删除消息（软删除，更新状态为已删除）
@@ -217,7 +208,7 @@ pub trait MessageRepositoryContract: Send + Sync {
         &self,
         keyword: String,
         params: MessagePaginationParams,
-        filter: Option<MessageFilter>
+        filter: Option<MessageFilter>,
     ) -> Result<MessagePaginationResult, DbErr>;
 }
 
@@ -249,7 +240,7 @@ impl MessageRepositoryContract for MessageRepository {
         &self,
         chat_room_id: Uuid,
         params: MessagePaginationParams,
-        filter: Option<MessageFilter>
+        filter: Option<MessageFilter>,
     ) -> Result<MessagePaginationResult, DbErr> {
         // 构建基础查询
         let mut query = Entity::find().filter(Column::ChatRoomId.eq(chat_room_id));
@@ -307,7 +298,8 @@ impl MessageRepositoryContract for MessageRepository {
 
     async fn update_status(&self, id: Uuid, status: MessageStatus) -> Result<Model, DbErr> {
         let message = Entity::find_by_id(id)
-            .one(self.db.as_ref()).await?
+            .one(self.db.as_ref())
+            .await?
             .ok_or_else(|| DbErr::RecordNotFound("Message not found".to_string()))?;
 
         let mut active_model: ActiveModel = message.into();
@@ -320,7 +312,7 @@ impl MessageRepositoryContract for MessageRepository {
     async fn count_by_chat_room(
         &self,
         chat_room_id: Uuid,
-        filter: Option<MessageFilter>
+        filter: Option<MessageFilter>,
     ) -> Result<u64, DbErr> {
         let mut query = Entity::find().filter(Column::ChatRoomId.eq(chat_room_id));
 
@@ -361,7 +353,7 @@ impl MessageRepositoryContract for MessageRepository {
         &self,
         keyword: String,
         params: MessagePaginationParams,
-        filter: Option<MessageFilter>
+        filter: Option<MessageFilter>,
     ) -> Result<MessagePaginationResult, DbErr> {
         // 验证关键词不为空
         if keyword.trim().is_empty() {

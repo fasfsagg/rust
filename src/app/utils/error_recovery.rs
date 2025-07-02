@@ -11,11 +11,16 @@
 // | 5. 恢复状态监控和指标收集                                                  |
 // \-----------------------------------------------------------------------------/
 
-use std::{ sync::{ Arc, RwLock }, time::{ Duration, Instant }, collections::HashMap, fmt::Debug };
-use backoff::{ ExponentialBackoff, backoff::Backoff };
-use serde::{ Serialize, Deserialize };
-use tracing::{ error, warn, info, debug, instrument };
-use crate::error::{ AppError, Result };
+use crate::error::{AppError, Result};
+use backoff::{ExponentialBackoff, backoff::Backoff};
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::HashMap,
+    fmt::Debug,
+    sync::{Arc, RwLock},
+    time::{Duration, Instant},
+};
+use tracing::{debug, error, info, instrument, warn};
 
 /// 错误类型分类
 ///
@@ -257,7 +262,9 @@ impl SimpleCircuitBreaker {
     }
 
     pub async fn call<F, T, Fut>(&self, operation: F) -> Result<T>
-        where F: FnOnce() -> Fut, Fut: std::future::Future<Output = Result<T>>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<T>>,
     {
         // 检查断路器状态
         let current_state = self.state();
@@ -266,30 +273,25 @@ impl SimpleCircuitBreaker {
             CircuitBreakerState::Open => {
                 // 断路器开启状态：检查是否可以尝试恢复
                 if let Some(last_failure) = *self.last_failure_time.read().unwrap() {
-                    if
-                        last_failure.elapsed() >
-                        Duration::from_secs(self.config.recovery_timeout_secs)
+                    if last_failure.elapsed()
+                        > Duration::from_secs(self.config.recovery_timeout_secs)
                     {
                         // 转换到半开状态，允许一个请求通过进行测试
                         *self.state.write().unwrap() = CircuitBreakerState::HalfOpen;
                         debug!("断路器从开启状态转换到半开状态，允许测试请求");
                     } else {
                         // 仍在恢复超时期间，拒绝请求
-                        return Err(
-                            AppError::with_span_trace(
-                                "断路器开启，请求被拒绝".to_string(),
-                                axum::http::StatusCode::SERVICE_UNAVAILABLE
-                            )
-                        );
+                        return Err(AppError::with_span_trace(
+                            "断路器开启，请求被拒绝".to_string(),
+                            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                        ));
                     }
                 } else {
                     // 如果没有记录失败时间但状态为开启，这是异常情况，直接拒绝请求
-                    return Err(
-                        AppError::with_span_trace(
-                            "断路器开启，请求被拒绝".to_string(),
-                            axum::http::StatusCode::SERVICE_UNAVAILABLE
-                        )
-                    );
+                    return Err(AppError::with_span_trace(
+                        "断路器开启，请求被拒绝".to_string(),
+                        axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                    ));
                 }
             }
             CircuitBreakerState::HalfOpen => {
@@ -413,24 +415,21 @@ impl ErrorRecoveryManager {
 
         if let Some(status_code) = self.extract_status_code(error) {
             match self.config.error_classification.classify_error(status_code) {
-                ErrorCategory::RateLimit =>
-                    (
-                        self.config.retry.rate_limit_max_retries,
-                        self.config.retry.rate_limit_initial_delay_ms,
-                        self.config.retry.rate_limit_max_delay_ms,
-                    ),
-                ErrorCategory::Timeout =>
-                    (
-                        self.config.retry.timeout_max_retries,
-                        self.config.retry.initial_delay_ms,
-                        self.config.retry.max_delay_ms,
-                    ),
-                ErrorCategory::Transient =>
-                    (
-                        self.config.retry.max_retries,
-                        self.config.retry.initial_delay_ms,
-                        self.config.retry.max_delay_ms,
-                    ),
+                ErrorCategory::RateLimit => (
+                    self.config.retry.rate_limit_max_retries,
+                    self.config.retry.rate_limit_initial_delay_ms,
+                    self.config.retry.rate_limit_max_delay_ms,
+                ),
+                ErrorCategory::Timeout => (
+                    self.config.retry.timeout_max_retries,
+                    self.config.retry.initial_delay_ms,
+                    self.config.retry.max_delay_ms,
+                ),
+                ErrorCategory::Transient => (
+                    self.config.retry.max_retries,
+                    self.config.retry.initial_delay_ms,
+                    self.config.retry.max_delay_ms,
+                ),
                 ErrorCategory::Permanent => (0, 0, 0), // 不重试永久性错误
             }
         } else {
@@ -458,7 +457,9 @@ impl ErrorRecoveryManager {
             breaker.clone()
         } else {
             // 创建新的断路器实例并存储
-            let breaker = Arc::new(SimpleCircuitBreaker::new(self.config.circuit_breaker.clone()));
+            let breaker = Arc::new(SimpleCircuitBreaker::new(
+                self.config.circuit_breaker.clone(),
+            ));
             breakers.insert(service_name.to_string(), breaker.clone());
             breaker
         }
@@ -476,16 +477,18 @@ impl ErrorRecoveryManager {
         service_name: &str,
         retry_count: u32,
         success: bool,
-        delay_ms: u64
+        delay_ms: u64,
     ) {
         let mut stats = self.recovery_stats.write().unwrap();
-        let entry = stats.entry(service_name.to_string()).or_insert_with(|| RecoveryStatus {
-            service_name: service_name.to_string(),
-            retry_stats: RetryStats::default(),
-            circuit_breaker_state: "CLOSED".to_string(),
-            degradation_active: false,
-            last_updated: chrono::Utc::now(),
-        });
+        let entry = stats
+            .entry(service_name.to_string())
+            .or_insert_with(|| RecoveryStatus {
+                service_name: service_name.to_string(),
+                retry_stats: RetryStats::default(),
+                circuit_breaker_state: "CLOSED".to_string(),
+                degradation_active: false,
+                last_updated: chrono::Utc::now(),
+            });
 
         entry.retry_stats.total_retries += retry_count as u64;
         if success {
@@ -498,10 +501,10 @@ impl ErrorRecoveryManager {
         let total_operations =
             entry.retry_stats.successful_retries + entry.retry_stats.failed_retries;
         if total_operations > 0 {
-            entry.retry_stats.avg_retry_delay_ms =
-                (entry.retry_stats.avg_retry_delay_ms * ((total_operations - 1) as f64) +
-                    (delay_ms as f64)) /
-                (total_operations as f64);
+            entry.retry_stats.avg_retry_delay_ms = (entry.retry_stats.avg_retry_delay_ms
+                * ((total_operations - 1) as f64)
+                + (delay_ms as f64))
+                / (total_operations as f64);
         }
 
         entry.last_updated = chrono::Utc::now();
@@ -519,7 +522,10 @@ impl ErrorRecoveryManager {
     /// * `Result<T>` - 操作结果
     #[instrument(skip(self, operation), fields(service_name = %service_name))]
     pub async fn execute_with_retry<T, F, Fut>(&self, service_name: &str, operation: F) -> Result<T>
-        where F: Fn() -> Fut, Fut: std::future::Future<Output = Result<T>>, T: Clone
+    where
+        F: Fn() -> Fut,
+        Fut: std::future::Future<Output = Result<T>>,
+        T: Clone,
     {
         let mut retry_count = 0;
         let start_time = Instant::now();
@@ -644,23 +650,27 @@ impl ErrorRecoveryManager {
     pub async fn execute_with_circuit_breaker<T, F, Fut>(
         &self,
         service_name: &str,
-        operation: F
-    )
-        -> Result<T>
-        where F: Fn() -> Fut, Fut: std::future::Future<Output = Result<T>>, T: Clone
+        operation: F,
+    ) -> Result<T>
+    where
+        F: Fn() -> Fut,
+        Fut: std::future::Future<Output = Result<T>>,
+        T: Clone,
     {
         let breaker = self.get_or_create_circuit_breaker(service_name);
 
         // 更新断路器状态统计
         {
             let mut stats = self.recovery_stats.write().unwrap();
-            let entry = stats.entry(service_name.to_string()).or_insert_with(|| RecoveryStatus {
-                service_name: service_name.to_string(),
-                retry_stats: RetryStats::default(),
-                circuit_breaker_state: "CLOSED".to_string(),
-                degradation_active: false,
-                last_updated: chrono::Utc::now(),
-            });
+            let entry = stats
+                .entry(service_name.to_string())
+                .or_insert_with(|| RecoveryStatus {
+                    service_name: service_name.to_string(),
+                    retry_stats: RetryStats::default(),
+                    circuit_breaker_state: "CLOSED".to_string(),
+                    degradation_active: false,
+                    last_updated: chrono::Utc::now(),
+                });
 
             entry.circuit_breaker_state = format!("{:?}", breaker.state());
             entry.last_updated = chrono::Utc::now();
@@ -717,9 +727,8 @@ impl ErrorRecoveryManager {
         {
             let cache = self.degradation_cache.read().unwrap();
             if let Some((cached_response, cached_time)) = cache.get(service_name) {
-                let cache_duration = Duration::from_secs(
-                    self.config.degradation.cache_duration_secs
-                );
+                let cache_duration =
+                    Duration::from_secs(self.config.degradation.cache_duration_secs);
                 if cached_time.elapsed() < cache_duration {
                     debug!(
                         service_name = %service_name,
@@ -735,13 +744,15 @@ impl ErrorRecoveryManager {
         // 更新降级状态
         {
             let mut stats = self.recovery_stats.write().unwrap();
-            let entry = stats.entry(service_name.to_string()).or_insert_with(|| RecoveryStatus {
-                service_name: service_name.to_string(),
-                retry_stats: RetryStats::default(),
-                circuit_breaker_state: "OPEN".to_string(),
-                degradation_active: false,
-                last_updated: chrono::Utc::now(),
-            });
+            let entry = stats
+                .entry(service_name.to_string())
+                .or_insert_with(|| RecoveryStatus {
+                    service_name: service_name.to_string(),
+                    retry_stats: RetryStats::default(),
+                    circuit_breaker_state: "OPEN".to_string(),
+                    degradation_active: false,
+                    last_updated: chrono::Utc::now(),
+                });
 
             entry.degradation_active = true;
             entry.last_updated = chrono::Utc::now();
@@ -758,16 +769,17 @@ impl ErrorRecoveryManager {
         // 缓存降级响应
         {
             let mut cache = self.degradation_cache.write().unwrap();
-            cache.insert(service_name.to_string(), (degradation_response.clone(), Instant::now()));
+            cache.insert(
+                service_name.to_string(),
+                (degradation_response.clone(), Instant::now()),
+            );
         }
 
         // 返回错误，因为我们无法生成有效的 T 类型响应
-        Err(
-            AppError::with_span_trace(
-                degradation_response,
-                axum::http::StatusCode::SERVICE_UNAVAILABLE
-            )
-        )
+        Err(AppError::with_span_trace(
+            degradation_response,
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+        ))
     }
 
     /// 执行完整的错误恢复策略（重试 + 断路器 + 降级）
@@ -784,10 +796,12 @@ impl ErrorRecoveryManager {
     pub async fn execute_with_full_recovery<T, F, Fut>(
         &self,
         service_name: &str,
-        operation: F
-    )
-        -> Result<T>
-        where F: Fn() -> Fut + Clone, Fut: std::future::Future<Output = Result<T>>, T: Clone
+        operation: F,
+    ) -> Result<T>
+    where
+        F: Fn() -> Fut + Clone,
+        Fut: std::future::Future<Output = Result<T>>,
+        T: Clone,
     {
         info!(
             service_name = %service_name,
@@ -803,10 +817,11 @@ impl ErrorRecoveryManager {
             }
         };
 
-        match
-            self.execute_with_circuit_breaker(service_name, || {
+        match self
+            .execute_with_circuit_breaker(service_name, || {
                 self.execute_with_retry(service_name, retry_operation.clone())
-            }).await
+            })
+            .await
         {
             Ok(result) => {
                 // 成功时清除降级状态
@@ -852,7 +867,11 @@ impl ErrorRecoveryManager {
     /// # 返回值
     /// * `Option<RecoveryStatus>` - 服务的恢复状态
     pub fn get_service_recovery_status(&self, service_name: &str) -> Option<RecoveryStatus> {
-        self.recovery_stats.read().unwrap().get(service_name).cloned()
+        self.recovery_stats
+            .read()
+            .unwrap()
+            .get(service_name)
+            .cloned()
     }
 
     /// 重置服务的恢复状态
@@ -909,7 +928,10 @@ impl ErrorRecoveryManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{ Arc, atomic::{ AtomicU32, Ordering } };
+    use std::sync::{
+        Arc,
+        atomic::{AtomicU32, Ordering},
+    };
 
     /// 创建测试用的错误恢复配置
     fn create_test_config() -> ErrorRecoveryConfig {
@@ -917,7 +939,7 @@ mod tests {
             retry: RetryConfig {
                 max_retries: 3,
                 initial_delay_ms: 10, // 减少测试时间
-                max_delay_ms: 100, // 减少测试时间
+                max_delay_ms: 100,    // 减少测试时间
                 multiplier: 2.0,
                 randomization_factor: 0.1,
                 use_smart_retry: true,
@@ -927,7 +949,7 @@ mod tests {
                 rate_limit_max_delay_ms: 500,
             },
             circuit_breaker: CircuitBreakerSettings {
-                failure_threshold: 2, // 降低阈值以便测试
+                failure_threshold: 2,     // 降低阈值以便测试
                 recovery_timeout_secs: 1, // 减少测试时间
                 request_timeout_secs: 1,
             },
@@ -975,24 +997,24 @@ mod tests {
         let call_count = Arc::new(AtomicU32::new(0));
         let call_count_clone = call_count.clone();
 
-        let result = manager.execute_with_retry("test_service", || {
-            let count = call_count_clone.clone();
-            async move {
-                let current = count.fetch_add(1, Ordering::SeqCst);
-                if current < 2 {
-                    // 前两次调用失败
-                    Err(
-                        AppError::with_span_trace(
+        let result = manager
+            .execute_with_retry("test_service", || {
+                let count = call_count_clone.clone();
+                async move {
+                    let current = count.fetch_add(1, Ordering::SeqCst);
+                    if current < 2 {
+                        // 前两次调用失败
+                        Err(AppError::with_span_trace(
                             "测试错误".to_string(),
-                            axum::http::StatusCode::INTERNAL_SERVER_ERROR
-                        )
-                    )
-                } else {
-                    // 第三次调用成功
-                    Ok("成功".to_string())
+                            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        ))
+                    } else {
+                        // 第三次调用成功
+                        Ok("成功".to_string())
+                    }
                 }
-            }
-        }).await;
+            })
+            .await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "成功");
@@ -1006,19 +1028,19 @@ mod tests {
         let call_count = Arc::new(AtomicU32::new(0));
         let call_count_clone = call_count.clone();
 
-        let result: Result<String> = manager.execute_with_retry("test_service", || {
-            let count = call_count_clone.clone();
-            async move {
-                count.fetch_add(1, Ordering::SeqCst);
-                // 总是失败
-                Err(
-                    AppError::with_span_trace(
+        let result: Result<String> = manager
+            .execute_with_retry("test_service", || {
+                let count = call_count_clone.clone();
+                async move {
+                    count.fetch_add(1, Ordering::SeqCst);
+                    // 总是失败
+                    Err(AppError::with_span_trace(
                         "持续错误".to_string(),
-                        axum::http::StatusCode::INTERNAL_SERVER_ERROR
-                    )
-                )
-            }
-        }).await;
+                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    ))
+                }
+            })
+            .await;
 
         assert!(result.is_err());
         // 应该调用 1 + max_retries 次
@@ -1032,13 +1054,15 @@ mod tests {
         let call_count = Arc::new(AtomicU32::new(0));
         let call_count_clone = call_count.clone();
 
-        let result = manager.execute_with_circuit_breaker("test_service", || {
-            let count = call_count_clone.clone();
-            async move {
-                count.fetch_add(1, Ordering::SeqCst);
-                Ok("成功".to_string())
-            }
-        }).await;
+        let result = manager
+            .execute_with_circuit_breaker("test_service", || {
+                let count = call_count_clone.clone();
+                async move {
+                    count.fetch_add(1, Ordering::SeqCst);
+                    Ok("成功".to_string())
+                }
+            })
+            .await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "成功");
@@ -1054,28 +1078,30 @@ mod tests {
 
         // 先触发足够的失败来开启断路器（失败阈值是2）
         for _ in 0..2 {
-            let _: Result<String> = manager.execute_with_circuit_breaker("test_service", || {
-                let count = call_count_clone.clone();
-                async move {
-                    count.fetch_add(1, Ordering::SeqCst);
-                    Err(
-                        AppError::with_span_trace(
+            let _: Result<String> = manager
+                .execute_with_circuit_breaker("test_service", || {
+                    let count = call_count_clone.clone();
+                    async move {
+                        count.fetch_add(1, Ordering::SeqCst);
+                        Err(AppError::with_span_trace(
                             "测试错误".to_string(),
-                            axum::http::StatusCode::INTERNAL_SERVER_ERROR
-                        )
-                    )
-                }
-            }).await;
+                            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        ))
+                    }
+                })
+                .await;
         }
 
         // 现在断路器应该是开启的，后续调用应该被拒绝
-        let result: Result<String> = manager.execute_with_circuit_breaker("test_service", || {
-            let count = call_count_clone.clone();
-            async move {
-                count.fetch_add(1, Ordering::SeqCst);
-                Ok("不应该被调用".to_string())
-            }
-        }).await;
+        let result: Result<String> = manager
+            .execute_with_circuit_breaker("test_service", || {
+                let count = call_count_clone.clone();
+                async move {
+                    count.fetch_add(1, Ordering::SeqCst);
+                    Ok("不应该被调用".to_string())
+                }
+            })
+            .await;
 
         // 断路器开启时应该返回错误
         assert!(result.is_err());
@@ -1090,20 +1116,18 @@ mod tests {
         let manager = ErrorRecoveryManager::new(create_test_config());
 
         // 执行一些操作来生成统计数据
-        let _: Result<String> = manager.execute_with_retry("service1", || {
-            async move { Ok("成功".to_string()) }
-        }).await;
+        let _: Result<String> = manager
+            .execute_with_retry("service1", || async move { Ok("成功".to_string()) })
+            .await;
 
-        let _: Result<String> = manager.execute_with_retry("service2", || {
-            async move {
-                Err(
-                    AppError::with_span_trace(
-                        "测试错误".to_string(),
-                        axum::http::StatusCode::INTERNAL_SERVER_ERROR
-                    )
-                )
-            }
-        }).await;
+        let _: Result<String> = manager
+            .execute_with_retry("service2", || async move {
+                Err(AppError::with_span_trace(
+                    "测试错误".to_string(),
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                ))
+            })
+            .await;
 
         // 获取统计数据
         let stats = manager.get_recovery_stats();
@@ -1123,9 +1147,9 @@ mod tests {
         let manager = ErrorRecoveryManager::new(create_test_config());
 
         // 先生成一些统计数据
-        let _: Result<String> = manager.execute_with_retry("test_service", || {
-            async move { Ok("成功".to_string()) }
-        }).await;
+        let _: Result<String> = manager
+            .execute_with_retry("test_service", || async move { Ok("成功".to_string()) })
+            .await;
 
         // 验证统计数据存在
         let stats_before = manager.get_recovery_stats();
@@ -1161,24 +1185,24 @@ mod tests {
         let call_count = Arc::new(AtomicU32::new(0));
         let call_count_clone = call_count.clone();
 
-        let result: Result<String> = manager.execute_with_full_recovery("test_service", || {
-            let count = call_count_clone.clone();
-            async move {
-                let current = count.fetch_add(1, Ordering::SeqCst);
-                if current < 1 {
-                    // 第一次调用失败
-                    Err(
-                        AppError::with_span_trace(
+        let result: Result<String> = manager
+            .execute_with_full_recovery("test_service", || {
+                let count = call_count_clone.clone();
+                async move {
+                    let current = count.fetch_add(1, Ordering::SeqCst);
+                    if current < 1 {
+                        // 第一次调用失败
+                        Err(AppError::with_span_trace(
                             "测试错误".to_string(),
-                            axum::http::StatusCode::INTERNAL_SERVER_ERROR
-                        )
-                    )
-                } else {
-                    // 第二次调用成功
-                    Ok("成功".to_string())
+                            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        ))
+                    } else {
+                        // 第二次调用成功
+                        Ok("成功".to_string())
+                    }
                 }
-            }
-        }).await;
+            })
+            .await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "成功");

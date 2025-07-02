@@ -1,7 +1,7 @@
 use sea_orm_migration::prelude::*;
 
 /// 创建用户会话表的迁移
-/// 
+///
 /// 此迁移创建 `user_sessions` 表，用于管理WebSocket连接状态和用户在线状态。
 /// 表设计支持多设备同时在线，为企业级聊天应用提供可靠的连接管理。
 #[derive(DeriveMigrationName)]
@@ -24,11 +24,7 @@ impl MigrationTrait for Migration {
                             .primary_key(),
                     )
                     // 关联的用户ID：外键关联到users表
-                    .col(
-                        ColumnDef::new(UserSessions::UserId)
-                            .uuid()
-                            .not_null(),
-                    )
+                    .col(ColumnDef::new(UserSessions::UserId).uuid().not_null())
                     // 会话令牌：用于WebSocket认证，唯一
                     .col(
                         ColumnDef::new(UserSessions::SessionToken)
@@ -63,11 +59,7 @@ impl MigrationTrait for Migration {
                             .not_null(),
                     )
                     // 用户代理字符串：可选
-                    .col(
-                        ColumnDef::new(UserSessions::UserAgent)
-                            .text()
-                            .null(),
-                    )
+                    .col(ColumnDef::new(UserSessions::UserAgent).text().null())
                     // 当前所在聊天室ID：可选，外键关联到chat_rooms表
                     .col(
                         ColumnDef::new(UserSessions::CurrentChatRoomId)
@@ -89,11 +81,7 @@ impl MigrationTrait for Migration {
                             .default(Expr::current_timestamp()),
                     )
                     // 会话元数据：JSON格式，存储额外的会话信息
-                    .col(
-                        ColumnDef::new(UserSessions::Metadata)
-                            .text()
-                            .null(),
-                    )
+                    .col(ColumnDef::new(UserSessions::Metadata).text().null())
                     // 会话过期时间：可选
                     .col(
                         ColumnDef::new(UserSessions::ExpiresAt)
@@ -183,11 +171,19 @@ impl MigrationTrait for Migration {
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         // 删除索引
         manager
-            .drop_index(Index::drop().name("idx_user_sessions_current_chat_room").to_owned())
+            .drop_index(
+                Index::drop()
+                    .name("idx_user_sessions_current_chat_room")
+                    .to_owned(),
+            )
             .await?;
-        
+
         manager
-            .drop_index(Index::drop().name("idx_user_sessions_last_activity").to_owned())
+            .drop_index(
+                Index::drop()
+                    .name("idx_user_sessions_last_activity")
+                    .to_owned(),
+            )
             .await?;
 
         manager

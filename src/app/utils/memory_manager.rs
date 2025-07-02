@@ -4,15 +4,18 @@
 //! 【目标】: 降低内存使用20-30%，提升缓存命中率至>90%
 //! 【特性】: L1内存缓存、对象池、内存池、智能缓存淘汰、内存泄漏检测
 
-use std::{
-    collections::{ HashMap, VecDeque },
-    sync::{ atomic::{ AtomicUsize, AtomicU64, Ordering }, Arc },
-    time::{ Duration, Instant, SystemTime },
-};
-use serde::{ Deserialize, Serialize };
-use tracing::{ debug, info, warn, error, instrument };
 use bytes::Bytes;
-use parking_lot::{ RwLock as ParkingRwLock, Mutex as ParkingMutex };
+use parking_lot::{Mutex as ParkingMutex, RwLock as ParkingRwLock};
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::{
+        Arc,
+        atomic::{AtomicU64, AtomicUsize, Ordering},
+    },
+    time::{Duration, Instant, SystemTime},
+};
+use tracing::{debug, error, info, instrument, warn};
 
 /// 内存管理器配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,7 +51,7 @@ impl Default for MemoryManagerConfig {
             object_pool_max_size: 10000,
             memory_pool_block_size: 4096, // 4KB
             memory_pool_max_blocks: 1000,
-            cache_eviction_interval_seconds: 60, // 1分钟
+            cache_eviction_interval_seconds: 60,    // 1分钟
             memory_monitoring_interval_seconds: 30, // 30秒
             memory_pressure_threshold_bytes: 1024 * 1024 * 1024, // 1GB
             enable_leak_detection: true,
@@ -108,7 +111,11 @@ impl<T> CacheEntry<T> {
 
 /// L1内存缓存实现
 #[derive(Debug)]
-pub struct L1MemoryCache<K, V> where K: Clone + Eq + std::hash::Hash, V: Clone {
+pub struct L1MemoryCache<K, V>
+where
+    K: Clone + Eq + std::hash::Hash,
+    V: Clone,
+{
     /// 缓存存储
     cache: ParkingRwLock<HashMap<K, Arc<ParkingMutex<CacheEntry<V>>>>>,
     /// 配置
@@ -117,7 +124,11 @@ pub struct L1MemoryCache<K, V> where K: Clone + Eq + std::hash::Hash, V: Clone {
     stats: Arc<CacheStats>,
 }
 
-impl<K, V> L1MemoryCache<K, V> where K: Clone + Eq + std::hash::Hash, V: Clone {
+impl<K, V> L1MemoryCache<K, V>
+where
+    K: Clone + Eq + std::hash::Hash,
+    V: Clone,
+{
     /// 创建新的L1缓存
     pub fn new(config: MemoryManagerConfig) -> Self {
         Self {
@@ -179,7 +190,9 @@ impl<K, V> L1MemoryCache<K, V> where K: Clone + Eq + std::hash::Hash, V: Clone {
         let inserted = cache.insert(key, entry).is_none();
         if inserted {
             self.stats.cache_sets.fetch_add(1, Ordering::Relaxed);
-            self.stats.total_size_bytes.fetch_add(size_bytes, Ordering::Relaxed);
+            self.stats
+                .total_size_bytes
+                .fetch_add(size_bytes, Ordering::Relaxed);
             debug!(size_bytes = size_bytes, "L1缓存条目已添加");
         }
 
@@ -196,7 +209,9 @@ impl<K, V> L1MemoryCache<K, V> where K: Clone + Eq + std::hash::Hash, V: Clone {
             drop(entry);
 
             self.stats.cache_removals.fetch_add(1, Ordering::Relaxed);
-            self.stats.total_size_bytes.fetch_sub(size_bytes, Ordering::Relaxed);
+            self.stats
+                .total_size_bytes
+                .fetch_sub(size_bytes, Ordering::Relaxed);
             debug!(size_bytes = size_bytes, "L1缓存条目已移除");
             Some(value)
         } else {
@@ -289,8 +304,12 @@ impl<K, V> L1MemoryCache<K, V> where K: Clone + Eq + std::hash::Hash, V: Clone {
             evicted_bytes += size_bytes;
         }
 
-        self.stats.cache_evictions.fetch_add(evicted_count, Ordering::Relaxed);
-        self.stats.total_size_bytes.fetch_sub(evicted_bytes, Ordering::Relaxed);
+        self.stats
+            .cache_evictions
+            .fetch_add(evicted_count, Ordering::Relaxed);
+        self.stats
+            .total_size_bytes
+            .fetch_sub(evicted_bytes, Ordering::Relaxed);
 
         info!(
             evicted_entries = evicted_count,
@@ -368,10 +387,14 @@ impl<T> std::fmt::Debug for ObjectPool<T> {
     }
 }
 
-impl<T> ObjectPool<T> where T: Send + 'static {
+impl<T> ObjectPool<T>
+where
+    T: Send + 'static,
+{
     /// 创建新的对象池
     pub fn new<F>(factory: F, config: MemoryManagerConfig) -> Self
-        where F: Fn() -> T + Send + Sync + 'static
+    where
+        F: Fn() -> T + Send + Sync + 'static,
     {
         let pool = ParkingMutex::new(VecDeque::new());
         let factory = Arc::new(factory);
@@ -397,9 +420,14 @@ impl<T> ObjectPool<T> where T: Send + 'static {
             pool.push_back(obj);
         }
 
-        self.stats.total_created.fetch_add(self.config.object_pool_initial_size, Ordering::Relaxed);
+        self.stats
+            .total_created
+            .fetch_add(self.config.object_pool_initial_size, Ordering::Relaxed);
 
-        info!(initial_size = self.config.object_pool_initial_size, "对象池预分配完成");
+        info!(
+            initial_size = self.config.object_pool_initial_size,
+            "对象池预分配完成"
+        );
     }
 
     /// 获取对象
@@ -601,10 +629,12 @@ impl MemoryPool {
             blocks.push_back(block);
         }
 
-        self.stats.total_allocated.fetch_add(initial_blocks, Ordering::Relaxed);
+        self.stats
+            .total_allocated
+            .fetch_add(initial_blocks, Ordering::Relaxed);
         self.stats.total_bytes_allocated.fetch_add(
             initial_blocks * self.config.memory_pool_block_size,
-            Ordering::Relaxed
+            Ordering::Relaxed,
         );
 
         info!(
@@ -623,27 +653,33 @@ impl MemoryPool {
         if let Some(block) = blocks.pop_front() {
             self.stats.pool_hits.fetch_add(1, Ordering::Relaxed);
             self.stats.active_blocks.fetch_add(1, Ordering::Relaxed);
-            debug!(block_size = self.config.memory_pool_block_size, "从内存池分配块");
+            debug!(
+                block_size = self.config.memory_pool_block_size,
+                "从内存池分配块"
+            );
             Some(block)
         } else {
             drop(blocks);
             // 池为空，尝试创建新块
-            if
-                self.stats.total_allocated.load(Ordering::Relaxed) <
-                self.config.memory_pool_max_blocks
+            if self.stats.total_allocated.load(Ordering::Relaxed)
+                < self.config.memory_pool_max_blocks
             {
                 let block = Bytes::from(vec![0u8; self.config.memory_pool_block_size]);
                 self.stats.pool_misses.fetch_add(1, Ordering::Relaxed);
                 self.stats.total_allocated.fetch_add(1, Ordering::Relaxed);
                 self.stats.active_blocks.fetch_add(1, Ordering::Relaxed);
-                self.stats.total_bytes_allocated.fetch_add(
-                    self.config.memory_pool_block_size,
-                    Ordering::Relaxed
+                self.stats
+                    .total_bytes_allocated
+                    .fetch_add(self.config.memory_pool_block_size, Ordering::Relaxed);
+                debug!(
+                    block_size = self.config.memory_pool_block_size,
+                    "创建新内存块"
                 );
-                debug!(block_size = self.config.memory_pool_block_size, "创建新内存块");
                 Some(block)
             } else {
-                self.stats.allocation_failures.fetch_add(1, Ordering::Relaxed);
+                self.stats
+                    .allocation_failures
+                    .fetch_add(1, Ordering::Relaxed);
                 warn!("内存池已达到最大容量，分配失败");
                 None
             }
@@ -675,7 +711,9 @@ impl MemoryPool {
             let reset_bytes = Bytes::from(reset_block);
 
             blocks.push_back(reset_bytes);
-            self.stats.successful_returns.fetch_add(1, Ordering::Relaxed);
+            self.stats
+                .successful_returns
+                .fetch_add(1, Ordering::Relaxed);
             debug!("内存块已归还到池中");
         } else {
             self.stats.pool_discards.fetch_add(1, Ordering::Relaxed);
@@ -827,9 +865,9 @@ impl MemoryMonitor {
         let is_running = self.is_running.clone();
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(
-                Duration::from_secs(config.memory_monitoring_interval_seconds)
-            );
+            let mut interval = tokio::time::interval(Duration::from_secs(
+                config.memory_monitoring_interval_seconds,
+            ));
 
             while is_running.load(Ordering::Relaxed) {
                 interval.tick().await;
@@ -882,7 +920,7 @@ impl MemoryMonitor {
             memory_pressure_level: Self::calculate_pressure_level(
                 sys.used_memory(),
                 sys.total_memory(),
-                config
+                config,
             ),
         }
     }
@@ -891,7 +929,7 @@ impl MemoryMonitor {
     fn calculate_pressure_level(
         used_memory: u64,
         total_memory: u64,
-        _config: &MemoryManagerConfig
+        _config: &MemoryManagerConfig,
     ) -> MemoryPressureLevel {
         let usage_percent = ((used_memory as f64) / (total_memory as f64)) * 100.0;
 
@@ -910,11 +948,13 @@ impl MemoryMonitor {
     async fn check_memory_pressure(
         snapshot: &MemoryUsageSnapshot,
         config: &MemoryManagerConfig,
-        stats: &MemoryMonitorStats
+        stats: &MemoryMonitorStats,
     ) {
         match snapshot.memory_pressure_level {
             MemoryPressureLevel::Critical => {
-                stats.critical_pressure_events.fetch_add(1, Ordering::Relaxed);
+                stats
+                    .critical_pressure_events
+                    .fetch_add(1, Ordering::Relaxed);
                 error!(
                     system_memory_usage = snapshot.system_used_memory,
                     process_memory_usage = snapshot.process_memory_usage,
@@ -940,7 +980,9 @@ impl MemoryMonitor {
 
         // 检查进程内存使用是否超过阈值
         if snapshot.process_memory_usage > (config.memory_pressure_threshold_bytes as u64) {
-            stats.process_memory_warnings.fetch_add(1, Ordering::Relaxed);
+            stats
+                .process_memory_warnings
+                .fetch_add(1, Ordering::Relaxed);
             warn!(
                 process_memory = snapshot.process_memory_usage,
                 threshold = config.memory_pressure_threshold_bytes,
@@ -953,7 +995,7 @@ impl MemoryMonitor {
     async fn store_usage_history(
         usage_history: &Arc<ParkingMutex<VecDeque<MemoryUsageSnapshot>>>,
         snapshot: MemoryUsageSnapshot,
-        config: &MemoryManagerConfig
+        config: &MemoryManagerConfig,
     ) {
         let mut history = usage_history.lock();
 
@@ -970,7 +1012,7 @@ impl MemoryMonitor {
     /// 检测内存泄漏
     async fn detect_memory_leaks(
         usage_history: &Arc<ParkingMutex<VecDeque<MemoryUsageSnapshot>>>,
-        stats: &MemoryMonitorStats
+        stats: &MemoryMonitorStats,
     ) {
         let history = usage_history.lock();
 
@@ -983,9 +1025,8 @@ impl MemoryMonitor {
         let mut increasing_count = 0;
 
         for i in 1..recent_snapshots.len() {
-            if
-                recent_snapshots[i - 1].process_memory_usage >
-                recent_snapshots[i].process_memory_usage
+            if recent_snapshots[i - 1].process_memory_usage
+                > recent_snapshots[i].process_memory_usage
             {
                 increasing_count += 1;
             }
@@ -993,7 +1034,9 @@ impl MemoryMonitor {
 
         // 如果80%的采样点都显示内存增长，可能存在内存泄漏
         if increasing_count >= 8 {
-            stats.potential_leaks_detected.fetch_add(1, Ordering::Relaxed);
+            stats
+                .potential_leaks_detected
+                .fetch_add(1, Ordering::Relaxed);
             warn!(
                 increasing_samples = increasing_count,
                 total_samples = recent_snapshots.len(),
@@ -1023,11 +1066,19 @@ impl MemoryMonitor {
 
     /// 重置统计信息
     pub fn reset_stats(&self) {
-        self.stats.critical_pressure_events.store(0, Ordering::Relaxed);
+        self.stats
+            .critical_pressure_events
+            .store(0, Ordering::Relaxed);
         self.stats.high_pressure_events.store(0, Ordering::Relaxed);
-        self.stats.medium_pressure_events.store(0, Ordering::Relaxed);
-        self.stats.process_memory_warnings.store(0, Ordering::Relaxed);
-        self.stats.potential_leaks_detected.store(0, Ordering::Relaxed);
+        self.stats
+            .medium_pressure_events
+            .store(0, Ordering::Relaxed);
+        self.stats
+            .process_memory_warnings
+            .store(0, Ordering::Relaxed);
+        self.stats
+            .potential_leaks_detected
+            .store(0, Ordering::Relaxed);
         self.stats.monitoring_cycles.store(0, Ordering::Relaxed);
 
         info!("内存监控统计信息已重置");
@@ -1127,7 +1178,7 @@ impl MemoryManager {
 
         let message_pool = ObjectPool::new(
             || Vec::with_capacity(1024), // 预分配1KB缓冲区
-            config.clone()
+            config.clone(),
         );
 
         let memory_pool = MemoryPool::new(config.clone());
@@ -1218,15 +1269,19 @@ impl MemoryManager {
 
         // 检查内存泄漏
         if monitor_stats.potential_leaks_detected > 0 {
-            issues.push(format!("检测到{}个潜在内存泄漏", monitor_stats.potential_leaks_detected));
+            issues.push(format!(
+                "检测到{}个潜在内存泄漏",
+                monitor_stats.potential_leaks_detected
+            ));
             is_healthy = false;
         }
 
         // 检查内存压力
         if monitor_stats.critical_pressure_events > 0 {
-            issues.push(
-                format!("发生{}次严重内存压力事件", monitor_stats.critical_pressure_events)
-            );
+            issues.push(format!(
+                "发生{}次严重内存压力事件",
+                monitor_stats.critical_pressure_events
+            ));
             is_healthy = false;
         }
 
@@ -1276,7 +1331,7 @@ pub struct MemoryHealthStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::time::{ sleep, Duration };
+    use tokio::time::{Duration, sleep};
 
     /// 创建测试配置
     fn create_test_config() -> MemoryManagerConfig {
@@ -1307,7 +1362,10 @@ mod tests {
         assert_eq!(cache.get(&"nonexistent".to_string()), None);
 
         // 测试移除
-        assert_eq!(cache.remove(&"key1".to_string()), Some("value1".to_string()));
+        assert_eq!(
+            cache.remove(&"key1".to_string()),
+            Some("value1".to_string())
+        );
         assert_eq!(cache.get(&"key1".to_string()), None);
     }
 
@@ -1405,7 +1463,9 @@ mod tests {
         manager.start().await;
 
         // 测试缓存操作
-        manager.string_cache.set("test_key".to_string(), "test_value".to_string(), 20);
+        manager
+            .string_cache
+            .set("test_key".to_string(), "test_value".to_string(), 20);
         assert_eq!(
             manager.string_cache.get(&"test_key".to_string()),
             Some("test_value".to_string())

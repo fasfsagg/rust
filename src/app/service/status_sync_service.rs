@@ -15,15 +15,15 @@
 //! - 用户活跃状态更新
 //! - 状态变更事件广播
 
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
-use chrono::{ DateTime, Utc };
-use serde::{ Deserialize, Serialize };
 
-use crate::app::service::{ ConnectionManager, MessageDistributor, MessagePriority };
-use crate::app::model::{ ServerMessage, MessageType };
+use crate::app::model::{MessageType, ServerMessage};
+use crate::app::service::{ConnectionManager, MessageDistributor, MessagePriority};
 
 /// 用户在线状态枚举
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -82,13 +82,9 @@ pub struct MessageStatusInfo {
 #[serde(tag = "event_type")]
 pub enum StatusSyncEvent {
     /// 用户状态变更事件
-    UserStatusChanged {
-        user_status: UserStatusInfo,
-    },
+    UserStatusChanged { user_status: UserStatusInfo },
     /// 消息状态变更事件
-    MessageStatusChanged {
-        message_status: MessageStatusInfo,
-    },
+    MessageStatusChanged { message_status: MessageStatusInfo },
     /// 用户上线事件
     UserOnline {
         user_id: Uuid,
@@ -142,7 +138,7 @@ impl StatusSyncService {
     /// 【返回值】: StatusSyncService 实例
     pub fn new(
         connection_manager: Arc<ConnectionManager>,
-        message_distributor: Arc<MessageDistributor>
+        message_distributor: Arc<MessageDistributor>,
     ) -> Self {
         Self {
             user_statuses: Arc::new(RwLock::new(HashMap::new())),
@@ -165,7 +161,7 @@ impl StatusSyncService {
         &self,
         user_id: Uuid,
         username: String,
-        status: UserOnlineStatus
+        status: UserOnlineStatus,
     ) -> Result<(), String> {
         let now = Utc::now();
 
@@ -194,22 +190,19 @@ impl StatusSyncService {
 
         // 创建状态同步事件
         let sync_event = match status {
-            UserOnlineStatus::Online =>
-                StatusSyncEvent::UserOnline {
-                    user_id,
-                    username: username.clone(),
-                    timestamp: now,
-                },
-            UserOnlineStatus::Offline =>
-                StatusSyncEvent::UserOffline {
-                    user_id,
-                    username: username.clone(),
-                    timestamp: now,
-                },
-            _ =>
-                StatusSyncEvent::UserStatusChanged {
-                    user_status: user_status.clone(),
-                },
+            UserOnlineStatus::Online => StatusSyncEvent::UserOnline {
+                user_id,
+                username: username.clone(),
+                timestamp: now,
+            },
+            UserOnlineStatus::Offline => StatusSyncEvent::UserOffline {
+                user_id,
+                username: username.clone(),
+                timestamp: now,
+            },
+            _ => StatusSyncEvent::UserStatusChanged {
+                user_status: user_status.clone(),
+            },
         };
 
         // 广播状态变更事件
@@ -232,7 +225,7 @@ impl StatusSyncService {
         &self,
         message_id: Uuid,
         user_id: Uuid,
-        read_status: MessageReadStatus
+        read_status: MessageReadStatus,
     ) -> Result<(), String> {
         let now = Utc::now();
 
@@ -252,16 +245,14 @@ impl StatusSyncService {
 
         // 创建状态同步事件
         let sync_event = match read_status {
-            MessageReadStatus::Read =>
-                StatusSyncEvent::MessageRead {
-                    message_id,
-                    user_id,
-                    timestamp: now,
-                },
-            _ =>
-                StatusSyncEvent::MessageStatusChanged {
-                    message_status: message_status.clone(),
-                },
+            MessageReadStatus::Read => StatusSyncEvent::MessageRead {
+                message_id,
+                user_id,
+                timestamp: now,
+            },
+            _ => StatusSyncEvent::MessageStatusChanged {
+                message_status: message_status.clone(),
+            },
         };
 
         // 广播状态变更事件
@@ -269,9 +260,7 @@ impl StatusSyncService {
 
         println!(
             "STATUS_SYNC: 消息 {} 状态更新为 {:?} (用户: {})",
-            message_id,
-            read_status,
-            user_id
+            message_id, read_status, user_id
         );
         Ok(())
     }
@@ -299,7 +288,7 @@ impl StatusSyncService {
     pub async fn get_message_status(
         &self,
         message_id: &Uuid,
-        user_id: &Uuid
+        user_id: &Uuid,
     ) -> Option<MessageStatusInfo> {
         let statuses = self.message_statuses.read().await;
         statuses.get(&(*message_id, *user_id)).cloned()
@@ -327,9 +316,8 @@ impl StatusSyncService {
     /// 【返回值】: Result<(), String> - 成功返回 Ok(())，失败返回错误信息
     async fn broadcast_status_event(&self, event: StatusSyncEvent) -> Result<(), String> {
         // 创建状态同步消息
-        let message_content = serde_json
-            ::to_string(&event)
-            .map_err(|e| format!("序列化状态事件失败: {}", e))?;
+        let message_content =
+            serde_json::to_string(&event).map_err(|e| format!("序列化状态事件失败: {}", e))?;
 
         let server_message = ServerMessage {
             id: Uuid::new_v4(),
@@ -341,12 +329,14 @@ impl StatusSyncService {
         };
 
         // 广播给所有在线用户
-        self.message_distributor.broadcast_to_all(
-            server_message,
-            false, // 不排除发送者
-            None,
-            Some(MessagePriority::High) // 状态同步使用高优先级
-        ).await?;
+        self.message_distributor
+            .broadcast_to_all(
+                server_message,
+                false, // 不排除发送者
+                None,
+                Some(MessagePriority::High), // 状态同步使用高优先级
+            )
+            .await?;
 
         Ok(())
     }
@@ -361,7 +351,10 @@ impl StatusSyncService {
     pub async fn cleanup_user_status(&self, user_id: &Uuid) -> Result<(), String> {
         let mut statuses = self.user_statuses.write().await;
         if let Some(removed_status) = statuses.remove(user_id) {
-            println!("STATUS_SYNC: 清理用户 {} 的状态信息", removed_status.username);
+            println!(
+                "STATUS_SYNC: 清理用户 {} 的状态信息",
+                removed_status.username
+            );
         }
         Ok(())
     }
@@ -370,20 +363,18 @@ impl StatusSyncService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::service::{ ConnectionManager, MessageDistributor };
+    use crate::app::service::{ConnectionManager, MessageDistributor};
     use std::sync::Arc;
     use uuid::Uuid;
 
     /// 创建测试用的状态同步服务
     async fn create_test_status_sync_service() -> StatusSyncService {
         let connection_manager = Arc::new(ConnectionManager::new());
-        let message_distributor = Arc::new(
-            MessageDistributor::new(
-                connection_manager.clone(),
-                Some(10), // 小批量用于测试
-                Some(1) // 单线程用于测试
-            )
-        );
+        let message_distributor = Arc::new(MessageDistributor::new(
+            connection_manager.clone(),
+            Some(10), // 小批量用于测试
+            Some(1),  // 单线程用于测试
+        ));
 
         StatusSyncService::new(connection_manager, message_distributor)
     }
@@ -395,11 +386,9 @@ mod tests {
         let username = "test_user".to_string();
 
         // 测试更新用户在线状态
-        let result = service.update_user_status(
-            user_id,
-            username.clone(),
-            UserOnlineStatus::Online
-        ).await;
+        let result = service
+            .update_user_status(user_id, username.clone(), UserOnlineStatus::Online)
+            .await;
 
         assert!(result.is_ok());
 
@@ -419,11 +408,9 @@ mod tests {
         let user_id = Uuid::new_v4();
 
         // 测试更新消息已读状态
-        let result = service.update_message_status(
-            message_id,
-            user_id,
-            MessageReadStatus::Read
-        ).await;
+        let result = service
+            .update_message_status(message_id, user_id, MessageReadStatus::Read)
+            .await;
 
         assert!(result.is_ok());
 
@@ -446,13 +433,16 @@ mod tests {
         let user3_id = Uuid::new_v4();
 
         service
-            .update_user_status(user1_id, "user1".to_string(), UserOnlineStatus::Online).await
+            .update_user_status(user1_id, "user1".to_string(), UserOnlineStatus::Online)
+            .await
             .unwrap();
         service
-            .update_user_status(user2_id, "user2".to_string(), UserOnlineStatus::Online).await
+            .update_user_status(user2_id, "user2".to_string(), UserOnlineStatus::Online)
+            .await
             .unwrap();
         service
-            .update_user_status(user3_id, "user3".to_string(), UserOnlineStatus::Offline).await
+            .update_user_status(user3_id, "user3".to_string(), UserOnlineStatus::Offline)
+            .await
             .unwrap();
 
         // 获取在线用户列表
@@ -461,10 +451,7 @@ mod tests {
         // 应该只有2个在线用户
         assert_eq!(online_users.len(), 2);
 
-        let online_user_ids: Vec<Uuid> = online_users
-            .iter()
-            .map(|u| u.user_id)
-            .collect();
+        let online_user_ids: Vec<Uuid> = online_users.iter().map(|u| u.user_id).collect();
         assert!(online_user_ids.contains(&user1_id));
         assert!(online_user_ids.contains(&user2_id));
         assert!(!online_user_ids.contains(&user3_id));
@@ -477,7 +464,8 @@ mod tests {
 
         // 添加用户状态
         service
-            .update_user_status(user_id, "test_user".to_string(), UserOnlineStatus::Online).await
+            .update_user_status(user_id, "test_user".to_string(), UserOnlineStatus::Online)
+            .await
             .unwrap();
 
         // 验证状态存在
@@ -499,14 +487,24 @@ mod tests {
         let user2_id = Uuid::new_v4();
 
         // 不同用户对同一消息的不同状态
-        service.update_message_status(message_id, user1_id, MessageReadStatus::Read).await.unwrap();
         service
-            .update_message_status(message_id, user2_id, MessageReadStatus::Delivered).await
+            .update_message_status(message_id, user1_id, MessageReadStatus::Read)
+            .await
+            .unwrap();
+        service
+            .update_message_status(message_id, user2_id, MessageReadStatus::Delivered)
+            .await
             .unwrap();
 
         // 验证状态独立存储
-        let user1_status = service.get_message_status(&message_id, &user1_id).await.unwrap();
-        let user2_status = service.get_message_status(&message_id, &user2_id).await.unwrap();
+        let user1_status = service
+            .get_message_status(&message_id, &user1_id)
+            .await
+            .unwrap();
+        let user2_status = service
+            .get_message_status(&message_id, &user2_id)
+            .await
+            .unwrap();
 
         assert_eq!(user1_status.read_status, MessageReadStatus::Read);
         assert_eq!(user2_status.read_status, MessageReadStatus::Delivered);

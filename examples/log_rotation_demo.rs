@@ -9,11 +9,11 @@
 // 4. 不同的轮转策略演示
 
 use axum_tutorial::app::middleware::logger::{
-    LoggerConfig, LogRotation, setup_file_rotation_logger
+    LogRotation, LoggerConfig, setup_file_rotation_logger,
 };
 use std::time::Duration;
 use tokio::time::sleep;
-use tracing::{info, warn, error, debug};
+use tracing::{debug, error, info, warn};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         file_name_prefix: "demo_app".to_string(),
         rotation: LogRotation::Minutely, // 每分钟轮转，便于演示
         non_blocking: true,
-        max_log_files: 5, // 只保留5个文件
+        max_log_files: 5,           // 只保留5个文件
         max_file_size: 1024 * 1024, // 1MB
         error_tracing: true,
         json_format: false,
@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 初始化日志系统
     let _guard = setup_file_rotation_logger(config)?;
-    
+
     println!("✓ 日志系统初始化完成");
     println!("✓ 日志文件将保存到: demo_logs/");
     println!("✓ 文件名前缀: demo_app");
@@ -47,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 演示2：生成不同级别的日志
     println!("2. 生成测试日志...");
-    
+
     for i in 1..=20 {
         info!(
             iteration = i,
@@ -55,15 +55,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "这是第 {} 次日志记录",
             i
         );
-        
+
         if i % 3 == 0 {
-            warn!(
-                iteration = i,
-                "这是一个警告日志 - 迭代 {}",
-                i
-            );
+            warn!(iteration = i, "这是一个警告日志 - 迭代 {}", i);
         }
-        
+
         if i % 5 == 0 {
             error!(
                 iteration = i,
@@ -72,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 i
             );
         }
-        
+
         if i % 7 == 0 {
             debug!(
                 iteration = i,
@@ -84,14 +80,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // 每隔2秒记录一次
         sleep(Duration::from_secs(2)).await;
-        
+
         if i % 5 == 0 {
             println!("  已生成 {} 条日志记录", i);
         }
     }
 
     println!("\n3. 演示结构化日志记录...");
-    
+
     // 演示结构化日志
     info!(
         user_id = "user_123",
@@ -126,7 +122,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 演示4：等待文件轮转
     println!("\n4. 等待日志文件轮转...");
     println!("  (如果当前时间接近分钟边界，可能会看到新的日志文件生成)");
-    
+
     // 继续生成一些日志以触发轮转
     for i in 1..=10 {
         info!(
