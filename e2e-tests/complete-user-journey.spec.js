@@ -160,7 +160,7 @@ async function connectWebSocket(page, user) {
   await page.waitForTimeout(2000);
   
   // 验证连接状态
-  const wsStatus = page.locator('#wsStatus');
+  const wsStatus = page.locator('#connectionStatus');
   await expect(wsStatus).toHaveText('已连接', { timeout: 10000 });
   await expect(wsStatus).toHaveClass(/connected/);
   
