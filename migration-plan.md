@@ -6,7 +6,7 @@
 
 *   **当前数据库**：SQLite (`task_manager.db`)，通过 SeaORM ORM 进行数据访问。
 *   **ORM 配置**：使用 SeaORM，其底层数据库驱动为 `sqlx-sqlite`，并配置了 `native-tls`。
-*   **架构**：遵循 Controller-Service-Repository 分层模式，代码结构清晰，注释详尽。
+*   **架构**：应遵循 SOLID (单一职责、开闭、里氏替换、接口隔离、依赖倒置) 原则，提高代码的可维护性和扩展性的分层模式，代码结构清晰，注释详尽。
 *   **目标**：项目旨在为构建支持百万吞吐量、百万并发的企业级移动手机聊天室应用后端奠定技术基础。SQLite 作为文件数据库，在并发、可伸缩性、高可用性方面存在局限，无法满足未来企业级应用的需求。因此，迁移到 PostgreSQL (关系型数据) 和 DragonflyDB (高性能内存数据) 是必要的现代化升级。
 *   **开发环境**：Windows 10 x86 64位系统。
 
@@ -39,21 +39,12 @@
     *   将 `sea-orm` 的 `sqlx-sqlite` 特性替换为 `sqlx-postgres`。
     *   确保 `sqlx` 依赖也支持 `postgres` 特性。
     *   添加 `redis` crate 用于连接 DragonflyDB。
-    *   示例：
-        ```toml
-        # Cargo.toml
-        [dependencies]
-        sea-orm = { version = "0.12", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros"] }
-        sqlx = { version = "...", features = ["postgres", "runtime-tokio-rustls"] } # 确保 sqlx 也支持 postgres
-        redis = { version = "0.25", features = ["tokio-comp"] } # 用于连接 DragonflyDB
-        ```
-*   **数据库连接 URL 调整**：
-    *   在 `src/config.rs` 中，更新 `AppConfig` 结构体中数据库连接字符串的解析逻辑。
-    *   PostgreSQL 的连接 URL 格式通常为：`postgresql://user:password@host:port/database_name`。
-    *   DragonflyDB 的连接 URL 格式通常为：`redis://host:port`。
+    *   确保依赖是最新兼容版
+   
+*   **数据库连接 URL 调整**：参考docker-compose.yml 配置数据库连接 URL
+
 *   **迁移工具配置**：
     *   确保 `sea-orm-cli` 能够正确识别并连接到 PostgreSQL 数据库。通常，你需要在运行迁移命令时通过环境变量或命令行参数指定 PostgreSQL 的连接 URL。
-    *   例如：`DATABASE_URL=postgresql://user:password@host:port/database_name sea-orm-cli migrate up`
 *   **实体（Entity）定义检查**：
     *   检查 `app/entity/` 目录下的所有实体定义。虽然 SeaORM 提供了很好的抽象，但某些特定于数据库的类型（如 SQLite 的 `BLOB` 与 PostgreSQL 的 `BYTEA`）可能需要微调。
     *   如果使用了 `Uuid`，PostgreSQL 原生支持 `UUID` 类型，确保 SeaORM 映射正确。
@@ -62,39 +53,11 @@
 
 *   **`.env` 文件更新**：
     *   添加 PostgreSQL 和 DragonflyDB 的连接字符串、用户名、密码、主机、端口等环境变量。
-    *   示例：
-        ```
-        DATABASE_URL_POSTGRES="postgresql://user:password@localhost:5432/axum_tutorial"
-        DRAGONFLYDB_URL="redis://localhost:6379"
-        ```
+"
+
 *   **Docker Compose 配置**：
     *   编写或修改 `docker-compose.yml` 文件，以方便地在 Windows 10 开发环境下启动 PostgreSQL 和 DragonflyDB 服务。这将为开发和测试提供一致的数据库环境。
-    *   示例 `docker-compose.yml` 片段：
-        ```yaml
-        version: '3.8'
-        services:
-          postgres:
-            image: postgres:16-alpine
-            restart: always
-            environment:
-              POSTGRES_USER: user
-              POSTGRES_PASSWORD: password
-              POSTGRES_DB: axum_tutorial
-            ports:
-              - "5432:5432"
-            volumes:
-              - postgres_data:/var/lib/postgresql/data
 
-          dragonflydb:
-            image: docker.dragonflydb.io/dragonflydb/dragonfly
-            restart: always
-            ports:
-              - "6379:6379"
-            command: ["dragonfly", "--maxmemory", "1gb"] # 根据需要调整内存限制
-
-        volumes:
-          postgres_data:
-        ```
 *   **本地开发环境**：
     *   确保你的 Windows 10 开发机器上安装了 PostgreSQL 客户端工具（如 `psql`），以便进行数据库管理和调试。
 
@@ -304,7 +267,7 @@
 
 **企业级要求考量**：
 
-*   **安全性**：确保数据库连接使用强密码，启用 SSL/TLS 加密（`native-tls` 兼容性），并配置防火墙规则。
+
 *   **可靠性**：实施定期备份、主从复制（PostgreSQL），并监控数据库健康状况。
 *   **性能**：持续进行性能测试和调优，确保系统能够应对百万并发的挑战。
 
