@@ -31,12 +31,6 @@ pub mod error;
 pub mod routes;
 pub mod startup;
 
-// --- 测试相关模块 (仅在测试或启用testing特性时编译) ---
-#[cfg(any(test, feature = "testing"))]
-pub mod test_config;
-#[cfg(any(test, feature = "testing"))]
-pub mod test_utils;
-
 use anyhow::Result;
 use config::AppConfig;
 use tokio::net::TcpListener;

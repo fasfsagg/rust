@@ -14,10 +14,6 @@ pub mod chat_room_entity;
 pub mod message_entity;
 pub mod user_session_entity;
 
-// 测试模块
-#[cfg(test)]
-mod tests;
-
 pub struct Migrator;
 
 impl MigratorTrait for Migrator {

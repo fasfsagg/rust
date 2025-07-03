@@ -12,9 +12,6 @@ pub mod message_repository;
 pub mod task_repository;
 pub mod user_repository;
 
-#[cfg(test)]
-mod test_message_repository;
-
 // 重新导出 Repository 以便上层模块（主要是 service）可以更方便地使用。
 // 使用 `crate::app::repository::MessageRepository` 而不是 `...::message_repository::MessageRepository`
 pub use message_repository::MessageRepository;

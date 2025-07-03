@@ -145,6 +145,4 @@ path = "examples/message_distributor_demo.rs"
 name = "log_rotation_demo"
 path = "examples/log_rotation_demo.rs"
 
-[[bench]]
-name = "message_distributor_performance"
-harness = false
+

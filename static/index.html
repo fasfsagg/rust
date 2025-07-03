@@ -7,36 +7,259 @@
     <!-- 添加favicon，使用简单的data URI避免404错误 -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='16'>🚀</text></svg>" type="image/svg+xml">
     <style>
+        /* 统一字体和排版规范 - 针对Windows 10 Chrome优化中文文字显示 */
         body {
-            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            line-height: 1.6;
-            color: #333;
-        }
-        
-        h1, h2, h3 {
+            /* 针对Windows 10 Chrome优化的字体族，优先使用系统字体 */
+            font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            max-width: none; /* 移除最大宽度限制，使用Grid布局控制 */
+            margin: 0;
+            padding: 0;
+            /* 针对Windows 10 Chrome优化的中文行高 */
+            line-height: 1.5;
             color: #2c3e50;
+            /* 统一文字方向和对齐方式 */
+            direction: ltr;
+            text-align: left;
+            /* Windows 10 Chrome中文字间距优化 */
+            letter-spacing: 0.01em;
+            /* Chrome浏览器文字渲染优化 */
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-rendering: optimizeLegibility;
+            /* Chrome浏览器背景优化 */
+            background-color: #f8f9fa;
+            min-height: 100vh;
         }
         
-        h1 {
-            border-bottom: 2px solid #eee;
-            padding-bottom: 10px;
-            margin-bottom: 20px;
+        /* 统一标题排版规范 - 建立清晰的视觉层次 */
+        h1, h2, h3, h4, h5, h6 {
+            color: #2c3e50;
+            /* 统一标题字体粗细 */
+            font-weight: 600;
+            /* 优化中文标题行高 */
+            line-height: 1.4;
+            /* 统一标题对齐方式 */
+            text-align: left;
+            /* 优化标题字间距 */
+            letter-spacing: 0.01em;
+            /* 统一标题边距 */
+            margin-top: 0;
+            margin-bottom: 15px;
         }
-        
-        .container {
+
+        /* 现代化页面标题样式 - Windows 10 Chrome优化 */
+        .page-header {
+            text-align: center;
+            margin: 20px auto 24px auto; /* Chrome浏览器间距优化 */
+            padding: 24px 20px; /* 适配Chrome的内边距渲染 */
+            background: linear-gradient(135deg, rgba(52, 152, 219, 0.06) 0%, rgba(46, 204, 113, 0.06) 100%);
+            border-radius: 16px; /* Chrome圆角渲染优化 */
+            border: 1px solid rgba(52, 152, 219, 0.12); /* Chrome边框透明度优化 */
+            box-shadow: 0 2px 12px rgba(52, 152, 219, 0.08); /* Chrome阴影渲染优化 */
+            max-width: 1400px; /* 与主容器保持一致 */
+        }
+
+        .page-header h1 {
+            font-size: 2.2em;
+            margin: 0;
+            padding: 0;
+            border: none;
             display: flex;
-            gap: 20px;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .title-icon {
+            font-size: 1.5em;
+            animation: pulse 2s infinite;
+        }
+
+        .title-main {
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 50%, #2ecc71 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .title-sub {
+            font-size: 0.5em;
+            color: #7f8c8d;
+            font-weight: 400;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        /* 响应式标题 */
+        @media (max-width: 768px) {
+            .page-header h1 {
+                font-size: 1.8em;
+            }
+
+            .title-sub {
+                font-size: 0.45em;
+            }
+        }
+
+        h2 {
+            font-size: 1.5em;
+            margin-bottom: 18px;
+        }
+
+        h3 {
+            font-size: 1.3em;
+            margin-bottom: 15px;
+        }
+
+        h4 {
+            font-size: 1.1em;
+            margin-bottom: 12px;
+        }
+
+        /* 通用文字排版规则 - 确保所有文本元素的一致性 */
+        p, span, div, li, label {
+            /* 继承统一的字体族 */
+            font-family: inherit;
+            /* 统一文字方向和对齐 */
+            direction: ltr;
+            text-align: left;
+            /* 优化中文文字间距 */
+            letter-spacing: 0.02em;
+            /* 确保文字渲染质量 */
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* 段落样式 - 优化段落间距和行高 */
+        p {
+            line-height: 1.6;
+            margin-bottom: 12px;
+        }
+
+        /* 列表样式 - 统一列表文字排版 */
+        ul, ol {
+            line-height: 1.6;
+            padding-left: 20px;
+        }
+
+        li {
+            margin-bottom: 6px;
+            line-height: 1.6;
+        }
+
+        /* 标签样式 - 统一表单标签排版 */
+        label {
+            font-weight: 500;
+            margin-bottom: 6px;
+            display: block;
+            line-height: 1.4;
         }
         
+        /* 主容器 - 使用CSS Grid实现现代化三栏布局，针对Windows 10 Chrome优化 */
+        .main-container {
+            display: grid;
+            /* 优化三栏布局比例：突出聊天功能区域 - 认证:任务:聊天 = 0.8:1:1.5 */
+            grid-template-columns: minmax(280px, 0.8fr) minmax(320px, 1fr) minmax(480px, 1.5fr);
+            /* 优化Grid行高设置，确保面板高度一致性 */
+            grid-template-rows: minmax(500px, auto);
+            gap: 24px; /* 适配Chrome的默认间距渲染 */
+            min-height: 85vh; /* 针对Chrome浏览器的视口高度优化 */
+            /* 改进垂直对齐：使用stretch确保面板高度一致 */
+            align-items: stretch;
+            /* 确保Grid容器在滚动时保持稳定对齐 */
+            align-content: start;
+            margin: 16px auto; /* 优化Chrome浏览器的上下边距 */
+            padding: 0 16px; /* 适配Chrome的默认内边距渲染 */
+            max-width: 1500px; /* 增加最大宽度以适应更大的聊天区域 */
+            /* Chrome浏览器特定优化 */
+            -webkit-box-sizing: border-box;
+            box-sizing: border-box;
+            /* 添加滚动时的布局稳定性 */
+            position: relative;
+            contain: layout style;
+        }
+
+        /* 面板基础样式 - 针对Windows 10 Chrome浏览器优化 */
         .panel {
-            flex: 1;
-            background-color: #f9f9f9;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); /* Chrome渲染优化的渐变背景 */
+            padding: 24px; /* 适配Chrome的默认内边距渲染 */
+            border-radius: 16px; /* 针对Chrome的圆角渲染优化 */
+            box-shadow:
+                0 4px 20px rgba(0,0,0,0.08),
+                0 1px 6px rgba(0,0,0,0.04); /* 针对Chrome的阴影渲染优化 */
+            border: 1px solid rgba(224, 224, 224, 0.8); /* Chrome浏览器边框优化 */
+            backdrop-filter: blur(8px); /* 适配Chrome的毛玻璃效果性能 */
+            display: flex;
+            flex-direction: column;
+            /* 优化高度设置：确保面板高度一致性和动态响应 */
+            height: 100%; /* 占满Grid容器分配的高度 */
+            min-height: 500px; /* 增加最小高度，确保内容充分展示 */
+            max-height: calc(100vh - 200px); /* 限制最大高度，避免超出视口 */
+            transition: all 0.25s ease-out; /* Chrome浏览器过渡动画优化 */
+            position: relative; /* 为伪元素定位做准备 */
+            /* 优化溢出处理：确保内容滚动时布局稳定 */
+            overflow: visible; /* 允许内容正常显示 */
+            /* Chrome浏览器特定优化 */
+            -webkit-transform: translateZ(0); /* 启用硬件加速 */
+            transform: translateZ(0);
+            will-change: transform, box-shadow; /* 优化Chrome渲染性能 */
+            /* 添加布局稳定性 */
+            contain: layout style;
+        }
+
+        /* 面板装饰性背景 */
+        .panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px; /* 增加装饰条高度 */
+            background: linear-gradient(90deg, #3498db, #2ecc71, #f39c12); /* 顶部彩色装饰条 */
+            opacity: 0.9; /* 增加透明度，更明显的装饰效果 */
+            border-radius: 18px 18px 0 0; /* 与面板圆角保持一致 */
+        }
+
+        /* 面板悬停效果 - 现代化交互反馈 */
+        .panel:hover {
+            box-shadow:
+                0 10px 40px rgba(0,0,0,0.15),
+                0 4px 12px rgba(0,0,0,0.1); /* 增强悬停阴影效果，更强的层次感 */
+            transform: translateY(-3px) scale(1.01); /* 轻微上浮和放大效果 */
+            border-color: rgba(255,255,255,1); /* 增强边框亮度 */
+        }
+
+        /* 面板焦点效果 */
+        .panel:focus-within {
+            box-shadow:
+                0 10px 40px rgba(52, 152, 219, 0.2),
+                0 4px 12px rgba(52, 152, 219, 0.15); /* 增强蓝色焦点阴影 */
+            transform: translateY(-2px) scale(1.005);
+        }
+
+        /* 面板标题统一样式 */
+        .panel > h2 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e8e8e8;
+            color: #2c3e50;
+            font-weight: 600;
+        }
+
+        /* 子标题统一样式 */
+        .panel h3, .chat-panel h3, .chat-panel h4 {
+            margin-top: 15px;
+            margin-bottom: 12px;
+            color: #34495e;
+            font-weight: 500;
+        }
+
+        /* 第一个子标题去除顶部边距 */
+        .panel h3:first-of-type, .chat-panel h3:first-of-type, .chat-panel h4:first-of-type {
+            margin-top: 0;
         }
         
         form {
@@ -46,35 +269,176 @@
             margin-bottom: 20px;
         }
         
+        /* Windows 10 Chrome表单元素优化 */
         input, textarea, button {
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+            padding: 12px 16px; /* Chrome浏览器内边距优化 */
+            border: 1px solid #d0d0d0; /* Chrome边框颜色优化 */
+            border-radius: 8px; /* Chrome圆角优化 */
+            /* Chrome字体优化 */
+            font-family: inherit;
+            font-size: 14px;
+            /* Chrome中文输入体验优化 */
+            line-height: 1.4;
+            letter-spacing: 0.01em;
+            /* 统一文字对齐 */
+            text-align: left;
+            direction: ltr;
+            /* Chrome文字渲染优化 */
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            /* Chrome浏览器性能优化 */
+            -webkit-appearance: none;
+            appearance: none;
+            transition: all 0.2s ease;
         }
         
+        /* Windows 10 Chrome按钮样式优化 */
         button {
-            background-color: #3498db;
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); /* Chrome渐变优化 */
             color: white;
             cursor: pointer;
             border: none;
-            padding: 10px;
+            padding: 12px 18px; /* Chrome内边距优化 */
+            border-radius: 6px; /* Chrome圆角优化 */
+            font-weight: 500; /* Chrome字体粗细优化 */
+            font-size: 14px;
+            transition: all 0.2s ease; /* Chrome过渡优化 */
+            min-height: 40px; /* Chrome最小高度优化 */
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 1px 4px rgba(52, 152, 219, 0.2); /* Chrome阴影优化 */
+            /* Chrome浏览器特定优化 */
+            -webkit-user-select: none;
+            user-select: none;
         }
-        
+
+        /* 按钮波纹效果 */
+        button::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transition: width 0.6s, height 0.6s, top 0.6s, left 0.6s;
+            transform: translate(-50%, -50%);
+        }
+
+        button:active::before {
+            width: 300px;
+            height: 300px;
+            top: 50%;
+            left: 50%;
+        }
+
         button:hover {
-            background-color: #2980b9;
+            background: linear-gradient(135deg, #2980b9 0%, #1f5f8b 100%); /* 悬停渐变 */
+            transform: translateY(-2px) scale(1.02); /* 轻微上浮和放大 */
+            box-shadow: 0 4px 16px rgba(52, 152, 219, 0.4); /* 增强阴影 */
+        }
+
+        button:active {
+            transform: translateY(-1px) scale(0.98); /* 按下效果 */
+            box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+        }
+
+        button:disabled {
+            background: linear-gradient(135deg, #bdc3c7 0%, #95a5a6 100%); /* 禁用渐变 */
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+            opacity: 0.6; /* 添加透明度 */
+        }
+
+        /* 按钮焦点样式 */
+        button:focus {
+            outline: none;
+            box-shadow:
+                0 4px 16px rgba(52, 152, 219, 0.4),
+                0 0 0 3px rgba(52, 152, 219, 0.2); /* 焦点环 */
         }
         
+        /* 任务列表容器 - Windows 10 Chrome浏览器滚动优化 */
         #taskList {
             list-style-type: none;
             padding: 0;
+            /* 优化高度设置：动态响应面板高度变化 */
+            flex: 1; /* 占用面板剩余空间 */
+            max-height: calc(100% - 280px); /* 根据面板内其他元素动态计算 */
+            min-height: 200px; /* 确保最小可用高度 */
+            overflow-y: auto; /* 添加垂直滚动条 */
+            border: 1px solid rgba(208, 208, 208, 0.7); /* Chrome边框渲染优化 */
+            border-radius: 12px; /* Chrome圆角渲染优化 */
+            background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%); /* Chrome渐变优化 */
+            margin-bottom: 20px; /* Chrome间距优化 */
+            /* Chrome浏览器滚动条样式优化 */
+            scrollbar-width: thin;
+            scrollbar-color: rgba(52, 152, 219, 0.4) rgba(245, 245, 245, 0.8);
+            /* Chrome性能优化 */
+            -webkit-overflow-scrolling: touch;
+            /* 添加滚动时的布局稳定性 */
+            contain: layout style;
+            /* 确保滚动时不影响其他面板 */
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Chrome浏览器滚动条样式优化 */
+        #taskList::-webkit-scrollbar {
+            width: 6px; /* Chrome浏览器滚动条宽度优化 */
+        }
+
+        #taskList::-webkit-scrollbar-track {
+            background: rgba(245, 245, 245, 0.8); /* Chrome滚动条轨道优化 */
+            border-radius: 3px;
+        }
+
+        #taskList::-webkit-scrollbar-thumb {
+            background: rgba(52, 152, 219, 0.4); /* Chrome滚动条拇指优化 */
+            border-radius: 3px;
+            transition: background 0.2s ease;
+        }
+
+        #taskList::-webkit-scrollbar-thumb:hover {
+            background: rgba(52, 152, 219, 0.6); /* Chrome悬停效果优化 */
+        }
+
+        /* 任务列表为空时的现代化样式 */
+        #taskList:empty::before {
+            content: "✨ 暂无任务，创建第一个任务开始吧！";
+            display: block;
+            text-align: center;
+            color: #7f8c8d;
+            padding: 40px 20px; /* 增加垂直内边距 */
+            font-style: italic;
+            font-size: 1.1em; /* 稍微增大字体 */
+            background: linear-gradient(135deg, rgba(52, 152, 219, 0.05), rgba(46, 204, 113, 0.05)); /* 添加微妙背景 */
+            border-radius: 8px;
+            margin: 20px;
+            border: 2px dashed rgba(52, 152, 219, 0.2); /* 添加虚线边框 */
         }
         
+        /* 任务项样式 - 统一任务信息文字排版 */
         .task-item {
             background-color: white;
-            padding: 10px;
-            margin-bottom: 10px;
-            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 12px;
+            border-radius: 6px;
             border-left: 3px solid #3498db;
+            /* 统一任务文字排版 */
+            font-family: inherit;
+            line-height: 1.6;
+            letter-spacing: 0.02em;
+            text-align: left;
+            direction: ltr;
+            /* 优化文字渲染 */
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
         
         .task-item.completed {
@@ -335,24 +699,67 @@
 
         /* ===== 聊天大厅样式 ===== */
 
-        /* 聊天大厅容器 - 三栏布局 */
+        /* 聊天大厅容器 - 使用Grid布局确保元素位置稳定，防止覆盖问题 */
         .chat-hall-container {
-            display: grid;
-            grid-template-columns: 1fr 2fr 1fr;
-            gap: 15px;
-            height: 70vh;
-            margin-top: 15px;
+            /* Grid布局在后面的特定优化中定义，这里保留基础样式 */
+            flex: 1; /* 占满父容器剩余空间 */
+            contain: layout;
         }
 
-        /* 聊天面板样式 */
+        /* 聊天面板样式 - 适应垂直布局，优化空间分配 */
         .chat-panel {
             background-color: white;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 18px; /* 增加内边距 */
+            border-radius: 12px; /* 增加圆角，与主面板保持一致 */
+            box-shadow: 0 3px 12px rgba(0,0,0,0.08); /* 增强阴影 */
             display: flex;
             flex-direction: column;
-            border: 1px solid #e0e0e0;
+            border: 1px solid rgba(232, 232, 232, 0.8); /* 使用半透明边框 */
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); /* 更流畅的过渡 */
+            /* 优化高度设置：确保面板间高度协调 */
+            min-height: 120px; /* 减少最小高度，提高空间利用率 */
+            flex-shrink: 0; /* 防止面板被过度压缩 */
+            /* 添加布局稳定性 */
+            contain: layout style;
+            /* 修复层级问题 */
+            position: relative;
+            z-index: 1; /* 基础层级 */
+        }
+
+        /* 聊天消息面板特殊样式 - 在Grid布局中占据主要空间 */
+        .chat-panel.main-chat {
+            /* Grid布局中不需要flex属性，通过grid-row控制 */
+            min-height: 300px; /* 增加最小高度 */
+            z-index: 5; /* 确保主聊天面板在其他面板之上 */
+            /* 确保聊天面板内部使用flex布局 */
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 连接控制面板样式 - 紧凑布局，Grid布局中的固定高度 */
+        .chat-panel.control-panel {
+            min-height: 140px; /* 适中的高度 */
+            /* Grid布局中通过grid-row控制位置 */
+        }
+
+        /* 在线用户面板样式 - 中等高度，Grid布局中的固定高度 */
+        .chat-panel.users-panel {
+            min-height: 180px; /* 适中的高度 */
+            max-height: 250px; /* 限制最大高度 */
+            /* Grid布局中通过grid-row控制位置 */
+        }
+
+        /* 原始日志面板样式 - 紧凑布局 */
+        .chat-panel.log-panel {
+            flex-shrink: 0; /* 保持固定高度 */
+            min-height: 120px; /* 较小的高度 */
+            max-height: 180px; /* 限制最大高度 */
+        }
+
+        /* 聊天面板悬停效果 */
+        .chat-panel:hover {
+            box-shadow: 0 5px 20px rgba(0,0,0,0.12); /* 增强悬停阴影 */
+            transform: translateY(-1px); /* 轻微上浮效果 */
         }
 
         /* 聊天区域样式 */
@@ -360,27 +767,66 @@
             flex: 1;
             display: flex;
             flex-direction: column;
+            min-height: 0; /* 允许flex子项收缩 */
         }
 
-        /* 消息容器样式 */
+        /* 消息容器样式 - 统一聊天窗口和原始日志区域的外观 */
         .messages-container {
             flex: 1;
             overflow-y: auto;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 10px;
-            background-color: #fafafa;
-            margin-bottom: 10px;
-            min-height: 200px;
+            border: 1px solid rgba(221, 221, 221, 0.6); /* 使用半透明边框 */
+            border-radius: 10px; /* 增加圆角，与整体设计保持一致 */
+            padding: 16px; /* 增加内边距，提升内容呼吸感 */
+            background: linear-gradient(135deg, #fafafa 0%, #f8f9fa 100%); /* 添加微妙渐变 */
+            margin-bottom: 8px; /* 减少底部间距，为输入区域让出空间 */
+            /* 优化高度设置：为聊天区域提供更多空间，确保布局稳定 */
+            min-height: 200px; /* 增加最小高度，确保聊天体验 */
+            max-height: 400px; /* 设置固定最大高度，防止无限增长影响其他元素 */
+            /* 优化滚动条样式 */
+            scrollbar-width: thin;
+            scrollbar-color: rgba(52, 152, 219, 0.3) transparent;
+            /* 添加滚动时的布局稳定性 */
+            contain: layout style;
+            position: relative;
+            /* 确保滚动行为平滑 */
+            scroll-behavior: smooth;
         }
 
-        /* 消息样式 */
+        /* WebKit浏览器滚动条样式 */
+        .messages-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .messages-container::-webkit-scrollbar-track {
+            background: #f8f9fa;
+            border-radius: 3px;
+        }
+
+        .messages-container::-webkit-scrollbar-thumb {
+            background: #bdc3c7;
+            border-radius: 3px;
+        }
+
+        .messages-container::-webkit-scrollbar-thumb:hover {
+            background: #95a5a6;
+        }
+
+        /* 消息样式 - 统一文字排版和布局 */
         .message {
-            margin-bottom: 10px;
-            padding: 8px 12px;
+            margin-bottom: 12px;
+            padding: 10px 14px;
             border-radius: 8px;
             max-width: 80%;
             word-wrap: break-word;
+            /* 统一消息文字排版 */
+            font-family: inherit;
+            line-height: 1.5;
+            letter-spacing: 0.02em;
+            text-align: left;
+            direction: ltr;
+            /* 优化文字渲染 */
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
 
         .message.system {
@@ -414,197 +860,1027 @@
             margin-left: auto;
         }
 
+        /* 消息头部样式 - 统一时间戳和发送者信息排版 */
         .message-header {
-            font-size: 0.8em;
-            opacity: 0.8;
-            margin-bottom: 4px;
+            font-size: 0.85em;
+            opacity: 0.85;
+            margin-bottom: 6px;
+            /* 统一头部文字排版 */
+            font-weight: 500;
+            line-height: 1.3;
+            letter-spacing: 0.01em;
+            text-align: left;
         }
 
+        /* 消息内容样式 - 优化正文文字显示 */
         .message-content {
             font-size: 0.95em;
+            /* 优化消息内容排版 */
+            line-height: 1.6;
+            letter-spacing: 0.02em;
+            text-align: left;
+            word-break: break-word;
+            /* 确保长文本正确换行 */
+            overflow-wrap: break-word;
         }
 
-        /* 输入区域样式 */
+        /* 输入区域样式 - 优化聊天输入体验，确保发送按钮始终可见 */
         .input-area {
             display: flex;
-            gap: 10px;
+            gap: 12px; /* 增加间距 */
+            padding: 16px; /* 增加内边距，提升视觉重要性 */
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%); /* 添加背景渐变 */
+            border-radius: 12px; /* 增加圆角 */
+            border: 1px solid rgba(52, 152, 219, 0.2); /* 添加蓝色边框 */
+            box-shadow: 0 2px 8px rgba(52, 152, 219, 0.1); /* 添加阴影 */
+            margin-top: 12px; /* 与消息容器分离 */
+            /* 修复发送按钮被遮挡问题：使用sticky定位确保始终在视口内 */
+            position: sticky;
+            bottom: 0;
+            z-index: 100; /* 提高层级确保输入区域在其他元素之上 */
+            /* 确保输入区域不会被其他元素覆盖 */
+            flex-shrink: 0; /* 防止被压缩 */
         }
 
         .input-area input {
             flex: 1;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+            padding: 14px 16px; /* 增加内边距 */
+            border: 2px solid #e1e8ed; /* 增强边框 */
+            border-radius: 8px; /* 增加圆角 */
+            font-size: 15px; /* 稍微增大字体 */
+            font-family: inherit;
+            line-height: 1.4;
+            transition: all 0.3s ease; /* 添加过渡效果 */
+            background-color: #ffffff;
+            /* 优化中文输入体验 */
+            letter-spacing: 0.02em;
+            -webkit-font-smoothing: antialiased;
         }
 
-        .input-area button {
-            padding: 10px 15px;
-            background-color: #3498db;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
+        .input-area input:focus {
+            border-color: #3498db; /* 聚焦时蓝色边框 */
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.15); /* 聚焦光环 */
+            outline: none;
+            transform: scale(1.01); /* 轻微放大 */
         }
 
-        .input-area button:hover {
-            background-color: #2980b9;
-        }
-
-        .input-area button:disabled {
-            background-color: #bdc3c7;
+        .input-area input:disabled {
+            background-color: #f8f9fa;
+            color: #95a5a6;
+            border-color: #e1e8ed;
             cursor: not-allowed;
         }
 
-        /* 在线用户列表样式 */
-        .online-users {
-            max-height: 300px;
-            overflow-y: auto;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            background-color: #fafafa;
+        .input-area button {
+            padding: 14px 20px; /* 增加内边距 */
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); /* 渐变背景 */
+            color: white;
+            border: none;
+            border-radius: 8px; /* 增加圆角 */
+            cursor: pointer;
+            font-size: 15px; /* 与输入框字体大小一致 */
+            font-weight: 600; /* 增加字体粗细 */
+            min-width: 80px; /* 最小宽度 */
+            transition: all 0.3s ease; /* 添加过渡效果 */
+            box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3); /* 添加阴影 */
+            position: relative;
+            overflow: hidden;
         }
 
+        /* 发送按钮特定样式 - 确保始终可见且可点击 */
+        #sendBtn {
+            /* 确保按钮不会被其他元素覆盖 */
+            position: relative;
+            z-index: 50; /* 高层级确保可见性 */
+            /* 防止按钮被压缩或隐藏 */
+            flex-shrink: 0;
+            /* 确保按钮在视口内 */
+            display: inline-block;
+        }
+
+        .input-area button:hover:not(:disabled) {
+            background: linear-gradient(135deg, #2980b9 0%, #1f5f8b 100%); /* 悬停渐变 */
+            transform: translateY(-2px) scale(1.05); /* 上浮和放大 */
+            box-shadow: 0 4px 16px rgba(52, 152, 219, 0.4); /* 增强阴影 */
+        }
+
+        .input-area button:active:not(:disabled) {
+            transform: translateY(-1px) scale(1.02); /* 按下效果 */
+            box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+        }
+
+        .input-area button:disabled {
+            background: linear-gradient(135deg, #bdc3c7 0%, #95a5a6 100%); /* 禁用渐变 */
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+            opacity: 0.7; /* 降低透明度 */
+        }
+
+        /* 在线用户列表样式 - 优化布局和视觉效果 */
+        .online-users {
+            max-height: 320px; /* 稍微增加最大高度 */
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 6px; /* 与其他元素圆角保持一致 */
+            background-color: #fafafa;
+            /* 继承消息容器的滚动条样式 */
+            scrollbar-width: thin;
+            scrollbar-color: #bdc3c7 #f8f9fa;
+        }
+
+        /* WebKit浏览器滚动条样式 */
+        .online-users::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .online-users::-webkit-scrollbar-track {
+            background: #f8f9fa;
+            border-radius: 3px;
+        }
+
+        .online-users::-webkit-scrollbar-thumb {
+            background: #bdc3c7;
+            border-radius: 3px;
+        }
+
+        .online-users::-webkit-scrollbar-thumb:hover {
+            background: #95a5a6;
+        }
+
+        /* 用户列表项样式 - 统一用户信息文字排版 */
         .user-item {
-            padding: 8px;
+            padding: 12px 14px; /* 增加内边距 */
             border-bottom: 1px solid #eee;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            transition: background-color 0.2s ease; /* 添加悬停过渡效果 */
+            /* 统一用户信息文字排版 */
+            font-family: inherit;
+            font-size: 0.9em;
+            line-height: 1.4;
+            letter-spacing: 0.01em;
+            text-align: left;
+            direction: ltr;
+        }
+
+        .user-item:hover {
+            background-color: #f0f0f0; /* 添加悬停效果 */
         }
 
         .user-item:last-child {
             border-bottom: none;
         }
 
-        /* 连接状态样式 */
+        /* 连接状态样式 - 优化视觉效果和一致性 */
         .connection-status {
-            padding: 8px;
-            border-radius: 4px;
+            padding: 12px; /* 增加内边距 */
+            border-radius: 6px; /* 与其他元素圆角保持一致 */
             text-align: center;
-            margin-bottom: 10px;
-            font-weight: bold;
+            margin-bottom: 15px; /* 与其他元素间距保持一致 */
+            font-weight: 600; /* 稍微增加字体粗细 */
+            font-size: 0.95em;
+            transition: all 0.3s ease; /* 添加状态切换过渡效果 */
         }
 
         .connection-status.connected {
             background-color: #d5f4e6;
             color: #27ae60;
             border: 1px solid #27ae60;
+            box-shadow: 0 2px 4px rgba(39, 174, 96, 0.2); /* 添加绿色阴影 */
         }
 
         .connection-status.disconnected {
             background-color: #fadbd8;
             color: #e74c3c;
             border: 1px solid #e74c3c;
+            box-shadow: 0 2px 4px rgba(231, 76, 60, 0.2); /* 添加红色阴影 */
         }
 
-        /* 控制按钮样式 */
+        /* 控制按钮样式 - 优化布局和视觉效果 */
         .controls {
             display: flex;
-            gap: 10px;
-            margin-bottom: 10px;
+            gap: 12px; /* 增加按钮间距 */
+            margin-bottom: 15px; /* 增加底部间距 */
+            align-items: stretch; /* 确保按钮高度一致 */
         }
 
         .controls button {
             flex: 1;
-            padding: 8px;
+            padding: 10px 12px; /* 增加内边距提升触摸体验 */
             font-size: 0.9em;
+            font-weight: 500; /* 增加字体粗细 */
             border: none;
-            border-radius: 4px;
+            border-radius: 6px; /* 稍微增加圆角 */
             cursor: pointer;
             color: white;
+            transition: all 0.2s ease; /* 添加过渡效果 */
+            min-height: 40px; /* 确保最小高度 */
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
+        /* 心跳按钮样式 - 优化颜色和交互效果 */
         .ping-btn {
             background-color: #f39c12;
+            box-shadow: 0 2px 4px rgba(243, 156, 18, 0.3); /* 添加阴影 */
         }
 
-        .ping-btn:hover {
+        .ping-btn:hover:not(:disabled) {
             background-color: #e67e22;
+            transform: translateY(-1px); /* 轻微上移效果 */
+            box-shadow: 0 4px 8px rgba(243, 156, 18, 0.4);
         }
 
+        /* 获取用户按钮样式 - 优化颜色和交互效果 */
         .users-btn {
             background-color: #9b59b6;
+            box-shadow: 0 2px 4px rgba(155, 89, 182, 0.3); /* 添加阴影 */
         }
 
-        .users-btn:hover {
+        .users-btn:hover:not(:disabled) {
             background-color: #8e44ad;
+            transform: translateY(-1px); /* 轻微上移效果 */
+            box-shadow: 0 4px 8px rgba(155, 89, 182, 0.4);
         }
 
+        /* 禁用状态样式 - 统一禁用按钮外观 */
         .ping-btn:disabled, .users-btn:disabled {
             background-color: #bdc3c7;
             cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
         }
 
-        /* 响应式设计 */
+        /* 清除日志按钮样式 - 与其他按钮保持一致 */
+        #clearLogBtn {
+            width: 100%;
+            padding: 10px 12px;
+            font-size: 0.9em;
+            font-weight: 500;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            background-color: #e74c3c; /* 使用红色表示清除操作 */
+            color: white;
+            transition: all 0.2s ease;
+            min-height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(231, 76, 60, 0.3);
+        }
+
+        #clearLogBtn:hover {
+            background-color: #c0392b;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(231, 76, 60, 0.4);
+        }
+
+        #clearLogBtn:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(231, 76, 60, 0.3);
+        }
+
+        /* ===== 新增：布局稳定性和对齐优化 ===== */
+
+        /* 面板内容区域优化 - 确保内容区域高度协调 */
+        .panel > * {
+            flex-shrink: 0; /* 防止面板内元素被过度压缩 */
+        }
+
+        .panel > #taskList,
+        .panel > .chat-hall-container,
+        .panel > .messages-container {
+            flex-shrink: 1; /* 允许这些容器适当收缩 */
+        }
+
+        /* 任务管理面板特定优化 */
+        .panel:nth-child(2) {
+            /* 确保任务管理面板的内容布局稳定 */
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel:nth-child(2) > form,
+        .panel:nth-child(2) > button,
+        .panel:nth-child(2) > div:not(#taskList),
+        .panel:nth-child(2) > h2,
+        .panel:nth-child(2) > h3 {
+            flex-shrink: 0; /* 保持表单和按钮区域固定 */
+        }
+
+        /* WebSocket聊天面板特定优化 - 使用Grid布局确保稳定性 */
+        .panel:nth-child(3) {
+            /* 确保聊天面板的垂直布局稳定 */
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 聊天大厅容器使用Grid布局确保元素位置稳定 */
+        .chat-hall-container {
+            display: grid;
+            grid-template-rows: auto 1fr auto auto; /* 控制面板 聊天区域 用户面板 日志面板 */
+            gap: 16px;
+            height: 100%;
+            min-height: 0; /* 允许grid子项收缩 */
+        }
+
+        /* 滚动时的布局锁定 - 防止滚动影响其他面板 */
+        .main-container:has(.panel:hover) .panel:not(:hover) {
+            /* 当某个面板被悬停时，其他面板保持稳定 */
+            transform: none !important;
+        }
+
+        /* 动态内容变化时的过渡优化 */
+        #taskList .task-item {
+            transition: all 0.3s ease;
+        }
+
+        /* 添加任务时的布局稳定性 */
+        #taskList:has(.task-item:last-child) {
+            /* 当有任务项时，确保滚动区域稳定 */
+            scroll-behavior: smooth;
+        }
+
+        /* Windows 10 Chrome响应式设计优化 - 移动优先方法 */
         @media (max-width: 768px) {
+            body {
+                padding: 12px; /* Chrome移动端边距优化 */
+            }
+
+            .main-container {
+                grid-template-columns: 1fr; /* 移动端单列布局 */
+                grid-template-rows: auto auto auto; /* 明确三行布局 */
+                gap: 16px; /* Chrome移动端间距优化 */
+                min-height: auto;
+                margin: 12px auto; /* Chrome移动端上下边距优化 */
+                padding: 0 8px; /* Chrome移动端左右内边距优化 */
+                max-width: 100%; /* 移动端占满宽度 */
+                /* 移动端取消stretch对齐，使用auto高度 */
+                align-items: start;
+            }
+
+            .panel {
+                /* 移动端优化高度设置 */
+                height: auto; /* 移动端使用自动高度 */
+                min-height: 320px; /* 减少移动端最小高度 */
+                max-height: none; /* 移动端取消最大高度限制 */
+                padding: 20px; /* 适当减少内边距 */
+                border-radius: 12px; /* 适当减少圆角 */
+            }
+
+            /* 移动端聊天面板特殊处理 - 确保聊天功能优先 */
+            .panel:nth-child(3) {
+                /* 聊天面板在移动端占据更多空间 */
+                min-height: 500px; /* 增加聊天面板高度 */
+                order: 1; /* 将聊天面板移到最前面 */
+            }
+
+            .panel:nth-child(1) {
+                order: 2; /* 认证面板移到中间 */
+            }
+
+            .panel:nth-child(2) {
+                order: 3; /* 任务管理面板移到最后 */
+            }
+
             .chat-hall-container {
-                grid-template-columns: 1fr;
-                height: auto;
-                gap: 10px;
+                gap: 12px; /* 适中的间距 */
             }
 
             .chat-panel {
-                padding: 10px;
+                padding: 16px; /* 增加内边距提升触摸体验 */
+                min-height: 120px;
+                border-radius: 12px; /* 保持一致的圆角 */
+            }
+
+            /* 移动端聊天面板高度优化 */
+            .chat-panel.main-chat {
+                min-height: 250px; /* 移动端聊天区域更大 */
+                flex: 3; /* 占据更多空间 */
+            }
+
+            .chat-panel.control-panel {
+                min-height: 100px; /* 移动端控制面板更紧凑 */
+            }
+
+            .chat-panel.users-panel {
+                min-height: 120px; /* 移动端用户面板适中 */
+                max-height: 180px;
+            }
+
+            .chat-panel.log-panel {
+                min-height: 80px; /* 移动端日志面板更紧凑 */
+                max-height: 120px;
             }
 
             .controls {
                 flex-direction: column;
+                gap: 12px; /* 增加按钮间距 */
+            }
+
+            .controls button {
+                min-height: 48px; /* 增加按钮高度提升触摸体验 */
+                font-size: 1em;
+                border-radius: 8px; /* 保持圆角一致性 */
+            }
+
+            .messages-container {
+                min-height: 180px; /* 移动端增加消息容器高度 */
+                border-radius: 8px; /* 保持圆角一致性 */
+            }
+
+            /* 移动端输入区域优化 */
+            .input-area {
+                padding: 12px; /* 移动端减少内边距 */
+                gap: 10px;
+            }
+
+            .input-area input {
+                padding: 12px 14px; /* 移动端适中的内边距 */
+                font-size: 16px; /* 防止iOS缩放 */
+            }
+
+            .input-area button {
+                padding: 12px 16px;
+                font-size: 16px; /* 防止iOS缩放 */
+                min-width: 70px;
+            }
+
+            #taskList {
+                max-height: 280px; /* 适中的任务列表高度 */
+                border-radius: 8px; /* 保持圆角一致性 */
+            }
+
+            /* 移动端优化表单元素 */
+            input, textarea, button {
+                border-radius: 8px; /* 统一圆角 */
+                font-size: 16px; /* 防止iOS缩放 */
+            }
+
+            /* 移动端优化面板标题 */
+            .panel > h2 {
+                font-size: 1.3em; /* 适中的标题大小 */
+                margin-bottom: 16px;
+            }
+        }
+
+        /* Windows 10 Chrome平板设备优化 */
+        @media (max-width: 1024px) and (min-width: 769px) {
+            .main-container {
+                /* 平板端优化布局：认证面板上方，下方任务管理和聊天并排，聊天区域更大 */
+                grid-template-columns: 0.8fr 1.2fr; /* 平板端两列布局，聊天区域更大 */
+                grid-template-rows: auto minmax(450px, auto); /* 优化行高设置 */
+                gap: 20px; /* Chrome平板端间距优化 */
+                padding: 0 12px; /* Chrome平板端左右内边距优化 */
+                /* 平板端使用stretch确保第二行面板高度一致 */
+                align-items: stretch;
+            }
+
+            .panel:first-child {
+                grid-column: 1 / -1; /* 认证面板占满第一行 */
+                height: auto; /* 认证面板使用自动高度 */
+                min-height: 280px; /* 减少认证面板高度 */
+                max-height: none; /* 取消最大高度限制 */
+            }
+
+            .panel:nth-child(2) {
+                grid-column: 1; /* 任务管理面板占左列 */
+                grid-row: 2;
+            }
+
+            .panel:nth-child(3) {
+                grid-column: 2; /* WebSocket聊天面板占右列，空间更大 */
+                grid-row: 2;
+            }
+
+            .panel:nth-child(2),
+            .panel:nth-child(3) {
+                /* 第二行面板使用统一高度设置 */
+                height: 100%; /* 占满Grid分配的高度 */
+                min-height: 450px; /* 平板端增加最小高度 */
+                max-height: calc(100vh - 400px); /* 限制最大高度 */
+                padding: 20px; /* 适当减少内边距 */
+            }
+
+            #taskList {
+                max-height: 350px; /* 平板端适中的任务列表高度 */
+            }
+
+            /* 平板端优化聊天面板 */
+            .chat-hall-container {
+                gap: 14px; /* 平板端适中间距 */
+            }
+
+            .chat-panel {
+                padding: 16px;
+                min-height: 120px;
+            }
+
+            /* 平板端聊天面板高度优化 */
+            .chat-panel.main-chat {
+                min-height: 200px; /* 平板端聊天区域更大 */
+                flex: 2.5; /* 占据更多空间 */
+            }
+
+            .chat-panel.control-panel {
+                min-height: 120px; /* 平板端控制面板适中 */
+            }
+
+            .chat-panel.users-panel {
+                min-height: 140px; /* 平板端用户面板适中 */
+                max-height: 200px;
+            }
+
+            .chat-panel.log-panel {
+                min-height: 100px; /* 平板端日志面板适中 */
+                max-height: 150px;
+            }
+
+            /* 平板端输入区域优化 */
+            .input-area {
+                padding: 14px; /* 平板端适中的内边距 */
+            }
+
+            .input-area input {
+                padding: 12px 14px;
+                font-size: 15px;
+            }
+
+            .input-area button {
+                padding: 12px 18px;
+                font-size: 15px;
+                min-width: 75px;
+            }
+
+            /* 平板端优化按钮 */
+            .controls button {
+                min-height: 44px;
+                font-size: 0.95em;
+            }
+        }
+
+        /* 大屏幕优化 */
+        @media (min-width: 1400px) {
+            .main-container {
+                gap: 36px; /* 大屏幕增加间距，更好的视觉分离 */
+                padding: 0 32px; /* 增加左右内边距 */
+            }
+
+            .panel {
+                padding: 32px; /* 大屏幕增加内边距 */
+                min-height: 520px; /* 大屏幕增加最小高度，更好利用空间 */
+            }
+
+            #taskList {
+                max-height: 520px; /* 大屏幕增加任务列表高度 */
+            }
+        }
+
+        /* 超大屏幕优化 */
+        @media (min-width: 1600px) {
+            .main-container {
+                gap: 40px; /* 超大屏幕进一步增加间距 */
+                padding: 0 40px;
+                max-width: 1600px; /* 增加最大宽度限制 */
+            }
+
+            .panel {
+                padding: 36px;
+                min-height: 560px;
+            }
+
+            #taskList {
+                max-height: 560px;
+            }
+        }
+
+        /* 现代化加载动画 */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        @keyframes shimmer {
+            0% {
+                background-position: -200px 0;
+            }
+            100% {
+                background-position: calc(200px + 100%) 0;
+            }
+        }
+
+        /* 页面加载动画 */
+        .main-container {
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        .panel {
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        .panel:nth-child(1) {
+            animation-delay: 0.1s;
+        }
+
+        .panel:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .panel:nth-child(3) {
+            animation-delay: 0.3s;
+        }
+
+        /* 加载状态样式 */
+        .loading {
+            position: relative;
+            pointer-events: none;
+        }
+
+        .loading::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(255, 255, 255, 0.4),
+                transparent
+            );
+            background-size: 200px 100%;
+            animation: shimmer 1.5s infinite;
+        }
+
+        /* 现代化滚动行为 */
+        html {
+            scroll-behavior: smooth;
+        }
+
+        /* 现代化选择样式 */
+        ::selection {
+            background: rgba(52, 152, 219, 0.2);
+            color: #2c3e50;
+        }
+
+        /* 现代化焦点样式 */
+        *:focus {
+            outline: none;
+        }
+
+        input:focus, textarea:focus {
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+            transform: scale(1.01);
+        }
+
+        /* 现代化过渡效果 */
+        * {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        /* 减少动画对于偏好减少动画的用户 */
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        /* ===== Windows 10 Chrome浏览器专用优化 ===== */
+
+        /* Chrome浏览器特定的1920x1080分辨率优化 */
+        @media screen and (min-width: 1920px) and (max-width: 1920px) {
+            .main-container {
+                max-width: 1700px; /* 针对1920px宽度的最佳显示，为聊天区域提供更多空间 */
+                gap: 32px; /* 大屏幕增加间距，提升视觉分离 */
+                padding: 0 24px;
+                /* 1920x1080分辨率下的优化布局比例 */
+                grid-template-columns: minmax(320px, 0.75fr) minmax(380px, 1fr) minmax(600px, 1.6fr);
+            }
+
+            .panel {
+                min-height: 550px; /* 1920x1080分辨率下的最佳高度 */
+                padding: 32px; /* 大屏幕增加内边距 */
+            }
+
+            /* 1920x1080分辨率下聊天面板优化 */
+            .chat-panel.main-chat {
+                min-height: 350px; /* 大屏幕聊天区域更大 */
+            }
+
+            .chat-panel.control-panel {
+                min-height: 160px; /* 大屏幕控制面板适中 */
+            }
+
+            .chat-panel.users-panel {
+                min-height: 200px; /* 大屏幕用户面板适中 */
+                max-height: 280px;
+            }
+
+            .chat-panel.log-panel {
+                min-height: 140px; /* 大屏幕日志面板适中 */
+                max-height: 200px;
+            }
+
+            /* 1920x1080分辨率下输入区域优化 */
+            .input-area {
+                padding: 18px; /* 大屏幕增加内边距 */
+                gap: 14px;
+            }
+
+            .input-area input {
+                padding: 16px 18px; /* 大屏幕增加内边距 */
+                font-size: 16px;
+            }
+
+            .input-area button {
+                padding: 16px 24px; /* 大屏幕增加内边距 */
+                font-size: 16px;
+                min-width: 90px;
+            }
+
+            .messages-container {
+                min-height: 250px; /* 大屏幕消息容器更大 */
+            }
+        }
+
+        /* Chrome浏览器字体渲染优化 */
+        @supports (-webkit-appearance: none) {
+            body, input, textarea, button {
+                font-feature-settings: "kern" 1, "liga" 1; /* Chrome字体特性优化 */
+                text-rendering: optimizeLegibility;
+            }
+        }
+
+        /* Chrome浏览器硬件加速优化 */
+        .panel, .main-container, .page-header {
+            -webkit-transform: translate3d(0, 0, 0); /* 强制硬件加速 */
+            transform: translate3d(0, 0, 0);
+        }
+
+        /* Chrome浏览器滚动性能优化 */
+        .messages-container, #taskList, .online-users {
+            -webkit-overflow-scrolling: touch;
+            scroll-behavior: smooth;
+        }
+
+        /* Windows 10 Chrome特定的焦点样式优化 */
+        input:focus, textarea:focus, button:focus {
+            outline: 2px solid rgba(52, 152, 219, 0.5);
+            outline-offset: 2px;
+        }
+
+        /* Chrome浏览器Grid布局兼容性优化 */
+        @supports (display: grid) {
+            .main-container {
+                display: grid;
+                grid-gap: 24px; /* 使用grid-gap确保兼容性 */
+            }
+        }
+
+        /* Chrome浏览器Flexbox回退方案 */
+        @supports not (display: grid) {
+            .main-container {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 24px;
+            }
+
+            .panel {
+                flex: 1 1 300px;
+                min-width: 300px;
+            }
+        }
+
+        /* 新增：面板特定优化 */
+        .panel:first-child {
+            /* 认证面板特殊样式 */
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%, rgba(52, 152, 219, 0.02) 100%);
+        }
+
+        .panel:nth-child(2) {
+            /* 任务管理面板特殊样式 */
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%, rgba(46, 204, 113, 0.02) 100%);
+        }
+
+        .panel:nth-child(3) {
+            /* WebSocket聊天面板特殊样式 */
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%, rgba(243, 156, 18, 0.02) 100%);
+        }
+
+        /* 新增：优化间距和布局细节 */
+        .main-container > .panel + .panel {
+            /* 面板之间的额外视觉分离 */
+            position: relative;
+        }
+
+        /* 新增：提升可访问性的焦点指示器 */
+        .panel:focus-within::after {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            border: 2px solid rgba(52, 152, 219, 0.5);
+            border-radius: 20px;
+            pointer-events: none;
+        }
+
+        /* ===== 新增：任务列表动态变化优化 ===== */
+
+        /* 任务项添加/删除动画 */
+        .task-item {
+            animation: taskItemFadeIn 0.3s ease-out;
+            transform-origin: top center;
+        }
+
+        @keyframes taskItemFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px) scale(0.95);
+                max-height: 0;
+                margin-bottom: 0;
+                padding-top: 0;
+                padding-bottom: 0;
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+                max-height: 200px;
+                margin-bottom: 12px;
+                padding-top: 15px;
+                padding-bottom: 15px;
+            }
+        }
+
+        /* 任务列表容器高度变化时的平滑过渡 */
+        #taskList {
+            transition: max-height 0.3s ease, min-height 0.3s ease;
+        }
+
+        /* 当任务列表为空时的特殊处理 */
+        #taskList:empty {
+            min-height: 120px; /* 空列表时的最小高度 */
+            transition: min-height 0.3s ease;
+        }
+
+        /* 任务列表滚动时的其他面板稳定性 */
+        .main-container:has(#taskList:hover) .panel:not(:nth-child(2)) {
+            /* 当任务列表被悬停时，其他面板保持稳定 */
+            will-change: auto;
+        }
+
+        /* 面板高度变化时的协调机制 */
+        .panel:has(#taskList) {
+            /* 包含任务列表的面板特殊处理 */
+            transition: height 0.3s ease, min-height 0.3s ease;
+        }
+
+        /* 响应式设计优化 - 移动端和小屏幕适配 */
+        @media (max-width: 768px) {
+            /* 移动端单列布局 */
+            .main-container {
+                grid-template-columns: 1fr; /* 单列布局 */
+                grid-template-rows: auto auto auto; /* 三行布局 */
+                gap: 12px; /* 减小间距 */
+            }
+
+            /* 聊天大厅容器在移动端的优化 */
+            .chat-hall-container {
+                grid-template-rows: auto 1fr auto; /* 简化为三行：控制面板 聊天区域 其他面板 */
+                gap: 12px;
+            }
+
+            /* 移动端消息容器高度调整 */
+            .messages-container {
+                max-height: 300px; /* 减小移动端高度 */
+                min-height: 150px;
+            }
+
+            /* 移动端输入区域优化 */
+            .input-area {
+                padding: 12px; /* 减小内边距 */
+                gap: 8px; /* 减小间距 */
+            }
+
+            /* 移动端面板内边距优化 */
+            .panel, .chat-panel {
+                padding: 12px; /* 减小内边距 */
+                margin: 8px 0; /* 减小外边距 */
+            }
+        }
+
+        /* 平板端适配 */
+        @media (min-width: 769px) and (max-width: 1024px) {
+            .main-container {
+                grid-template-columns: 0.8fr 1.2fr; /* 两列布局 */
+            }
+
+            /* 平板端消息容器高度调整 */
+            .messages-container {
+                max-height: 350px;
+            }
+        }
+
+        /* 大屏幕优化 */
+        @media (min-width: 1920px) {
+            .main-container {
+                max-width: 1800px; /* 限制最大宽度 */
+                margin: 0 auto; /* 居中显示 */
+            }
+
+            /* 大屏幕消息容器高度增加 */
+            .messages-container {
+                max-height: 500px;
             }
         }
     </style>
 </head>
 <body>
-    <!-- 页面主标题 -->
-    <h1>Axum 任务管理系统 - 前端测试页面</h1>
+    <!-- 现代化页面主标题 -->
+    <header class="page-header">
+        <h1>
+            <span class="title-icon">🚀</span>
+            <span class="title-main">Axum 任务管理系统</span>
+            <span class="title-sub">企业级聊天应用演示平台</span>
+        </h1>
+    </header>
 
-    <!-- 认证面板 -->
-    <div class="auth-panel">
-        <div class="auth-status">
-            <div class="auth-info">
-                <span class="status-badge unauthenticated" id="authStatus">未认证</span>
-                <span id="currentUser">未登录</span>
+    <!-- 页面主要内容容器，使用 CSS Grid 三栏布局 -->
+    <div class="main-container">
+        <!-- 左侧面板：用户认证区域 -->
+        <div class="panel">
+            <h2>用户认证</h2>
+
+            <!-- 认证状态显示 -->
+            <div class="auth-status">
+                <div class="auth-info">
+                    <span class="status-badge unauthenticated" id="authStatus">未认证</span>
+                    <span id="currentUser">未登录</span>
+                </div>
+                <div>
+                    <button id="logoutBtn" class="hidden">登出</button>
+                </div>
             </div>
-            <div>
-                <button id="logoutBtn" class="hidden">登出</button>
+
+            <!-- 认证表单区域 -->
+            <div class="auth-forms" id="authForms">
+                <!-- 标签切换按钮 -->
+                <div class="auth-tabs" style="margin-bottom: 15px;">
+                    <button type="button" id="loginTab" class="auth-tab-btn active">登录</button>
+                    <button type="button" id="registerTab" class="auth-tab-btn">注册</button>
+                </div>
+
+                <!-- 登录表单 -->
+                <div class="auth-form" id="loginFormContainer">
+                    <h4>用户登录</h4>
+                    <form id="loginForm">
+                        <input type="text" id="loginUsername" placeholder="用户名" required>
+                        <input type="password" id="loginPassword" placeholder="密码" required>
+                        <button type="submit">登录</button>
+                    </form>
+                    <div id="loginMessage"></div>
+                </div>
+
+                <!-- 注册表单 -->
+                <div class="auth-form hidden" id="registerFormContainer">
+                    <h4>用户注册</h4>
+                    <form id="registerForm">
+                        <input type="text" id="registerUsername" placeholder="用户名" required>
+                        <input type="password" id="registerPassword" placeholder="密码" required>
+                        <input type="password" id="confirmPassword" placeholder="确认密码" required>
+                        <button type="submit">注册</button>
+                    </form>
+                    <div id="registerMessage"></div>
+                </div>
             </div>
         </div>
-
-        <!-- 认证表单区域 -->
-        <div class="auth-forms" id="authForms">
-            <!-- 标签切换按钮 -->
-            <div class="auth-tabs" style="margin-bottom: 15px;">
-                <button type="button" id="loginTab" class="auth-tab-btn active">登录</button>
-                <button type="button" id="registerTab" class="auth-tab-btn">注册</button>
-            </div>
-
-            <!-- 登录表单 -->
-            <div class="auth-form" id="loginFormContainer">
-                <h4>用户登录</h4>
-                <form id="loginForm">
-                    <input type="text" id="loginUsername" placeholder="用户名" required>
-                    <input type="password" id="loginPassword" placeholder="密码" required>
-                    <button type="submit">登录</button>
-                </form>
-                <div id="loginMessage"></div>
-            </div>
-
-            <!-- 注册表单 -->
-            <div class="auth-form hidden" id="registerFormContainer">
-                <h4>用户注册</h4>
-                <form id="registerForm">
-                    <input type="text" id="registerUsername" placeholder="用户名" required>
-                    <input type="password" id="registerPassword" placeholder="密码" required>
-                    <input type="password" id="confirmPassword" placeholder="确认密码" required>
-                    <button type="submit">注册</button>
-                </form>
-                <div id="registerMessage"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 页面主要内容容器，使用 flex 布局 -->
-    <div class="container">
-        <!-- 左侧面板：任务管理功能区域 -->
+        <!-- 中间面板：任务管理功能区域 -->
         <div class="panel">
             <h2>任务管理</h2>
             
@@ -647,38 +1923,28 @@
         <div class="panel">
             <h2>WebSocket 聊天大厅</h2>
 
-            <!-- 聊天大厅容器 - 三栏布局 -->
+            <!-- 聊天大厅容器 - 垂直布局，优化空间分配 -->
             <div class="chat-hall-container">
-                <!-- 左侧：连接控制和在线用户 -->
-                <div class="chat-panel">
+                <!-- 连接控制区域 - 紧凑布局 -->
+                <div class="chat-panel control-panel">
                     <h3>连接控制</h3>
                     <div class="connection-status disconnected" id="connectionStatus">未连接</div>
 
                     <div class="controls">
                         <button id="wsConnectBtn">连接</button>
                         <button id="wsDisconnectBtn" disabled>断开</button>
-                    </div>
-
-                    <div class="controls">
                         <button id="pingBtn" class="ping-btn" disabled>发送心跳</button>
                         <button id="getUsersBtn" class="users-btn" disabled>获取在线用户</button>
                     </div>
-
-                    <h4>在线用户 (<span id="userCount">0</span>)</h4>
-                    <div class="online-users" id="onlineUsers">
-                        <div style="text-align: center; color: #7f8c8d; padding: 20px;">
-                            暂无在线用户
-                        </div>
-                    </div>
                 </div>
 
-                <!-- 中间：聊天区域 -->
-                <div class="chat-panel">
-                    <h3>聊天消息</h3>
+                <!-- 聊天区域 - 主要区域，占据更多空间 -->
+                <div class="chat-panel main-chat">
+                    <h3>💬 聊天消息</h3>
                     <div class="chat-area">
                         <div class="messages-container" id="messagesContainer">
                             <div style="text-align: center; color: #7f8c8d; padding: 20px;">
-                                连接到聊天大厅开始聊天...
+                                🚀 连接到聊天大厅开始聊天...
                             </div>
                         </div>
 
@@ -689,10 +1955,20 @@
                     </div>
                 </div>
 
-                <!-- 右侧：原始消息日志 -->
-                <div class="chat-panel">
-                    <h3>原始消息日志</h3>
-                    <div class="messages-container" id="rawMessages" style="font-family: monospace; font-size: 0.8em;">
+                <!-- 在线用户区域 - 中等高度 -->
+                <div class="chat-panel users-panel">
+                    <h4>👥 在线用户 (<span id="userCount">0</span>)</h4>
+                    <div class="online-users" id="onlineUsers">
+                        <div style="text-align: center; color: #7f8c8d; padding: 20px;">
+                            暂无在线用户
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 原始消息日志区域 - 紧凑布局 -->
+                <div class="chat-panel log-panel">
+                    <h4>📋 原始消息日志</h4>
+                    <div class="messages-container" id="rawMessages" style="font-family: monospace; font-size: 0.8em; max-height: 120px;">
                         <div style="text-align: center; color: #7f8c8d; padding: 20px;">
                             等待消息...
                         </div>
@@ -1378,28 +2654,8 @@
                 };
 
                 socket.onmessage = (event) => {
-                    // 记录原始消息到日志
-                    logWebSocketMessage(`收到: ${event.data}`);
-
-                    // 处理聊天大厅消息
+                    // 统一使用聊天大厅消息处理函数，避免重复处理
                     handleChatHallWebSocketMessage(event.data);
-
-                    // 同时保持原有的消息显示功能
-                    try {
-                        const message = JSON.parse(event.data);
-                        // 显示为格式化的聊天消息
-                        displayChatMessage(message);
-                    } catch (error) {
-                        // 如果不是JSON格式，当作普通文本消息显示
-                        const simpleMessage = {
-                            message_type: 'Text',
-                            content: event.data,
-                            sender: { username: '服务器' },
-                            timestamp: new Date().toISOString(),
-                            is_own_message: false
-                        };
-                        displayChatMessage(simpleMessage);
-                    }
                 };
 
                 socket.onclose = (event) => {
@@ -1492,13 +2748,7 @@
             const message = messageInput.value.trim();
             if (!message) return;
 
-            // 发送消息到服务器
-            socket.send(message);
-
-            // 在本地显示发送的消息（模拟聊天室体验）
-            logWebSocketMessage(`发送: ${message}`);
-
-            // 同时显示为聊天消息格式（带发送者标识）
+            // 构建要发送的消息对象
             const timestamp = new Date().toISOString();
             const chatMessage = {
                 message_type: 'Text',
@@ -1507,12 +2757,22 @@
                     username: currentUser ? currentUser.username : '我',
                     user_id: currentUser ? currentUser.id : 'self'
                 },
-                timestamp: timestamp,
-                is_own_message: true // 标记为自己发送的消息
+                timestamp: timestamp
             };
 
-            // 显示为聊天消息
-            displayChatMessage(chatMessage);
+            // 发送JSON格式的消息到服务器
+            const messageToSend = JSON.stringify(chatMessage);
+            socket.send(messageToSend);
+
+            // 在原始消息日志中记录发送的消息
+            logWebSocketMessage(`发送: ${messageToSend}`);
+
+            // 立即在聊天窗口显示发送的消息（标记为自己的消息）
+            const localChatMessage = {
+                ...chatMessage,
+                is_own_message: true // 标记为自己发送的消息
+            };
+            displayChatMessage(localChatMessage);
 
             messageInput.value = '';
         }
@@ -1570,21 +2830,31 @@
         }
 
         /**
-         * 显示聊天消息（格式化显示）
+         * 显示聊天消息（格式化显示）- 修复消息显示逻辑
          * @param {Object} message - 聊天消息对象
          */
         function displayChatMessage(message) {
-            const messagesElem = document.getElementById('webSocketMessages');
+            // 修复：使用正确的聊天消息容器元素
+            const messagesElem = document.getElementById('messagesContainer');
+            if (!messagesElem) {
+                console.error('错误: 找不到聊天消息容器 #messagesContainer');
+                return;
+            }
+
             const messageElem = document.createElement('div');
-            messageElem.className = 'chat-message';
+            messageElem.className = 'message'; // 使用现有的CSS类名
 
             // 根据消息类型设置样式
             if (message.is_own_message) {
-                messageElem.classList.add('own-message');
+                messageElem.classList.add('own');
             } else if (message.message_type === 'System') {
-                messageElem.classList.add('system-message');
+                messageElem.classList.add('system');
+            } else if (message.message_type === 'UserJoined') {
+                messageElem.classList.add('user-joined');
+            } else if (message.message_type === 'UserLeft') {
+                messageElem.classList.add('user-left');
             } else {
-                messageElem.classList.add('other-message');
+                messageElem.classList.add('text');
             }
 
             // 格式化时间戳
@@ -1592,12 +2862,18 @@
 
             // 构建消息内容
             let messageContent = '';
-            if (message.message_type === 'System') {
-                messageContent = `<span class="timestamp">[${timestamp}]</span> <span class="system-text">${message.content}</span>`;
+            if (message.message_type === 'System' || message.message_type === 'UserJoined' || message.message_type === 'UserLeft') {
+                messageContent = `
+                    <div class="message-header">[${timestamp}]</div>
+                    <div class="message-content">${message.content}</div>
+                `;
             } else {
                 const senderName = message.sender ? message.sender.username : '未知用户';
                 const ownLabel = message.is_own_message ? ' (我)' : '';
-                messageContent = `<span class="timestamp">[${timestamp}]</span> <span class="sender">${senderName}${ownLabel}:</span> <span class="content">${message.content}</span>`;
+                messageContent = `
+                    <div class="message-header">[${timestamp}] ${senderName}${ownLabel}</div>
+                    <div class="message-content">${message.content}</div>
+                `;
             }
 
             messageElem.innerHTML = messageContent;
@@ -1691,7 +2967,7 @@
         }
 
         /**
-         * 处理聊天大厅 WebSocket 消息
+         * 处理聊天大厅 WebSocket 消息 - 优化消息处理逻辑
          * @param {string} data - 接收到的消息数据
          */
         function handleChatHallWebSocketMessage(data) {
@@ -1700,14 +2976,27 @@
 
             try {
                 const message = JSON.parse(data);
-                displayChatHallMessage(message);
 
-                // 如果是在线用户列表响应，更新用户列表
+                // 检查是否是自己发送的消息（避免重复显示）
+                const isOwnMessage = message.sender && currentUser &&
+                                   message.sender.username === currentUser.username;
+
+                // 只有非自己发送的消息才显示在聊天窗口中
+                // 自己发送的消息已经在sendWebSocketMessage中显示了
+                if (!isOwnMessage || message.message_type !== 'Text') {
+                    displayChatHallMessage(message);
+                }
+
+                // 处理特殊消息类型
                 if (message.message_type === 'OnlineUsersList') {
                     const usersData = JSON.parse(message.content);
                     updateOnlineUsers(usersData.users);
+                } else if (message.message_type === 'Pong') {
+                    // 心跳响应消息，显示在聊天窗口
+                    displayChatHallMessage(message);
                 }
             } catch (error) {
+                console.error('解析WebSocket消息失败:', error);
                 // 如果不是JSON格式，当作普通文本消息显示
                 displayChatHallMessage({
                     message_type: 'Text',

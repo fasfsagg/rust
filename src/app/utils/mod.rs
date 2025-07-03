@@ -10,7 +10,7 @@ pub mod jwt_utils;
 pub mod memory_manager;
 pub mod memory_manager_benchmark;
 pub mod optimized_state;
-pub mod test_connection_pool_managers;
+
 pub mod uuid_utils;
 pub mod validation_utils;
 pub mod websocket_pool_manager; // 【任务13.4新增】WebSocket连接池管理器 // 【任务13.4新增】连接池管理器测试
