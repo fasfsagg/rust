@@ -34,10 +34,10 @@ impl MigrationTrait for Migration {
     }
 }
 
-/// Helper Iden for the `user` table
+/// Helper Iden for the `users` table
 #[derive(DeriveIden)]
 pub enum User {
-    #[sea_orm(iden = "user")]
+    #[sea_orm(iden = "users")]
     Table,
     Id,
     Username,

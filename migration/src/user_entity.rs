@@ -1,13 +1,13 @@
 //! `user_entity.rs`
 //!
-//! 这个文件专门定义了与 `user` 表相关联的 SeaORM 实体。
+//! 这个文件专门定义了与 `users` 表相关联的 SeaORM 实体。
 //! 它被设计为 `migration` crate 的一部分，以便迁移脚本可以直接访问它，
 //! 同时也可以被主应用 `axum-tutorial` 导入，实现代码的复用和单向依赖。
 
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-#[sea_orm(table_name = "user")]
+#[sea_orm(table_name = "users")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,

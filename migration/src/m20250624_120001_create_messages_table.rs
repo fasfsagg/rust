@@ -160,7 +160,7 @@ enum Messages {
 /// 用户表的列定义枚举（用于外键引用）
 #[derive(DeriveIden)]
 enum User {
-    #[sea_orm(iden = "user")]
+    #[sea_orm(iden = "users")]
     Table,
     Id,
 }

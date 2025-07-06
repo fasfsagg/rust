@@ -1,11 +1,11 @@
 //! `SeaORM` Entity, DTO, and related implementations for the `User` entity.
 
 use sea_orm::entity::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 
-/// Defines the `user` entity, which will be mapped to the `user` table in the database.
+/// Defines the `user` entity, which will be mapped to the `users` table in the database.
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Deserialize)]
-#[sea_orm(table_name = "user")]
+#[sea_orm(table_name = "users")]
 pub struct Model {
     /// The unique identifier for the user, using a UUID.
     #[sea_orm(primary_key, auto_increment = false, column_type = "Uuid")]
